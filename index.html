@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>⚡ Wizard FPS</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <!--
+    Photon JS SDK — loaded as a global script so window.Photon is available.
+    IMPORTANT: Replace YOUR_PHOTON_APP_ID in src/network.js with a real App ID
+    from https://dashboard.photonengine.com (free tier supports up to 20 CCU).
+  -->
+  <script src="https://unpkg.com/photon-engine@4.1.1/lib/photon-loadbalancing.js"></script>
+</head>
+<body>
+  <canvas id="game-canvas"></canvas>
+
+  <!-- HUD -->
+  <div id="ui">
+    <div id="crosshair"></div>
+
+    <div id="health-wrap">
+      <div id="health-track">
+        <div id="health-bar"></div>
+      </div>
+      <span id="health-text">100 HP</span>
+    </div>
+
+    <div id="player-count">Players: 1</div>
+
+    <div id="kill-feed"></div>
+  </div>
+
+  <!-- Start / paused overlay -->
+  <div id="overlay">
+    <h1 id="overlay-title">⚡ Wizard FPS</h1>
+    <p id="overlay-status">Connecting…</p>
+    <p id="overlay-hint">WASD · Mouse to aim · LMB to cast fireball</p>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
