@@ -157,7 +157,7 @@ function update(delta) {
   // ── Camera yaw / pitch from mouse ─────────────────────────────────────────
   const { dx, dy } = controls.consumeMouseDelta();
   cameraYaw   -= dx * MOUSE_SENS;
-  cameraPitch  = clamp(cameraPitch - dy * MOUSE_SENS, PITCH_MIN, PITCH_MAX);
+  cameraPitch  = clamp(cameraPitch + dy * MOUSE_SENS, PITCH_MIN, PITCH_MAX);
 
   // Player faces the direction the camera is looking (yaw only)
   localPlayer.rotation = cameraYaw;
