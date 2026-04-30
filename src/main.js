@@ -9,12 +9,11 @@ import { UIManager }      from './ui.js';
 // ── Tuning constants ─────────────────────────────────────────────────────────
 const MOVE_SPEED       = 9;      // units / second
 const MOUSE_SENS       = 0.0022; // radians per pixel
-const PITCH_MIN        = -0.15;  // camera tilt limits
-const PITCH_MAX        = 0.55;
+const PITCH_MIN        = -1.4;   // camera tilt limits (full vertical)
+const PITCH_MAX        =  1.4;
 const SHOOT_COOLDOWN   = 0.5;    // seconds between shots
 const NET_TICK         = 1 / 13; // position broadcast interval (~13 Hz)
-const CAM_DIST         = 6;      // third-person camera distance
-const CAM_HEIGHT       = 2.2;
+const EYE_HEIGHT       = 1.5;    // camera height above player position.y
 const JUMP_VELOCITY    = 8;      // upward speed on jump (units/s)
 const GRAVITY          = 22;     // downward acceleration (units/s²)
 const GROUND_Y         = 0.75;   // floor height
@@ -54,6 +53,7 @@ function init() {
 
   // Local player exists immediately (we spawn it before knowing actor ID)
   localPlayer = new Player(scene, true, 0x9b59b6);
+  localPlayer.group.visible = false;
 
   // ── Network callbacks ──────────────────────────────────────────────────────
   network = new NetworkManager({
@@ -157,7 +157,7 @@ function update(delta) {
   // ── Camera yaw / pitch from mouse ─────────────────────────────────────────
   const { dx, dy } = controls.consumeMouseDelta();
   cameraYaw   -= dx * MOUSE_SENS;
-  cameraPitch  = clamp(cameraPitch + dy * MOUSE_SENS, PITCH_MIN, PITCH_MAX);
+  cameraPitch  = clamp(cameraPitch - dy * MOUSE_SENS, PITCH_MIN, PITCH_MAX);
 
   // Player faces the direction the camera is looking (yaw only)
   localPlayer.rotation = cameraYaw;
@@ -226,32 +226,33 @@ function update(delta) {
 
 // ── Spawn a fireball from the local player ────────────────────────────────────
 function castFireball() {
-  // Forward direction in world space
-  _forward.set(-Math.sin(cameraYaw), 0, -Math.cos(cameraYaw));
+  _forward.set(
+    -Math.sin(cameraYaw) * Math.cos(cameraPitch),
+    Math.sin(cameraPitch),
+    -Math.cos(cameraYaw) * Math.cos(cameraPitch)
+  );
 
-  // Spawn slightly in front of and above the player (wand tip)
   const spawnPos = localPlayer.position.clone()
-    .add(new THREE.Vector3(0, 0.7, 0))
-    .addScaledVector(_forward, 0.9);
+    .add(new THREE.Vector3(0, EYE_HEIGHT, 0))
+    .addScaledVector(_forward, 0.5);
 
   fireballs.spawn(spawnPos, _forward.clone(), localActorId);
   network.sendFireball(spawnPos, _forward);
 }
 
-// ── Third-person camera positioning ──────────────────────────────────────────
+// ── First-person camera ───────────────────────────────────────────────────────
 function updateCamera() {
-  // Camera orbits around the player at (cameraYaw, cameraPitch)
-  const sinY = Math.sin(cameraYaw);
-  const cosY = Math.cos(cameraYaw);
+  camera.position.set(
+    localPlayer.position.x,
+    localPlayer.position.y + EYE_HEIGHT,
+    localPlayer.position.z
+  );
 
-  const camX = localPlayer.position.x + sinY * CAM_DIST;
-  const camZ = localPlayer.position.z + cosY * CAM_DIST;
-  const camY = localPlayer.position.y + CAM_HEIGHT + cameraPitch * 4;
-
-  camera.position.set(camX, camY, camZ);
-
-  // Look at the player's upper body
-  _lookAt.copy(localPlayer.position).setY(localPlayer.position.y + 1.0);
+  _lookAt.set(
+    localPlayer.position.x - Math.sin(cameraYaw) * Math.cos(cameraPitch),
+    localPlayer.position.y + EYE_HEIGHT + Math.sin(cameraPitch),
+    localPlayer.position.z - Math.cos(cameraYaw) * Math.cos(cameraPitch)
+  );
   camera.lookAt(_lookAt);
 }
 
