@@ -12,6 +12,9 @@ export class UIManager {
     this._killFeed       = document.getElementById('kill-feed');
     this._spellIndicator = document.getElementById('spell-indicator');
     this._effectStatus   = document.getElementById('effect-status');
+    this._scoreboard     = document.getElementById('scoreboard');
+    this._scoreBody      = document.getElementById('scoreboard-body');
+    this._scoreboardVisible = false;
   }
 
   // ── Health ──────────────────────────────────────────────────────────────────
@@ -51,6 +54,36 @@ export class UIManager {
     const labels = { burn: '🔥 Burning!', slow: '❄️ Slowed!', silence: '⚡ Silenced!' };
     this._effectStatus.textContent    = effect ? labels[effect] : '';
     this._effectStatus.dataset.effect = effect || '';
+  }
+
+  // ── Scoreboard ───────────────────────────────────────────────────────────────
+  toggleScoreboard() {
+    this._scoreboardVisible = !this._scoreboardVisible;
+    this._scoreboard.style.display = this._scoreboardVisible ? 'flex' : 'none';
+  }
+
+  hideScoreboard() {
+    this._scoreboardVisible = false;
+    this._scoreboard.style.display = 'none';
+  }
+
+  updateScoreboard(scores, localActorId) {
+    const rows = [...scores.entries()]
+      .sort((a, b) => b[1].kills - a[1].kills);
+
+    this._scoreBody.innerHTML = '';
+    rows.forEach(([id, s], i) => {
+      const tr = document.createElement('tr');
+      const isLocal = id === localActorId;
+      if (isLocal) tr.classList.add('local-row');
+      tr.innerHTML = `
+        <td>${i + 1}</td>
+        <td>${isLocal ? '⚔ You' : 'Wizard ' + id}</td>
+        <td>${s.kills}</td>
+        <td>${s.deaths}</td>
+      `;
+      this._scoreBody.appendChild(tr);
+    });
   }
 
   // ── Kill feed ────────────────────────────────────────────────────────────────

@@ -233,6 +233,80 @@ body {
 #spell-indicator[data-spell="ice"]       { border-color: rgba(68,170,255,0.7); }
 #spell-indicator[data-spell="lightning"] { border-color: rgba(255,238,0,0.7); }
 
+/* ── Scoreboard ── */
+#scoreboard {
+  display: none;
+  position: fixed;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  z-index: 40;
+  pointer-events: none;
+}
+
+#scoreboard-inner {
+  background: rgba(8, 5, 16, 0.92);
+  border: 1px solid rgba(180, 140, 255, 0.25);
+  border-radius: 12px;
+  padding: 28px 36px;
+  min-width: 360px;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 0 40px rgba(100, 50, 200, 0.3);
+}
+
+#scoreboard-title {
+  font-family: 'Cinzel Decorative', 'Cinzel', serif;
+  font-size: 1.3rem;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: 0.1em;
+  margin-bottom: 18px;
+  background: linear-gradient(135deg, #c084fc, #818cf8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+#scoreboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+#scoreboard-table th {
+  font-family: 'Cinzel', serif;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.45);
+  padding: 6px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  text-align: left;
+}
+
+#scoreboard-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  color: rgba(255,255,255,0.85);
+}
+
+#scoreboard-table tr.local-row td {
+  color: #c084fc;
+  font-weight: 700;
+}
+
+#scoreboard-table td:first-child {
+  color: rgba(255,255,255,0.35);
+  font-size: 0.8rem;
+}
+
+#scoreboard-hint {
+  text-align: center;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  color: rgba(255,255,255,0.25);
+  margin-top: 14px;
+}
+
 /* ── Active effect status ── */
 #effect-status {
   position: absolute;

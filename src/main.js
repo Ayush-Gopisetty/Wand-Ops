@@ -25,6 +25,7 @@ let localPlayer;
 const remotePlayers = new Map();
 
 let controls, fireballs, network, ui, colliders;
+const scores = new Map(); // actorNr → { kills, deaths }
 
 let cameraYaw   = 0;
 let cameraPitch = 0;
@@ -73,6 +74,8 @@ function init() {
     onConnected(actorNr) {
       localActorId   = actorNr;
       localPlayer.id = actorNr;
+      // onPlayerJoin already ran for existing actors — only set own entry
+      scores.set(actorNr, { kills: 0, deaths: 0 });
       ui.setOverlayStatus('Click to play');
     },
 
@@ -82,7 +85,14 @@ function init() {
       const player = new Player(scene, false, remoteColor(actorNr));
       player.id    = actorNr;
       remotePlayers.set(actorNr, player);
+      // Fresh score for this player (reset covers rejoin)
+      scores.set(actorNr, { kills: 0, deaths: 0 });
       ui.setPlayerCount(remotePlayers.size + 1);
+      // Broadcast own current score so the new player sees everyone's totals
+      if (localActorId >= 0) {
+        const mine = scores.get(localActorId);
+        if (mine) network.sendScoreUpdate(localActorId, mine.kills, mine.deaths);
+      }
     },
 
     onPlayerLeave(actorNr) {
@@ -90,6 +100,7 @@ function init() {
       if (!player) return;
       player.remove();
       remotePlayers.delete(actorNr);
+      scores.delete(actorNr);
       ui.setPlayerCount(remotePlayers.size + 1);
     },
 
@@ -107,6 +118,20 @@ function init() {
       fireballs.spawn(pos, dir, actorNr, data.sp || 'fire');
     },
 
+    onKill({ killerId, victimId }) {
+      if (!scores.has(killerId)) scores.set(killerId, { kills: 0, deaths: 0 });
+      if (!scores.has(victimId)) scores.set(victimId, { kills: 0, deaths: 0 });
+      scores.get(killerId).kills++;
+      scores.get(victimId).deaths++;
+      ui.updateScoreboard(scores, localActorId);
+    },
+
+    onScoreUpdate({ actorNr, kills, deaths }) {
+      if (actorNr === localActorId) return;
+      scores.set(actorNr, { kills, deaths });
+      ui.updateScoreboard(scores, localActorId);
+    },
+
     onConnectionFailed(reason) {
       ui.setOverlayStatus(`Multiplayer unavailable — ${reason}. Click to play solo.`);
       localActorId = 1;
@@ -122,6 +147,7 @@ function init() {
           localPlayer.respawn();
           ui.setHealth(localPlayer.health);
           ui.addKillEntry(`Wizard ${actorNr} defeated you!`);
+          // Deaths tracked via EV_KILL from the killer's client
         }
       } else {
         const target = remotePlayers.get(data.targetId);
@@ -145,7 +171,16 @@ function init() {
       ui.showOverlay(false);
     } else {
       ui.showOverlay(true);
+      ui.hideScoreboard();
       ui.setOverlayStatus(localActorId >= 0 ? 'Paused — click to resume' : 'Connecting…');
+    }
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.code === 'Tab') {
+      e.preventDefault();
+      if (!document.pointerLockElement) return;
+      ui.toggleScoreboard();
     }
   });
 
@@ -251,7 +286,18 @@ function update(delta) {
     const target = remotePlayers.get(targetId);
     if (target) {
       const dead = target.takeDamage(damage);
-      if (dead) ui.addKillEntry(`You defeated Wizard ${targetId}!`);
+      if (dead) {
+        network.sendKill(localActorId, targetId);
+        // raiseEvent doesn't loop back — apply locally and broadcast updated score
+        if (!scores.has(localActorId)) scores.set(localActorId, { kills: 0, deaths: 0 });
+        if (!scores.has(targetId))     scores.set(targetId,     { kills: 0, deaths: 0 });
+        scores.get(localActorId).kills++;
+        scores.get(targetId).deaths++;
+        const mine = scores.get(localActorId);
+        network.sendScoreUpdate(localActorId, mine.kills, mine.deaths);
+        ui.updateScoreboard(scores, localActorId);
+        ui.addKillEntry(`You defeated Wizard ${targetId}!`);
+      }
     }
   }, colliders);
 

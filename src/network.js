@@ -8,6 +8,8 @@ const REGION      = 'us'; // us | eu | asia | jp …
 export const EV_POSITION = 1; // { x, y, z, r }
 export const EV_FIREBALL = 2; // { px, py, pz, dx, dy, dz }
 export const EV_HIT      = 3; // { targetId, damage }
+export const EV_KILL         = 4; // { killerId, victimId }
+export const EV_SCORE_UPDATE = 5; // { actorNr, kills, deaths }
 
 export class NetworkManager {
   constructor(callbacks) {
@@ -101,6 +103,8 @@ export class NetworkManager {
         case EV_POSITION: this.callbacks.onPosition(actorNr, content); break;
         case EV_FIREBALL: this.callbacks.onFireball(actorNr, content); break;
         case EV_HIT:      this.callbacks.onHit(actorNr, content);      break;
+        case EV_KILL:         this.callbacks.onKill(content);        break;
+        case EV_SCORE_UPDATE: this.callbacks.onScoreUpdate(content); break;
       }
     };
 
@@ -158,6 +162,16 @@ export class NetworkManager {
   sendHit(targetId, damage, spell = 'fire') {
     if (!this.connected || !this.client) return;
     this.client.raiseEvent(EV_HIT, { targetId, damage, sp: spell });
+  }
+
+  sendKill(killerId, victimId) {
+    if (!this.connected || !this.client) return;
+    this.client.raiseEvent(EV_KILL, { killerId, victimId });
+  }
+
+  sendScoreUpdate(actorNr, kills, deaths) {
+    if (!this.connected || !this.client) return;
+    this.client.raiseEvent(EV_SCORE_UPDATE, { actorNr, kills, deaths });
   }
 
   /** Number of players currently in the room. */
