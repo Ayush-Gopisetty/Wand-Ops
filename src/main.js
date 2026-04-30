@@ -27,7 +27,7 @@ const remotePlayers = new Map();
 let controls, fireballs, network, ui;
 
 let cameraYaw   = 0;
-let cameraPitch = 0.25;
+let cameraPitch = 0;
 let shootTimer  = 0;
 let netTimer    = 0;
 let localActorId = -1;
@@ -107,6 +107,12 @@ function init() {
       fireballs.spawn(pos, dir, actorNr, data.sp || 'fire');
     },
 
+    onConnectionFailed(reason) {
+      ui.setOverlayStatus(`Multiplayer unavailable — ${reason}. Click to play solo.`);
+      localActorId = 1;
+      localPlayer.id = 1;
+    },
+
     onHit(actorNr, data) {
       if (data.targetId === localActorId) {
         const dead = localPlayer.takeDamage(data.damage);
@@ -152,6 +158,7 @@ function loop() {
   requestAnimationFrame(loop);
   const delta = Math.min(clock.getDelta(), 0.05);
   update(delta);
+  updateCamera();
   renderer.render(scene, camera);
 }
 
@@ -236,7 +243,6 @@ function update(delta) {
     ui.setPlayerCount(network.getPlayerCount());
   }
 
-  updateCamera();
 }
 
 // ── Spawn a spell projectile ──────────────────────────────────────────────────

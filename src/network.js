@@ -31,12 +31,20 @@ export class NetworkManager {
     }
 
     // ── Real Photon connection ────────────────────────────────────────────
-    Photon.PhotonPeer.setWebSocketImpl(WebSocket); // required when loaded as npm module
+    Photon.PhotonPeer.setWebSocketImpl(WebSocket);
 
     const LBC  = Photon.LoadBalancing.LoadBalancingClient;
     const PROT = Photon.ConnectionProtocol;
 
     this.client = new LBC(PROT.Wss, APP_ID, APP_VERSION);
+
+    // Connection timeout — fall back to offline if Photon doesn't respond
+    const timeout = setTimeout(() => {
+      if (!this.connected) {
+        console.warn('[Network] Connection timed out — falling back to offline mode.');
+        this.callbacks.onConnectionFailed('Connection timed out');
+      }
+    }, 10000);
 
     // ── State changes ─────────────────────────────────────────────────────
     this.client.onStateChange = (state) => {
@@ -49,6 +57,7 @@ export class NetworkManager {
 
     // ── Room events ───────────────────────────────────────────────────────
     this.client.onJoinRoom = () => {
+      clearTimeout(timeout);
       this.localActorNr = this.client.myActor().actorNr;
       this.connected    = true;
 
@@ -59,6 +68,12 @@ export class NetworkManager {
       });
 
       this.callbacks.onConnected(this.localActorNr);
+    };
+
+    this.client.onJoinRoomFailed = (code, msg) => {
+      clearTimeout(timeout);
+      console.error('[Network] Join room failed:', code, msg);
+      this.callbacks.onConnectionFailed('Failed to join room');
     };
 
     this.client.onActorJoin = (actor) => {
@@ -81,7 +96,9 @@ export class NetworkManager {
     };
 
     this.client.onError = (code, msg) => {
+      clearTimeout(timeout);
       console.error('[Photon error]', code, msg);
+      this.callbacks.onConnectionFailed(`Photon error ${code}`);
     };
 
     this.client.connectToRegionMaster(REGION);
