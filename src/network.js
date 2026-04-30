@@ -1,13 +1,5 @@
-/**
- * Photon LoadBalancing multiplayer layer.
- *
- * ⚠️  SETUP REQUIRED:
- *   1. Go to https://dashboard.photonengine.com
- *   2. Create a free "Realtime" app (free tier = 20 CCU)
- *   3. Paste your App ID below replacing PASTE_YOUR_APP_ID_HERE
- *
- * Without a valid App ID the game falls back to offline/single-player mode.
- */
+import * as Photon from 'photon-realtime';
+
 const APP_ID      = import.meta.env.VITE_PHOTON_APP_ID ?? '';
 const APP_VERSION = '1.0';
 const REGION      = 'us'; // us | eu | asia | jp …
@@ -27,12 +19,9 @@ export class NetworkManager {
   }
 
   connect() {
-    console.log('[Network] APP_ID:', APP_ID ? APP_ID.slice(0, 8) + '…' : 'MISSING');
-    console.log('[Network] Photon SDK on window:', !!window.Photon);
-
-    // ── Offline fallback when SDK or App ID is missing ────────────────────
-    if (!window.Photon || !APP_ID || APP_ID === 'PASTE_YOUR_APP_ID_HERE') {
-      console.warn('[Network] Running in OFFLINE mode — multiplayer disabled.');
+    // ── Offline fallback when App ID is missing ───────────────────────────
+    if (!APP_ID) {
+      console.warn('[Network] VITE_PHOTON_APP_ID not set — offline mode.');
       setTimeout(() => {
         this.localActorNr = 1;
         this.connected    = true;
@@ -42,32 +31,26 @@ export class NetworkManager {
     }
 
     // ── Real Photon connection ────────────────────────────────────────────
-    const LBC  = window.Photon.LoadBalancing.LoadBalancingClient;
-    const PROT = window.Photon.LoadBalancing.ConnectionProtocol;
+    const LBC  = Photon.LoadBalancing.LoadBalancingClient;
+    const PROT = Photon.ConnectionProtocol;
 
     this.client = new LBC(PROT.Wss, APP_ID, APP_VERSION);
 
     // ── State changes ─────────────────────────────────────────────────────
     this.client.onStateChange = (state) => {
-      console.log('[Network] Photon state:', state);
       const S = LBC.State;
       if (S && state === S.ConnectedToMaster) this._joinRoom();
       else if (!S && state === 3) this._joinRoom();
     };
 
-    this.client.onConnectedToMaster = () => {
-      console.log('[Network] onConnectedToMaster fired');
-      this._joinRoom();
-    };
+    this.client.onConnectedToMaster = () => this._joinRoom();
 
     // ── Room events ───────────────────────────────────────────────────────
-    this.client.onJoinRoom = (createdByMe) => {
+    this.client.onJoinRoom = () => {
       this.localActorNr = this.client.myActor().actorNr;
       this.connected    = true;
-      console.log('[Network] Joined room. actorNr:', this.localActorNr, 'created:', createdByMe);
 
       const actors = this.client.myRoomActors();
-      console.log('[Network] Existing actors:', Object.keys(actors));
       Object.keys(actors).forEach(key => {
         const nr = parseInt(key, 10);
         if (nr !== this.localActorNr) this.callbacks.onPlayerJoin(nr);
@@ -77,14 +60,12 @@ export class NetworkManager {
     };
 
     this.client.onActorJoin = (actor) => {
-      console.log('[Network] Actor joined:', actor.actorNr);
       if (actor.actorNr !== this.localActorNr) {
         this.callbacks.onPlayerJoin(actor.actorNr);
       }
     };
 
     this.client.onActorLeave = (actor) => {
-      console.log('[Network] Actor left:', actor.actorNr);
       this.callbacks.onPlayerLeave(actor.actorNr);
     };
 
@@ -101,7 +82,6 @@ export class NetworkManager {
       console.error('[Photon error]', code, msg);
     };
 
-    console.log('[Network] Connecting to region:', REGION);
     this.client.connectToRegionMaster(REGION);
   }
 
@@ -129,17 +109,18 @@ export class NetworkManager {
     });
   }
 
-  sendFireball(position, direction) {
+  sendFireball(position, direction, spell = 'fire') {
     if (!this.connected || !this.client) return;
     this.client.raiseEvent(EV_FIREBALL, {
       px: +position.x.toFixed(3), py: +position.y.toFixed(3), pz: +position.z.toFixed(3),
       dx: +direction.x.toFixed(4), dy: +direction.y.toFixed(4), dz: +direction.z.toFixed(4),
+      sp: spell,
     });
   }
 
-  sendHit(targetId, damage) {
+  sendHit(targetId, damage, spell = 'fire') {
     if (!this.connected || !this.client) return;
-    this.client.raiseEvent(EV_HIT, { targetId, damage });
+    this.client.raiseEvent(EV_HIT, { targetId, damage, sp: spell });
   }
 
   /** Number of players currently in the room. */

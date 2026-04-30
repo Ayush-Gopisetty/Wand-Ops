@@ -10,7 +10,6 @@
     IMPORTANT: Replace YOUR_PHOTON_APP_ID in src/network.js with a real App ID
     from https://dashboard.photonengine.com (free tier supports up to 20 CCU).
   -->
-  <script src="https://cdn.jsdelivr.net/npm/photon-engine@4.1.1/lib/photon-loadbalancing.min.js"></script>
 </head>
 <body>
   <canvas id="game-canvas"></canvas>
@@ -28,6 +27,9 @@
 
     <div id="player-count">Players: 1</div>
 
+    <div id="spell-indicator" data-spell="fire">🔥 Fire</div>
+    <div id="effect-status"></div>
+
     <div id="kill-feed"></div>
   </div>
 
@@ -35,7 +37,26 @@
   <div id="overlay">
     <h1 id="overlay-title">⚡ Wizard FPS</h1>
     <p id="overlay-status">Connecting…</p>
-    <p id="overlay-hint">WASD · Mouse to aim · LMB to cast fireball</p>
+
+    <div id="spell-picker">
+      <button class="spell-btn active" data-spell="fire">
+        <span class="spell-icon">🔥</span>
+        <span class="spell-name">Fire</span>
+        <span class="spell-desc">Burn · 5 dmg/s · 3s</span>
+      </button>
+      <button class="spell-btn" data-spell="ice">
+        <span class="spell-icon">❄️</span>
+        <span class="spell-name">Ice</span>
+        <span class="spell-desc">Slow · 70% · 3s</span>
+      </button>
+      <button class="spell-btn" data-spell="lightning">
+        <span class="spell-icon">⚡</span>
+        <span class="spell-name">Lightning</span>
+        <span class="spell-desc">Silence · 2s</span>
+      </button>
+    </div>
+
+    <p id="overlay-hint">WASD · Mouse · LMB cast · Space jump</p>
   </div>
 
   <script type="module" src="/src/main.js"></script>

@@ -4,12 +4,14 @@
  */
 export class UIManager {
   constructor() {
-    this._bar        = document.getElementById('health-bar');
-    this._healthText = document.getElementById('health-text');
-    this._playerCnt  = document.getElementById('player-count');
-    this._overlay    = document.getElementById('overlay');
-    this._status     = document.getElementById('overlay-status');
-    this._killFeed   = document.getElementById('kill-feed');
+    this._bar            = document.getElementById('health-bar');
+    this._healthText     = document.getElementById('health-text');
+    this._playerCnt      = document.getElementById('player-count');
+    this._overlay        = document.getElementById('overlay');
+    this._status         = document.getElementById('overlay-status');
+    this._killFeed       = document.getElementById('kill-feed');
+    this._spellIndicator = document.getElementById('spell-indicator');
+    this._effectStatus   = document.getElementById('effect-status');
   }
 
   // ── Health ──────────────────────────────────────────────────────────────────
@@ -35,6 +37,20 @@ export class UIManager {
 
   showOverlay(visible) {
     this._overlay.style.display = visible ? 'flex' : 'none';
+  }
+
+  // ── Spell indicator ──────────────────────────────────────────────────────────
+  setSpell(spell) {
+    const labels = { fire: '🔥 Fire', ice: '❄️ Ice', lightning: '⚡ Lightning' };
+    this._spellIndicator.textContent  = labels[spell] || spell;
+    this._spellIndicator.dataset.spell = spell;
+  }
+
+  // ── Active effect status ──────────────────────────────────────────────────────
+  setEffect(effect) {
+    const labels = { burn: '🔥 Burning!', slow: '❄️ Slowed!', silence: '⚡ Silenced!' };
+    this._effectStatus.textContent    = effect ? labels[effect] : '';
+    this._effectStatus.dataset.effect = effect || '';
   }
 
   // ── Kill feed ────────────────────────────────────────────────────────────────

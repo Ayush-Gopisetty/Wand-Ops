@@ -7,34 +7,35 @@ import { NetworkManager } from './network.js';
 import { UIManager }      from './ui.js';
 
 // ── Tuning constants ─────────────────────────────────────────────────────────
-const MOVE_SPEED       = 9;      // units / second
-const MOUSE_SENS       = 0.0022; // radians per pixel
-const PITCH_MIN        = -1.4;   // camera tilt limits (full vertical)
+const MOVE_SPEED       = 9;
+const SLOW_FACTOR      = 0.3;    // movement multiplier while iced
+const MOUSE_SENS       = 0.0022;
+const PITCH_MIN        = -1.4;
 const PITCH_MAX        =  1.4;
-const SHOOT_COOLDOWN   = 0.5;    // seconds between shots
-const NET_TICK         = 1 / 13; // position broadcast interval (~13 Hz)
-const EYE_HEIGHT       = 1.5;    // camera height above player position.y
-const JUMP_VELOCITY    = 8;      // upward speed on jump (units/s)
-const GRAVITY          = 22;     // downward acceleration (units/s²)
-const GROUND_Y         = 0.75;   // floor height
+const SHOOT_COOLDOWN   = 0.5;
+const NET_TICK         = 1 / 13;
+const EYE_HEIGHT       = 1.5;
+const JUMP_VELOCITY    = 8;
+const GRAVITY          = 22;
+const GROUND_Y         = 0.75;
 
 // ── Module-level state ───────────────────────────────────────────────────────
 let scene, camera, renderer;
 let localPlayer;
-const remotePlayers = new Map(); // actorNr → Player
+const remotePlayers = new Map();
 
 let controls, fireballs, network, ui;
 
-let cameraYaw   = 0; // horizontal orbit
+let cameraYaw   = 0;
 let cameraPitch = 0.25;
 let shootTimer  = 0;
 let netTimer    = 0;
-let localActorId = -1; // set once Photon assigns an actor number
+let localActorId = -1;
 
 let playerVelocityY = 0;
 let isGrounded      = true;
+let selectedSpell   = 'fire';
 
-// Pre-allocated vectors — avoids GC pressure in the game loop
 const _moveDir = new THREE.Vector3();
 const _yAxis   = new THREE.Vector3(0, 1, 0);
 const _forward = new THREE.Vector3();
@@ -47,27 +48,37 @@ function init() {
   const canvas = document.getElementById('game-canvas');
   ({ scene, camera, renderer } = createScene(canvas));
 
-  controls = new Controls();
-  ui       = new UIManager();
+  controls  = new Controls();
+  ui        = new UIManager();
   fireballs = new FireballManager(scene);
 
-  // Local player exists immediately (we spawn it before knowing actor ID)
   localPlayer = new Player(scene, true, 0x9b59b6);
   localPlayer.group.visible = false;
+
+  // ── Spell picker ──────────────────────────────────────────────────────────
+  document.querySelectorAll('.spell-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      selectedSpell = btn.dataset.spell;
+      document.querySelectorAll('.spell-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      ui.setSpell(selectedSpell);
+    });
+  });
+  ui.setSpell(selectedSpell);
 
   // ── Network callbacks ──────────────────────────────────────────────────────
   network = new NetworkManager({
 
     onConnected(actorNr) {
-      localActorId    = actorNr;
-      localPlayer.id  = actorNr;
+      localActorId   = actorNr;
+      localPlayer.id = actorNr;
       ui.setOverlayStatus('Click to play');
     },
 
     onPlayerJoin(actorNr) {
       if (actorNr === localActorId) return;
       if (remotePlayers.has(actorNr)) return;
-
       const player = new Player(scene, false, remoteColor(actorNr));
       player.id    = actorNr;
       remotePlayers.set(actorNr, player);
@@ -93,13 +104,13 @@ function init() {
     onFireball(actorNr, data) {
       const pos = new THREE.Vector3(data.px, data.py, data.pz);
       const dir = new THREE.Vector3(data.dx, data.dy, data.dz);
-      fireballs.spawn(pos, dir, actorNr);
+      fireballs.spawn(pos, dir, actorNr, data.sp || 'fire');
     },
 
     onHit(actorNr, data) {
-      // actorNr is the shooter; data.targetId is who was hit
       if (data.targetId === localActorId) {
         const dead = localPlayer.takeDamage(data.damage);
+        localPlayer.applySpellEffect(data.sp || 'fire');
         ui.setHealth(localPlayer.health);
         if (dead) {
           localPlayer.respawn();
@@ -113,20 +124,16 @@ function init() {
     },
   });
 
-  // Start network connection immediately (happens in background)
   network.connect();
 
-  // Show overlay; clicking it locks the pointer
   ui.showOverlay(true);
   ui.setHealth(100);
   ui.setPlayerCount(1);
 
-  // Pointer lock on click (controls.js also handles this, belt-and-suspenders)
   document.getElementById('overlay').addEventListener('click', () => {
     controls.requestLock();
   });
 
-  // Hide overlay when pointer locks; show it again when unlocked (ESC)
   document.addEventListener('pointerlockchange', () => {
     if (document.pointerLockElement) {
       ui.showOverlay(false);
@@ -143,26 +150,23 @@ function init() {
 // ── Game loop ─────────────────────────────────────────────────────────────────
 function loop() {
   requestAnimationFrame(loop);
-  const delta = Math.min(clock.getDelta(), 0.05); // cap at 50 ms
-
+  const delta = Math.min(clock.getDelta(), 0.05);
   update(delta);
   renderer.render(scene, camera);
 }
 
 // ── Per-frame update ──────────────────────────────────────────────────────────
 function update(delta) {
-  // Block all gameplay logic until pointer is locked AND connected
   if (!controls.isLocked || localActorId < 0) return;
 
-  // ── Camera yaw / pitch from mouse ─────────────────────────────────────────
+  // ── Camera yaw / pitch ────────────────────────────────────────────────────
   const { dx, dy } = controls.consumeMouseDelta();
   cameraYaw   -= dx * MOUSE_SENS;
   cameraPitch  = clamp(cameraPitch - dy * MOUSE_SENS, PITCH_MIN, PITCH_MAX);
 
-  // Player faces the direction the camera is looking (yaw only)
   localPlayer.rotation = cameraYaw;
 
-  // ── WASD movement (relative to camera yaw) ────────────────────────────────
+  // ── WASD movement ─────────────────────────────────────────────────────────
   _moveDir.set(0, 0, 0);
   if (controls.isDown('KeyW') || controls.isDown('ArrowUp'))    _moveDir.z -= 1;
   if (controls.isDown('KeyS') || controls.isDown('ArrowDown'))  _moveDir.z += 1;
@@ -171,7 +175,8 @@ function update(delta) {
 
   if (_moveDir.lengthSq() > 0) {
     _moveDir.normalize().applyAxisAngle(_yAxis, cameraYaw);
-    localPlayer.position.addScaledVector(_moveDir, MOVE_SPEED * delta);
+    const speed = localPlayer.slowTimer > 0 ? MOVE_SPEED * SLOW_FACTOR : MOVE_SPEED;
+    localPlayer.position.addScaledVector(_moveDir, speed * delta);
   }
 
   // ── Jump + gravity ────────────────────────────────────────────────────────
@@ -187,24 +192,35 @@ function update(delta) {
     isGrounded = true;
   }
 
-  // ── Shooting ─────────────────────────────────────────────────────────────
+  // ── Burn DoT ──────────────────────────────────────────────────────────────
+  if (localPlayer.burnTimer > 0) {
+    const dead = localPlayer.takeDamage(localPlayer.burnDps * delta);
+    ui.setHealth(localPlayer.health);
+    if (dead) { localPlayer.respawn(); ui.setHealth(localPlayer.health); }
+  }
+
+  // ── Status effect HUD ─────────────────────────────────────────────────────
+  ui.setEffect(
+    localPlayer.burnTimer    > 0 ? 'burn'    :
+    localPlayer.slowTimer    > 0 ? 'slow'    :
+    localPlayer.silenceTimer > 0 ? 'silence' : null
+  );
+
+  // ── Shooting (blocked while silenced) ────────────────────────────────────
   shootTimer -= delta;
-  if (controls.consumeClick() && shootTimer <= 0) {
+  if (controls.consumeClick() && shootTimer <= 0 && localPlayer.silenceTimer <= 0) {
     shootTimer = SHOOT_COOLDOWN;
     castFireball();
   }
 
-  // ── Update local & remote players ─────────────────────────────────────────
+  // ── Update players ────────────────────────────────────────────────────────
   localPlayer.update(delta);
   remotePlayers.forEach(p => p.update(delta));
 
   // ── Fireball simulation + hit detection ──────────────────────────────────
-  fireballs.update(delta, remotePlayers, localActorId, (ownerId, targetId, damage) => {
-    // We are authoritative for our own fireballs
+  fireballs.update(delta, remotePlayers, localActorId, (ownerId, targetId, damage, spell) => {
     if (ownerId !== localActorId) return;
-
-    network.sendHit(targetId, damage);
-
+    network.sendHit(targetId, damage, spell);
     const target = remotePlayers.get(targetId);
     if (target) {
       const dead = target.takeDamage(damage);
@@ -212,7 +228,7 @@ function update(delta) {
     }
   });
 
-  // ── Network position broadcast (throttled) ────────────────────────────────
+  // ── Network position broadcast ────────────────────────────────────────────
   netTimer += delta;
   if (netTimer >= NET_TICK) {
     netTimer = 0;
@@ -220,11 +236,10 @@ function update(delta) {
     ui.setPlayerCount(network.getPlayerCount());
   }
 
-  // ── Camera follow ─────────────────────────────────────────────────────────
   updateCamera();
 }
 
-// ── Spawn a fireball from the local player ────────────────────────────────────
+// ── Spawn a spell projectile ──────────────────────────────────────────────────
 function castFireball() {
   _forward.set(
     -Math.sin(cameraYaw) * Math.cos(cameraPitch),
@@ -236,8 +251,8 @@ function castFireball() {
     .add(new THREE.Vector3(0, EYE_HEIGHT, 0))
     .addScaledVector(_forward, 0.5);
 
-  fireballs.spawn(spawnPos, _forward.clone(), localActorId);
-  network.sendFireball(spawnPos, _forward);
+  fireballs.spawn(spawnPos, _forward.clone(), localActorId, selectedSpell);
+  network.sendFireball(spawnPos, _forward, selectedSpell);
 }
 
 // ── First-person camera ───────────────────────────────────────────────────────
@@ -256,8 +271,6 @@ function updateCamera() {
   camera.lookAt(_lookAt);
 }
 
-// ── Utility ───────────────────────────────────────────────────────────────────
 function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
 
-// ── Start ─────────────────────────────────────────────────────────────────────
 init();

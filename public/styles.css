@@ -164,3 +164,84 @@ body {
   margin-top: 6px;
   letter-spacing: 0.05em;
 }
+
+/* ── Spell picker (overlay) ── */
+#spell-picker {
+  display: flex;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.spell-btn {
+  background: rgba(255,255,255,0.07);
+  border: 2px solid rgba(255,255,255,0.15);
+  color: #fff;
+  padding: 14px 20px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  transition: background 0.15s, border-color 0.15s, transform 0.12s, box-shadow 0.15s;
+  pointer-events: all;
+}
+
+.spell-btn:hover {
+  background: rgba(255,255,255,0.13);
+  transform: translateY(-3px);
+}
+
+.spell-icon { font-size: 1.6rem; }
+.spell-name { font-size: 0.95rem; font-weight: 700; letter-spacing: 0.04em; }
+.spell-desc { font-size: 0.7rem; opacity: 0.6; }
+
+.spell-btn.active[data-spell="fire"] {
+  border-color: #ff5500;
+  background: rgba(255,85,0,0.22);
+  box-shadow: 0 0 18px rgba(255,85,0,0.45);
+}
+.spell-btn.active[data-spell="ice"] {
+  border-color: #44aaff;
+  background: rgba(68,170,255,0.22);
+  box-shadow: 0 0 18px rgba(68,170,255,0.45);
+}
+.spell-btn.active[data-spell="lightning"] {
+  border-color: #ffee00;
+  background: rgba(255,238,0,0.15);
+  box-shadow: 0 0 18px rgba(255,238,0,0.4);
+}
+
+/* ── Spell indicator (HUD) ── */
+#spell-indicator {
+  position: absolute;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 13px;
+  background: rgba(0,0,0,0.5);
+  padding: 4px 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.12);
+  letter-spacing: 0.05em;
+  transition: border-color 0.2s;
+}
+
+#spell-indicator[data-spell="fire"]      { border-color: rgba(255,85,0,0.7); }
+#spell-indicator[data-spell="ice"]       { border-color: rgba(68,170,255,0.7); }
+#spell-indicator[data-spell="lightning"] { border-color: rgba(255,238,0,0.7); }
+
+/* ── Active effect status ── */
+#effect-status {
+  position: absolute;
+  top: 58%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-shadow: 0 1px 4px #000;
+  pointer-events: none;
+  min-height: 1.2em;
+}
