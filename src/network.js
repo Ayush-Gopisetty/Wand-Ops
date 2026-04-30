@@ -8,7 +8,7 @@
  *
  * Without a valid App ID the game falls back to offline/single-player mode.
  */
-const APP_ID      = 'PASTE_YOUR_APP_ID_HERE';
+const APP_ID      = import.meta.env.VITE_PHOTON_APP_ID ?? '';
 const APP_VERSION = '1.0';
 const REGION      = 'us'; // us | eu | asia | jp …
 

@@ -3,3 +3,20 @@ dist/
 .DS_Store
 *.local
 .vercel
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Keys & certs
+*.pem
+*.key
+*.p12
+secrets.*
+
+# Editor / OS
+.vscode/settings.json
+.idea/
+Thumbs.db
+
