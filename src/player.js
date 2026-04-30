@@ -91,7 +91,7 @@ export class Player {
     if (this.isLocal) {
       this.position.x = clamp(this.position.x, -ARENA_HALF, ARENA_HALF);
       this.position.z = clamp(this.position.z, -ARENA_HALF, ARENA_HALF);
-      this.position.y = 0.75;
+      // Y is managed by main.js (gravity + jump)
     } else {
       // Smooth remote interpolation
       this.position.lerp(this.targetPosition, LERP_SPEED);

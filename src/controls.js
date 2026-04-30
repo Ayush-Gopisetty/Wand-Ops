@@ -12,9 +12,13 @@ export class Controls {
     this._dx = 0;
     this._dy = 0;
     this._click = false;
+    this._jump  = false;
 
     // Bound handlers (kept so we can remove them)
-    this._onKD  = (e) => { this.keys[e.code] = true; };
+    this._onKD  = (e) => {
+      this.keys[e.code] = true;
+      if (e.code === 'Space') { e.preventDefault(); this._jump = true; }
+    };
     this._onKU  = (e) => { this.keys[e.code] = false; };
     this._onMM  = (e) => {
       if (!this.isLocked) return;
@@ -49,6 +53,13 @@ export class Controls {
   consumeClick() {
     const v = this._click;
     this._click = false;
+    return v;
+  }
+
+  /** Returns true if Space was pressed since last call, then resets. */
+  consumeJump() {
+    const v = this._jump;
+    this._jump = false;
     return v;
   }
 

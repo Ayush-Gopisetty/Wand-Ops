@@ -15,6 +15,9 @@ const SHOOT_COOLDOWN   = 0.5;    // seconds between shots
 const NET_TICK         = 1 / 13; // position broadcast interval (~13 Hz)
 const CAM_DIST         = 6;      // third-person camera distance
 const CAM_HEIGHT       = 2.2;
+const JUMP_VELOCITY    = 8;      // upward speed on jump (units/s)
+const GRAVITY          = 22;     // downward acceleration (units/s²)
+const GROUND_Y         = 0.75;   // floor height
 
 // ── Module-level state ───────────────────────────────────────────────────────
 let scene, camera, renderer;
@@ -28,6 +31,9 @@ let cameraPitch = 0.25;
 let shootTimer  = 0;
 let netTimer    = 0;
 let localActorId = -1; // set once Photon assigns an actor number
+
+let playerVelocityY = 0;
+let isGrounded      = true;
 
 // Pre-allocated vectors — avoids GC pressure in the game loop
 const _moveDir = new THREE.Vector3();
@@ -166,6 +172,19 @@ function update(delta) {
   if (_moveDir.lengthSq() > 0) {
     _moveDir.normalize().applyAxisAngle(_yAxis, cameraYaw);
     localPlayer.position.addScaledVector(_moveDir, MOVE_SPEED * delta);
+  }
+
+  // ── Jump + gravity ────────────────────────────────────────────────────────
+  if (controls.consumeJump() && isGrounded) {
+    playerVelocityY = JUMP_VELOCITY;
+    isGrounded = false;
+  }
+  playerVelocityY -= GRAVITY * delta;
+  localPlayer.position.y += playerVelocityY * delta;
+  if (localPlayer.position.y <= GROUND_Y) {
+    localPlayer.position.y = GROUND_Y;
+    playerVelocityY = 0;
+    isGrounded = true;
   }
 
   // ── Shooting ─────────────────────────────────────────────────────────────
