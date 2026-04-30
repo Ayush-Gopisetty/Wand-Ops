@@ -31,6 +31,8 @@ export class NetworkManager {
     }
 
     // ── Real Photon connection ────────────────────────────────────────────
+    console.log('[Network] App ID loaded:', APP_ID.slice(0, 8) + '…');
+    console.log('[Network] Connecting to region:', REGION);
     Photon.PhotonPeer.setWebSocketImpl(WebSocket);
 
     const LBC  = Photon.LoadBalancing.LoadBalancingClient;
@@ -48,15 +50,20 @@ export class NetworkManager {
 
     // ── State changes ─────────────────────────────────────────────────────
     this.client.onStateChange = (state) => {
+      console.log('[Network] State:', state);
       const S = LBC.State;
       if (S && state === S.ConnectedToMaster) this._joinRoom();
       else if (!S && state === 3) this._joinRoom();
     };
 
-    this.client.onConnectedToMaster = () => this._joinRoom();
+    this.client.onConnectedToMaster = () => {
+      console.log('[Network] Connected to master — joining room…');
+      this._joinRoom();
+    };
 
     // ── Room events ───────────────────────────────────────────────────────
     this.client.onJoinRoom = () => {
+      console.log('[Network] Joined room — multiplayer active.');
       clearTimeout(timeout);
       this.localActorNr = this.client.myActor().actorNr;
       this.connected    = true;
@@ -68,12 +75,6 @@ export class NetworkManager {
       });
 
       this.callbacks.onConnected(this.localActorNr);
-    };
-
-    this.client.onJoinRoomFailed = (code, msg) => {
-      clearTimeout(timeout);
-      console.error('[Network] Join room failed:', code, msg);
-      this.callbacks.onConnectionFailed('Failed to join room');
     };
 
     this.client.onActorJoin = (actor) => {
@@ -109,12 +110,13 @@ export class NetworkManager {
     if (this._joiningRoom || !this.client) return;
     this._joiningRoom = true;
 
-    // All players share the same room — joinOrCreateRoom handles both paths
-    this.client.joinOrCreateRoom('WizardArena', {
-      maxPlayers: 8,
-      isOpen: true,
-      isVisible: true,
-    });
+    // Try to join existing room; create it if it doesn't exist yet
+    this.client.joinRoom('WizardArena');
+
+    this.client.onJoinRoomFailed = (code, msg) => {
+      console.log('[Network] Room not found, creating…', code, msg);
+      this.client.createRoom('WizardArena', { maxPlayers: 8, isOpen: true, isVisible: true });
+    };
   }
 
   // ── Public send helpers ─────────────────────────────────────────────────────
