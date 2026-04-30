@@ -52,8 +52,16 @@ export class NetworkManager {
     this.client.onStateChange = (state) => {
       console.log('[Network] State:', state);
       const S = LBC.State;
-      if (S && state === S.ConnectedToMaster) this._joinRoom();
-      else if (!S && state === 3) this._joinRoom();
+      const isConnectedToMaster = S ? state === S.ConnectedToMaster : state === 4;
+      const isJoinedLobby       = S ? state === S.JoinedLobby       : state === 5;
+
+      if (isConnectedToMaster) {
+        this._joinRoom();
+      } else if (isJoinedLobby && this._joiningRoom && !this.connected) {
+        // createRoom failed (room already exists) — join it instead
+        console.log('[Network] Room exists — joining WizardArena…');
+        this.client.joinRoom('WizardArena');
+      }
     };
 
     this.client.onConnectedToMaster = () => {
