@@ -31,6 +31,8 @@ export class NetworkManager {
     }
 
     // ── Real Photon connection ────────────────────────────────────────────
+    Photon.PhotonPeer.setWebSocketImpl(WebSocket); // required when loaded as npm module
+
     const LBC  = Photon.LoadBalancing.LoadBalancingClient;
     const PROT = Photon.ConnectionProtocol;
 
