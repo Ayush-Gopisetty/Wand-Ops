@@ -109,14 +109,22 @@ export class NetworkManager {
   _joinRoom() {
     if (this._joiningRoom || !this.client) return;
     this._joiningRoom = true;
-
-    // Try to join existing room; create it if it doesn't exist yet
-    this.client.joinRoom('WizardArena');
+    let retried = false;
 
     this.client.onJoinRoomFailed = (code, msg) => {
-      console.log('[Network] Room not found, creating…', code, msg);
-      this.client.createRoom('WizardArena', { maxPlayers: 8, isOpen: true, isVisible: true });
+      console.log('[Network] Room op failed:', code, msg, '— retried:', retried);
+      if (!retried) {
+        retried = true;
+        // createRoom failed (room already exists) — join it instead
+        this.client.joinRoom('WizardArena');
+      } else {
+        this.callbacks.onConnectionFailed(`Room unavailable (${code})`);
+      }
     };
+
+    // Always try createRoom first; if room already exists onJoinRoomFailed → joinRoom
+    console.log('[Network] Creating/joining room WizardArena…');
+    this.client.createRoom('WizardArena', { maxPlayers: 8 });
   }
 
   // ── Public send helpers ─────────────────────────────────────────────────────
