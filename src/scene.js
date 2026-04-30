@@ -14,38 +14,193 @@ export function createScene(canvas) {
   const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.1, 120);
 
   // ── Lighting ───────────────────────────────────────────────────────────────
-  scene.add(new THREE.AmbientLight(0x7755cc, 0.7));
+  scene.add(new THREE.AmbientLight(0x88779a, 0.6));
 
-  const moon = new THREE.DirectionalLight(0xaad4ff, 1.4);
+  const moon = new THREE.DirectionalLight(0xc8d8ff, 1.2);
   moon.position.set(-20, 50, 10);
   scene.add(moon);
 
-  const warmFill = new THREE.DirectionalLight(0xff9944, 0.4);
+  const warmFill = new THREE.DirectionalLight(0xff9944, 0.35);
   warmFill.position.set(20, 10, -20);
   scene.add(warmFill);
 
-  // ── Ground ─────────────────────────────────────────────────────────────────
-  const groundMat = new THREE.MeshStandardMaterial({ color: 0x0e2208, roughness: 1 });
+  // ── Ground (dark grey flagstone) ──────────────────────────────────────────
+  function makeFlagstoneTexture() {
+    const S = 1024;
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = S;
+    const ctx = cv.getContext('2d');
+
+    ctx.fillStyle = '#0d0d0d';
+    ctx.fillRect(0, 0, S, S);
+
+    const COLS = 8, ROWS = 8;
+    const cw = S / COLS, ch = S / ROWS;
+
+    const pts = [];
+    for (let r = 0; r <= ROWS; r++) {
+      pts[r] = [];
+      for (let c = 0; c <= COLS; c++) {
+        pts[r][c] = {
+          x: c * cw + (r > 0 && r < ROWS ? (Math.random() - 0.5) * cw * 0.42 : 0),
+          y: r * ch + (c > 0 && c < COLS ? (Math.random() - 0.5) * ch * 0.42 : 0),
+        };
+      }
+    }
+
+    // Dark grey palette with subtle variation
+    const PALETTES = [
+      [220, 4, 20], [220, 3, 24], [220, 5, 18],
+      [220, 3, 26], [220, 4, 22], [220, 2, 28],
+    ];
+
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const [h, s, l] = PALETTES[Math.floor(Math.random() * PALETTES.length)];
+        const lv = l + (Math.random() - 0.5) * 5;
+        const gap = 4;
+        const tl = pts[r][c],     tr = pts[r][c + 1];
+        const br = pts[r+1][c+1], bl = pts[r+1][c];
+        const mx = (tl.x + tr.x + br.x + bl.x) / 4;
+        const my = (tl.y + tr.y + br.y + bl.y) / 4;
+
+        ctx.fillStyle = `hsl(${h},${s}%,${lv}%)`;
+        ctx.beginPath();
+        ctx.moveTo(tl.x + gap, tl.y + gap);
+        ctx.lineTo(tr.x - gap, tr.y + gap);
+        ctx.lineTo(br.x - gap, br.y - gap);
+        ctx.lineTo(bl.x + gap, bl.y - gap);
+        ctx.closePath();
+        ctx.fill();
+
+        const grad = ctx.createRadialGradient(mx - cw * 0.1, my - ch * 0.1, 0, mx, my, Math.max(cw, ch) * 0.65);
+        grad.addColorStop(0, `hsla(${h},${s}%,${lv + 8}%,0.35)`);
+        grad.addColorStop(1, `hsla(${h},${s}%,${lv - 10}%,0.5)`);
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(tl.x + gap, tl.y + gap);
+        ctx.lineTo(tr.x - gap, tr.y + gap);
+        ctx.lineTo(br.x - gap, br.y - gap);
+        ctx.lineTo(bl.x + gap, bl.y - gap);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+
+    const tex = new THREE.CanvasTexture(cv);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(14, 14);
+    return tex;
+  }
+
+  const groundMat = new THREE.MeshStandardMaterial({ map: makeFlagstoneTexture(), roughness: 0.95 });
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(ARENA * 2, ARENA * 2), groundMat);
   ground.rotation.x = -Math.PI / 2;
   scene.add(ground);
 
-  const grid = new THREE.GridHelper(ARENA * 2, 32, 0x2a0d55, 0x1a0833);
-  grid.position.y = 0.01;
-  scene.add(grid);
 
-  // ── Arena walls ────────────────────────────────────────────────────────────
-  const wallMat = new THREE.MeshBasicMaterial({ color: 0x6600cc, transparent: true, opacity: 0.5 });
-  [
-    { geo: new THREE.BoxGeometry(ARENA * 2, 3, 0.5), pos: [0, 1.5, -ARENA] },
-    { geo: new THREE.BoxGeometry(ARENA * 2, 3, 0.5), pos: [0, 1.5,  ARENA] },
-    { geo: new THREE.BoxGeometry(0.5, 3, ARENA * 2), pos: [-ARENA, 1.5, 0] },
-    { geo: new THREE.BoxGeometry(0.5, 3, ARENA * 2), pos: [ ARENA, 1.5, 0] },
-  ].forEach(({ geo, pos }) => {
-    const m = new THREE.Mesh(geo, wallMat);
-    m.position.set(...pos);
-    scene.add(m);
-  });
+  // ── Arena walls (stone fortress) ──────────────────────────────────────────
+  function makeStoneWallTexture() {
+    const S = 1024, MORTAR = 5;
+    const cv = document.createElement('canvas');
+    cv.width = S; cv.height = S;
+    const ctx = cv.getContext('2d');
+
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(0, 0, S, S);
+
+    const ROW_H = 90;
+    let y = 0, row = 0;
+    while (y < S) {
+      const rh = ROW_H + (Math.random() - 0.5) * 16;
+      const stagger = (row % 2) * 110;
+      let x = -stagger;
+      while (x < S) {
+        const bw = 140 + (Math.random() - 0.5) * 60;
+        const l  = 18 + Math.random() * 10;  // dark grey range
+        const h  = 220;
+        const s  = 3 + Math.random() * 4;
+        ctx.fillStyle = `hsl(${h},${s}%,${l}%)`;
+        ctx.fillRect(x + MORTAR, y + MORTAR, bw - MORTAR * 2, rh - MORTAR * 2);
+
+        // Highlight top-left
+        ctx.fillStyle = `hsla(${h},${s}%,${l + 10}%,0.35)`;
+        ctx.fillRect(x + MORTAR, y + MORTAR, bw - MORTAR * 2, 6);
+        ctx.fillRect(x + MORTAR, y + MORTAR, 6, rh - MORTAR * 2);
+
+        // Shadow bottom-right
+        ctx.fillStyle = `hsla(${h},${s}%,${l - 10}%,0.5)`;
+        ctx.fillRect(x + MORTAR, y + rh - MORTAR - 6, bw - MORTAR * 2, 6);
+        ctx.fillRect(x + bw - MORTAR - 6, y + MORTAR, 6, rh - MORTAR * 2);
+
+        x += bw;
+      }
+      y += rh;
+      row++;
+    }
+
+    const tex = new THREE.CanvasTexture(cv);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(6, 1);
+    return tex;
+  }
+
+  const stoneMat = new THREE.MeshStandardMaterial({ map: makeStoneWallTexture(), roughness: 0.93, metalness: 0.04 });
+
+  function buildWall(cx, cz, isVertical) {
+    const len = ARENA * 2;
+    const w = isVertical ? 1.2 : len;
+    const d = isVertical ? len : 1.2;
+
+    const body = new THREE.Mesh(new THREE.BoxGeometry(w, 3.8, d), stoneMat);
+    body.position.set(cx, 1.9, cz);
+    scene.add(body);
+
+    // Battlements (merlons)
+    const count = Math.floor(len / 4.5);
+    for (let i = 0; i < count; i++) {
+      const t   = (i + 0.5) / count;
+      const off = (t - 0.5) * (len - 4.5);
+      const mx  = isVertical ? cx       : cx + off;
+      const mz  = isVertical ? cz + off : cz;
+      const mw  = isVertical ? 1.5 : 1.9;
+      const md  = isVertical ? 1.9 : 1.5;
+      const m   = new THREE.Mesh(new THREE.BoxGeometry(mw, 1.4, md), stoneMat);
+      m.position.set(mx, 4.6, mz);
+      scene.add(m);
+    }
+  }
+
+  buildWall(0,      -ARENA, false);
+  buildWall(0,       ARENA, false);
+  buildWall(-ARENA,  0,     true);
+  buildWall( ARENA,  0,     true);
+
+  // Corner towers + torchlight
+  const torchMat = new THREE.MeshStandardMaterial({ color: 0xff6600, emissive: 0xff4400, emissiveIntensity: 1.2, roughness: 0.5 });
+  [-ARENA, ARENA].forEach(tx => [-ARENA, ARENA].forEach(tz => {
+    const tower = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.6, 6.8, 8), stoneMat);
+    tower.position.set(tx, 3.4, tz);
+    scene.add(tower);
+
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const mb = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.3, 1.1), stoneMat);
+      mb.position.set(tx + Math.cos(a) * 1.9, 7.35, tz + Math.sin(a) * 1.9);
+      scene.add(mb);
+    }
+
+    // Torch bracket + flame
+    const inset = tx > 0 ? -3.5 : 3.5;
+    const insetZ = tz > 0 ? -3.5 : 3.5;
+    const flame = new THREE.Mesh(new THREE.SphereGeometry(0.22, 6, 6), torchMat);
+    flame.position.set(tx + inset * 0.5, 5.2, tz + insetZ * 0.5);
+    scene.add(flame);
+
+    const pt = new THREE.PointLight(0xff8833, 3.5, 22);
+    pt.position.set(tx + inset * 0.5, 5.2, tz + insetZ * 0.5);
+    scene.add(pt);
+  }));
 
   // ── Fantasy Trees ──────────────────────────────────────────────────────────
   const TREE_VARIANTS = [

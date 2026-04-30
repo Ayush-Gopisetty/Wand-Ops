@@ -186,6 +186,26 @@ function update(delta) {
     localPlayer.position.addScaledVector(_moveDir, speed * delta);
   }
 
+  // ── World collision ───────────────────────────────────────────────────────
+  if (colliders) {
+    const PR = 0.45;
+    const bound = colliders.arenaSize - PR;
+    localPlayer.position.x = clamp(localPlayer.position.x, -bound, bound);
+    localPlayer.position.z = clamp(localPlayer.position.z, -bound, bound);
+    for (const tree of colliders.trees) {
+      const dx = localPlayer.position.x - tree.x;
+      const dz = localPlayer.position.z - tree.z;
+      const distSq = dx * dx + dz * dz;
+      const minDist = tree.radius + PR;
+      if (distSq < minDist * minDist && distSq > 0.0001) {
+        const dist = Math.sqrt(distSq);
+        const overlap = minDist - dist;
+        localPlayer.position.x += (dx / dist) * overlap;
+        localPlayer.position.z += (dz / dist) * overlap;
+      }
+    }
+  }
+
   // ── Jump + gravity ────────────────────────────────────────────────────────
   if (controls.consumeJump() && isGrounded) {
     playerVelocityY = JUMP_VELOCITY;

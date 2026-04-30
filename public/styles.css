@@ -4,7 +4,7 @@
 body {
   overflow: hidden;
   background: #000;
-  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-family: 'Cinzel', Georgia, serif;
   color: #fff;
 }
 
@@ -144,9 +144,10 @@ body {
 }
 
 #overlay h1 {
+  font-family: 'Cinzel Decorative', 'Cinzel', serif;
   font-size: clamp(2rem, 6vw, 3.5rem);
-  font-weight: 800;
-  letter-spacing: 0.04em;
+  font-weight: 700;
+  letter-spacing: 0.06em;
   background: linear-gradient(135deg, #a855f7, #3b82f6);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
