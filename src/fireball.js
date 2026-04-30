@@ -34,7 +34,7 @@ export class FireballManager {
     this.fireballs.push({ mesh, dir: direction.clone().normalize(), ownerId, lifetime: LIFETIME, spell, cfg });
   }
 
-  update(delta, targets, localActorId, onHit) {
+  update(delta, targets, localActorId, onHit, colliders) {
     for (let i = this.fireballs.length - 1; i >= 0; i--) {
       const fb = this.fireballs[i];
       fb.lifetime -= delta;
@@ -51,6 +51,23 @@ export class FireballManager {
       }
 
       fb.mesh.position.addScaledVector(fb.dir, SPEED * delta);
+      const p = fb.mesh.position;
+
+      // ── World collision ────────────────────────────────────────────────────
+      if (colliders) {
+        // Arena walls
+        if (Math.abs(p.x) >= colliders.arenaSize - 0.4 ||
+            Math.abs(p.z) >= colliders.arenaSize - 0.4) {
+          this._remove(i); continue;
+        }
+        // Tree trunks (cylinder check in XZ plane)
+        let hitTree = false;
+        for (const tree of colliders.trees) {
+          const dx = p.x - tree.x, dz = p.z - tree.z;
+          if (dx * dx + dz * dz < tree.radius * tree.radius) { hitTree = true; break; }
+        }
+        if (hitTree) { this._remove(i); continue; }
+      }
 
       if (fb.ownerId !== localActorId) continue;
       for (const [id, player] of targets) {

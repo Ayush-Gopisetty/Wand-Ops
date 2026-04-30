@@ -24,7 +24,7 @@ let scene, camera, renderer;
 let localPlayer;
 const remotePlayers = new Map();
 
-let controls, fireballs, network, ui;
+let controls, fireballs, network, ui, colliders;
 
 let cameraYaw   = 0;
 let cameraPitch = 0;
@@ -46,7 +46,7 @@ const clock = new THREE.Clock();
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 function init() {
   const canvas = document.getElementById('game-canvas');
-  ({ scene, camera, renderer } = createScene(canvas));
+  ({ scene, camera, renderer, colliders } = createScene(canvas));
 
   controls  = new Controls();
   ui        = new UIManager();
@@ -233,7 +233,7 @@ function update(delta) {
       const dead = target.takeDamage(damage);
       if (dead) ui.addKillEntry(`You defeated Wizard ${targetId}!`);
     }
-  });
+  }, colliders);
 
   // ── Network position broadcast ────────────────────────────────────────────
   netTimer += delta;
