@@ -27,9 +27,12 @@ export class NetworkManager {
   }
 
   connect() {
+    console.log('[Network] APP_ID:', APP_ID ? APP_ID.slice(0, 8) + '…' : 'MISSING');
+    console.log('[Network] Photon SDK on window:', !!window.Photon);
+
     // ── Offline fallback when SDK or App ID is missing ────────────────────
-    if (!window.Photon || APP_ID === 'PASTE_YOUR_APP_ID_HERE') {
-      console.warn('[Network] Photon SDK not loaded or App ID not set — offline mode.');
+    if (!window.Photon || !APP_ID || APP_ID === 'PASTE_YOUR_APP_ID_HERE') {
+      console.warn('[Network] Running in OFFLINE mode — multiplayer disabled.');
       setTimeout(() => {
         this.localActorNr = 1;
         this.connected    = true;
@@ -46,37 +49,42 @@ export class NetworkManager {
 
     // ── State changes ─────────────────────────────────────────────────────
     this.client.onStateChange = (state) => {
+      console.log('[Network] Photon state:', state);
       const S = LBC.State;
-      // ConnectedToMaster is when we can join/create a room
       if (S && state === S.ConnectedToMaster) this._joinRoom();
-      // Fallback: some SDK versions use numeric state 3 for ConnectedToMaster
       else if (!S && state === 3) this._joinRoom();
     };
 
-    // Older SDK builds expose this helper callback
-    this.client.onConnectedToMaster = () => this._joinRoom();
+    this.client.onConnectedToMaster = () => {
+      console.log('[Network] onConnectedToMaster fired');
+      this._joinRoom();
+    };
 
     // ── Room events ───────────────────────────────────────────────────────
     this.client.onJoinRoom = (createdByMe) => {
       this.localActorNr = this.client.myActor().actorNr;
       this.connected    = true;
-      this.callbacks.onConnected(this.localActorNr);
+      console.log('[Network] Joined room. actorNr:', this.localActorNr, 'created:', createdByMe);
 
-      // Notify about players already in the room
       const actors = this.client.myRoomActors();
+      console.log('[Network] Existing actors:', Object.keys(actors));
       Object.keys(actors).forEach(key => {
         const nr = parseInt(key, 10);
         if (nr !== this.localActorNr) this.callbacks.onPlayerJoin(nr);
       });
+
+      this.callbacks.onConnected(this.localActorNr);
     };
 
     this.client.onActorJoin = (actor) => {
+      console.log('[Network] Actor joined:', actor.actorNr);
       if (actor.actorNr !== this.localActorNr) {
         this.callbacks.onPlayerJoin(actor.actorNr);
       }
     };
 
     this.client.onActorLeave = (actor) => {
+      console.log('[Network] Actor left:', actor.actorNr);
       this.callbacks.onPlayerLeave(actor.actorNr);
     };
 
@@ -93,7 +101,7 @@ export class NetworkManager {
       console.error('[Photon error]', code, msg);
     };
 
-    // Start connecting
+    console.log('[Network] Connecting to region:', REGION);
     this.client.connectToRegionMaster(REGION);
   }
 
