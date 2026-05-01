@@ -10,6 +10,7 @@ export const EV_FIREBALL = 2; // { px, py, pz, dx, dy, dz }
 export const EV_HIT      = 3; // { targetId, damage }
 export const EV_KILL         = 4; // { killerId, victimId }
 export const EV_SCORE_UPDATE = 5; // { actorNr, kills, deaths }
+export const EV_RESPAWN      = 6; // {} — sent by victim on respawn
 
 export class NetworkManager {
   constructor(callbacks) {
@@ -104,7 +105,8 @@ export class NetworkManager {
         case EV_FIREBALL: this.callbacks.onFireball(actorNr, content); break;
         case EV_HIT:      this.callbacks.onHit(actorNr, content);      break;
         case EV_KILL:         this.callbacks.onKill(content);        break;
-        case EV_SCORE_UPDATE: this.callbacks.onScoreUpdate(content); break;
+        case EV_SCORE_UPDATE: this.callbacks.onScoreUpdate(content);  break;
+        case EV_RESPAWN:      this.callbacks.onRespawn(actorNr);     break;
       }
     };
 
@@ -172,6 +174,11 @@ export class NetworkManager {
   sendScoreUpdate(actorNr, kills, deaths) {
     if (!this.connected || !this.client) return;
     this.client.raiseEvent(EV_SCORE_UPDATE, { actorNr, kills, deaths });
+  }
+
+  sendRespawn() {
+    if (!this.connected || !this.client) return;
+    this.client.raiseEvent(EV_RESPAWN, {});
   }
 
   /** Number of players currently in the room. */

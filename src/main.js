@@ -132,6 +132,17 @@ function init() {
       ui.updateScoreboard(scores, localActorId);
     },
 
+    onRespawn(actorNr) {
+      const p = remotePlayers.get(actorNr);
+      if (p) {
+        p.health = 100;
+        p.burnTimer = 0;
+        p.slowTimer = 0;
+        p.silenceTimer = 0;
+        p.hitFlashTimer = 0;
+      }
+    },
+
     onConnectionFailed(reason) {
       ui.setOverlayStatus(`Multiplayer unavailable — ${reason}. Click to play solo.`);
       localActorId = 1;
@@ -145,9 +156,9 @@ function init() {
         ui.setHealth(localPlayer.health);
         if (dead) {
           localPlayer.respawn();
+          network.sendRespawn(); // tell others to reset our health on their client
           ui.setHealth(localPlayer.health);
           ui.addKillEntry(`Wizard ${actorNr} defeated you!`);
-          // Deaths tracked via EV_KILL from the killer's client
         }
       } else {
         const target = remotePlayers.get(data.targetId);
@@ -287,6 +298,11 @@ function update(delta) {
     if (target) {
       const dead = target.takeDamage(damage);
       if (dead) {
+        // Reset remote health immediately — health stays 0 without this,
+        // making every subsequent hit also return dead=true
+        target.health = 100;
+        target.hitFlashTimer = 0;
+
         network.sendKill(localActorId, targetId);
         // raiseEvent doesn't loop back — apply locally and broadcast updated score
         if (!scores.has(localActorId)) scores.set(localActorId, { kills: 0, deaths: 0 });
