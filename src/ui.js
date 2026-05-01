@@ -44,14 +44,14 @@ export class UIManager {
 
   // ── Spell indicator ──────────────────────────────────────────────────────────
   setSpell(spell) {
-    const labels = { fire: '🔥 Fire', ice: '❄️ Ice', lightning: '⚡ Lightning' };
+    const labels = { fire: '🔥 Fire', ice: '❄️ Ice', lightning: '⚡ Lightning', air: '💨 Air', earth: '🪨 Earth' };
     this._spellIndicator.textContent  = labels[spell] || spell;
     this._spellIndicator.dataset.spell = spell;
   }
 
   // ── Active effect status ──────────────────────────────────────────────────────
   setEffect(effect) {
-    const labels = { burn: '🔥 Burning!', slow: '❄️ Slowed!', silence: '⚡ Silenced!' };
+    const labels = { burn: '🔥 Burning!', slow: '❄️ Slowed!', silence: '⚡ Silenced!', ground: '🪨 Grounded!' };
     this._effectStatus.textContent    = effect ? labels[effect] : '';
     this._effectStatus.dataset.effect = effect || '';
   }

@@ -31,10 +31,11 @@ export class Player {
     this._bodyColor    = color;
 
     // Status effects (ticked in update; burn damage applied in main.js)
-    this.burnTimer    = 0;
-    this.burnDps      = 0;
-    this.slowTimer    = 0;
-    this.silenceTimer = 0;
+    this.burnTimer     = 0;
+    this.burnDps       = 0;
+    this.slowTimer     = 0;
+    this.silenceTimer  = 0;
+    this.groundedTimer = 0;
 
     this._buildMesh(color);
     scene.add(this.group);
@@ -88,9 +89,10 @@ export class Player {
       this.position.x = clamp(this.position.x, -ARENA_HALF, ARENA_HALF);
       this.position.z = clamp(this.position.z, -ARENA_HALF, ARENA_HALF);
       // Y managed by main.js (gravity + jump)
-      if (this.burnTimer    > 0) this.burnTimer    -= delta;
-      if (this.slowTimer    > 0) this.slowTimer    -= delta;
-      if (this.silenceTimer > 0) this.silenceTimer -= delta;
+      if (this.burnTimer     > 0) this.burnTimer     -= delta;
+      if (this.slowTimer     > 0) this.slowTimer     -= delta;
+      if (this.silenceTimer  > 0) this.silenceTimer  -= delta;
+      if (this.groundedTimer > 0) this.groundedTimer -= delta;
     } else {
       this.position.lerp(this.targetPosition, LERP_SPEED);
       this.rotation += (this.targetRotation - this.rotation) * LERP_SPEED;
@@ -114,7 +116,10 @@ export class Player {
       this.slowTimer = 3;
     } else if (spell === 'lightning') {
       this.silenceTimer = 2;
+    } else if (spell === 'earth') {
+      this.groundedTimer = 3;
     }
+    // air knockback is handled in main.js via velocity
   }
 
   takeDamage(amount) {
@@ -131,10 +136,11 @@ export class Player {
       (Math.random() - 0.5) * 24
     );
     this.velocity.set(0, 0, 0);
-    this.hitFlashTimer = 0;
-    this.burnTimer    = 0;
-    this.slowTimer    = 0;
-    this.silenceTimer = 0;
+    this.hitFlashTimer  = 0;
+    this.burnTimer      = 0;
+    this.slowTimer      = 0;
+    this.silenceTimer   = 0;
+    this.groundedTimer  = 0;
     this._bodyMat.color.setHex(this._bodyColor);
   }
 

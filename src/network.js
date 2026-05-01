@@ -161,9 +161,11 @@ export class NetworkManager {
     });
   }
 
-  sendHit(targetId, damage, spell = 'fire') {
+  sendHit(targetId, damage, spell = 'fire', dir = null) {
     if (!this.connected || !this.client) return;
-    this.client.raiseEvent(EV_HIT, { targetId, damage, sp: spell });
+    const data = { targetId, damage, sp: spell };
+    if (dir) { data.kx = +dir.x.toFixed(3); data.ky = +dir.y.toFixed(3); data.kz = +dir.z.toFixed(3); }
+    this.client.raiseEvent(EV_HIT, data);
   }
 
   sendKill(killerId, victimId) {

@@ -37,10 +37,11 @@ let playerVelocityY = 0;
 let isGrounded      = true;
 let selectedSpell   = 'fire';
 
-const _moveDir = new THREE.Vector3();
-const _yAxis   = new THREE.Vector3(0, 1, 0);
-const _forward = new THREE.Vector3();
-const _lookAt  = new THREE.Vector3();
+const _moveDir      = new THREE.Vector3();
+const _yAxis        = new THREE.Vector3(0, 1, 0);
+const _forward      = new THREE.Vector3();
+const _lookAt       = new THREE.Vector3();
+const _knockbackVel = new THREE.Vector3();
 
 const clock = new THREE.Clock();
 
@@ -153,6 +154,12 @@ function init() {
       if (data.targetId === localActorId) {
         const dead = localPlayer.takeDamage(data.damage);
         localPlayer.applySpellEffect(data.sp || 'fire');
+
+        if (data.sp === 'air' && data.kx !== undefined) {
+          _knockbackVel.set(data.kx, 0, data.kz).normalize().multiplyScalar(18);
+          playerVelocityY = Math.max(playerVelocityY + 4, 9);
+        }
+
         ui.setHealth(localPlayer.health);
         if (dead) {
           localPlayer.respawn();
@@ -252,8 +259,14 @@ function update(delta) {
     }
   }
 
+  // ── Air knockback decay ───────────────────────────────────────────────────
+  if (_knockbackVel.lengthSq() > 0.01) {
+    localPlayer.position.addScaledVector(_knockbackVel, delta);
+    _knockbackVel.multiplyScalar(Math.max(0, 1 - delta * 7));
+  }
+
   // ── Jump + gravity ────────────────────────────────────────────────────────
-  if (controls.consumeJump() && isGrounded) {
+  if (controls.consumeJump() && isGrounded && localPlayer.groundedTimer <= 0) {
     playerVelocityY = JUMP_VELOCITY;
     isGrounded = false;
   }
@@ -274,9 +287,10 @@ function update(delta) {
 
   // ── Status effect HUD ─────────────────────────────────────────────────────
   ui.setEffect(
-    localPlayer.burnTimer    > 0 ? 'burn'    :
-    localPlayer.slowTimer    > 0 ? 'slow'    :
-    localPlayer.silenceTimer > 0 ? 'silence' : null
+    localPlayer.burnTimer     > 0 ? 'burn'    :
+    localPlayer.slowTimer     > 0 ? 'slow'    :
+    localPlayer.silenceTimer  > 0 ? 'silence' :
+    localPlayer.groundedTimer > 0 ? 'ground'  : null
   );
 
   // ── Shooting (blocked while silenced) ────────────────────────────────────
@@ -291,9 +305,9 @@ function update(delta) {
   remotePlayers.forEach(p => p.update(delta));
 
   // ── Fireball simulation + hit detection ──────────────────────────────────
-  fireballs.update(delta, remotePlayers, localActorId, (ownerId, targetId, damage, spell) => {
+  fireballs.update(delta, remotePlayers, localActorId, (ownerId, targetId, damage, spell, dir) => {
     if (ownerId !== localActorId) return;
-    network.sendHit(targetId, damage, spell);
+    network.sendHit(targetId, damage, spell, spell === 'air' ? dir : null);
     const target = remotePlayers.get(targetId);
     if (target) {
       const dead = target.takeDamage(damage);

@@ -169,8 +169,11 @@ body {
 /* ── Spell picker (overlay) ── */
 #spell-picker {
   display: flex;
-  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
   margin-top: 4px;
+  max-width: 580px;
 }
 
 .spell-btn {
@@ -213,6 +216,16 @@ body {
   background: rgba(255,238,0,0.15);
   box-shadow: 0 0 18px rgba(255,238,0,0.4);
 }
+.spell-btn.active[data-spell="air"] {
+  border-color: #99eeff;
+  background: rgba(153,238,255,0.18);
+  box-shadow: 0 0 18px rgba(153,238,255,0.45);
+}
+.spell-btn.active[data-spell="earth"] {
+  border-color: #8b6914;
+  background: rgba(139,105,20,0.22);
+  box-shadow: 0 0 18px rgba(139,105,20,0.45);
+}
 
 /* ── Spell indicator (HUD) ── */
 #spell-indicator {
@@ -232,6 +245,8 @@ body {
 #spell-indicator[data-spell="fire"]      { border-color: rgba(255,85,0,0.7); }
 #spell-indicator[data-spell="ice"]       { border-color: rgba(68,170,255,0.7); }
 #spell-indicator[data-spell="lightning"] { border-color: rgba(255,238,0,0.7); }
+#spell-indicator[data-spell="air"]       { border-color: rgba(153,238,255,0.7); }
+#spell-indicator[data-spell="earth"]     { border-color: rgba(139,105,20,0.7); }
 
 /* ── Scoreboard ── */
 #scoreboard {
