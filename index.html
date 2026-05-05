@@ -6,13 +6,8 @@
   <title>⚡ Wand Ops</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&family=Cinzel:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,700;0,800;1,800&family=Spline+Sans:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css" />
-  <!--
-    Photon JS SDK — loaded as a global script so window.Photon is available.
-    IMPORTANT: Replace YOUR_PHOTON_APP_ID in src/network.js with a real App ID
-    from https://dashboard.photonengine.com (free tier supports up to 20 CCU).
-  -->
 </head>
 <body>
   <canvas id="game-canvas"></canvas>
@@ -55,42 +50,200 @@
     </div>
   </div>
 
-  <!-- Start / paused overlay -->
+  <!-- Landing / paused overlay -->
   <div id="overlay">
-    <h1 id="overlay-title">⚡ Wand Ops</h1>
-    <p id="overlay-status">Connecting…</p>
 
-    <div id="spell-picker">
-      <button class="spell-btn active" data-spell="fire">
-        <span class="spell-icon">🔥</span>
-        <span class="spell-name">Fire</span>
-        <span class="spell-desc">Burn · 5 dmg/s · 3s</span>
-      </button>
-      <button class="spell-btn" data-spell="ice">
-        <span class="spell-icon">❄️</span>
-        <span class="spell-name">Ice</span>
-        <span class="spell-desc">Slow · 70% · 3s</span>
-      </button>
-      <button class="spell-btn" data-spell="lightning">
-        <span class="spell-icon">⚡</span>
-        <span class="spell-name">Lightning</span>
-        <span class="spell-desc">Silence · 2s</span>
-      </button>
-      <button class="spell-btn" data-spell="air">
-        <span class="spell-icon">💨</span>
-        <span class="spell-name">Air</span>
-        <span class="spell-desc">Knockback · pushes</span>
-      </button>
-      <button class="spell-btn" data-spell="earth">
-        <span class="spell-icon">🪨</span>
-        <span class="spell-name">Earth</span>
-        <span class="spell-desc">Grounded · 3s</span>
-      </button>
+    <!-- ── Nav bar ── -->
+    <nav class="lo-nav" onclick="event.stopPropagation()">
+      <div class="lo-nav-brand">
+        <span class="lo-live-badge">WIZARD LIVE</span>
+        <div class="lo-nav-user">
+          <div class="lo-nav-avatar"></div>
+          <div>
+            <div class="lo-nav-name">Archmage_Hex</div>
+            <div class="lo-nav-viewers">1,248 viewers</div>
+          </div>
+        </div>
+      </div>
+      <div class="lo-nav-actions">
+        <div class="lo-currency">
+          <span class="lo-coin">$</span><span>5990</span>
+        </div>
+        <button class="lo-icon-btn" title="Shop">🛒</button>
+        <button class="lo-icon-btn" title="Help">❓</button>
+        <button class="lo-icon-btn" title="Settings">⚙️</button>
+        <button class="lo-icon-btn" title="Chat">💬</button>
+        <button class="lo-signout-btn">Sign Out</button>
+      </div>
+    </nav>
+
+    <!-- ── 3-column body ── -->
+    <div class="lo-body">
+
+      <!-- Left: play + stats + arsenal -->
+      <aside class="lo-left">
+
+        <div class="lo-play-card" id="lo-play-card">
+          <p id="overlay-status" class="lo-play-status">Connecting…</p>
+          <h2 class="lo-play-label">PLAY</h2>
+          <p class="lo-play-mode">QUICK MATCH: ARENA</p>
+        </div>
+
+        <div class="lo-card">
+          <div class="lo-card-head"><span>📊</span> SEASON STATS</div>
+          <div class="lo-stat-row">
+            <span class="lo-stat-label">WIN RATE</span>
+            <span class="lo-stat-value lo-accent">68%</span>
+          </div>
+          <div class="lo-stat-row">
+            <span class="lo-stat-label">K/D RATIO</span>
+            <span class="lo-stat-value lo-accent">2.45</span>
+          </div>
+          <div class="lo-stat-row">
+            <span class="lo-stat-label">WANDS MASTERY</span>
+            <span class="lo-stat-value">Level 42</span>
+          </div>
+        </div>
+
+        <div class="lo-card lo-card-arsenal" onclick="event.stopPropagation()">
+          <div class="lo-card-head"><span>⚔️</span> ARSENAL</div>
+          <div class="lo-gear-item lo-gear-top">
+            <div class="lo-gear-ico">🪄</div>
+            <div>
+              <div class="lo-gear-name">ELDER STAFF</div>
+              <div class="lo-rarity lo-rarity-legendary">LEGENDARY</div>
+            </div>
+          </div>
+          <div class="lo-gear-item">
+            <div class="lo-gear-ico">✨</div>
+            <div>
+              <div class="lo-gear-name">CRYSTAL FOCUS</div>
+              <div class="lo-rarity lo-rarity-rare">LVL 15 • RARE</div>
+            </div>
+          </div>
+          <div class="lo-gear-item">
+            <div class="lo-gear-ico">🛡️</div>
+            <div>
+              <div class="lo-gear-name">RUNE SHIELD</div>
+              <div class="lo-rarity lo-rarity-common">LVL 08 • COMMON</div>
+            </div>
+          </div>
+          <button class="lo-view-gear-btn">VIEW ALL GEAR</button>
+        </div>
+
+      </aside>
+
+      <!-- Center: avatar + player info + spell picker -->
+      <section class="lo-center">
+
+        <div class="lo-avatar-wrap">
+          <div class="lo-avatar-oval">
+            <svg viewBox="0 0 80 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="40" cy="34" r="17" fill="rgba(216,185,255,0.3)"/>
+              <path d="M10 94 C10 64 70 64 70 94" fill="rgba(216,185,255,0.3)"/>
+            </svg>
+          </div>
+          <div class="lo-status-dot"></div>
+        </div>
+
+        <h1 class="lo-player-name" id="lo-player-name">ARCHMAGE HEX</h1>
+
+        <div class="lo-level-row">
+          <span class="lo-chip lo-chip-level">LVL 88</span>
+          <span class="lo-chip lo-chip-rank">GRAND MASTER</span>
+        </div>
+
+        <div class="lo-spell-tray" onclick="event.stopPropagation()">
+          <div id="spell-picker">
+            <button class="spell-btn active" data-spell="fire">
+              <span class="spell-icon">🔥</span>
+              <span class="spell-name">Fire</span>
+              <span class="spell-desc">Burn · 5 dmg/s · 3s</span>
+            </button>
+            <button class="spell-btn" data-spell="ice">
+              <span class="spell-icon">❄️</span>
+              <span class="spell-name">Ice</span>
+              <span class="spell-desc">Slow · 70% · 3s</span>
+            </button>
+            <button class="spell-btn" data-spell="lightning">
+              <span class="spell-icon">⚡</span>
+              <span class="spell-name">Lightning</span>
+              <span class="spell-desc">Silence · 2s</span>
+            </button>
+            <button class="spell-btn" data-spell="air">
+              <span class="spell-icon">💨</span>
+              <span class="spell-name">Air</span>
+              <span class="spell-desc">Knockback · pushes</span>
+            </button>
+            <button class="spell-btn" data-spell="earth">
+              <span class="spell-icon">🪨</span>
+              <span class="spell-name">Earth</span>
+              <span class="spell-desc">Grounded · 3s</span>
+            </button>
+          </div>
+        </div>
+
+        <p id="overlay-hint" class="lo-hint">WASD · Mouse · LMB cast · Space jump</p>
+
+      </section>
+
+      <!-- Right: news -->
+      <aside class="lo-right">
+
+        <div class="lo-card lo-news-card" onclick="event.stopPropagation()">
+          <div class="lo-card-head"><span>📣</span> WIZARD NEWS</div>
+          <div class="lo-news-thumb">
+            <svg viewBox="0 0 48 32" fill="none"><rect width="48" height="32" rx="4" fill="#313252"/><path d="M18 20 L24 12 L30 20Z" fill="#4c4355"/><circle cx="32" cy="13" r="3" fill="#4c4355"/></svg>
+          </div>
+          <div class="lo-news-body">
+            <div class="lo-news-title">PATCH v0.25: NEON WANDS</div>
+            <div class="lo-news-desc">New magical skins and arena rebalancing just dropped in this week's update…</div>
+          </div>
+          <div class="lo-card-divider"></div>
+          <div class="lo-news-event">
+            <div class="lo-event-ico">📅</div>
+            <div>
+              <div class="lo-event-name">WEEKLY TOURNAMENT</div>
+              <div class="lo-event-time">Starts in 4h 20m</div>
+            </div>
+          </div>
+        </div>
+
+      </aside>
     </div>
 
-    <p id="overlay-hint">WASD · Mouse · LMB cast · Space jump</p>
+    <!-- ── Footer ── -->
+    <footer class="lo-footer" onclick="event.stopPropagation()">
+      <div class="lo-footer-links">
+        <span>V0.25.7</span>
+        <span>MERCHANDISE</span>
+        <span>PRIVACY POLICY</span>
+        <span>TERMS OF SERVICE</span>
+      </div>
+      <div class="lo-footer-right">
+        <span>DISCORD</span>
+        <span>𝕏</span>
+        <span class="lo-footer-copy">© 2024 Blue Wizard Digital</span>
+      </div>
+    </footer>
+
   </div>
 
   <script type="module" src="/src/main.js"></script>
+
+  <script>
+    // Bouncy character rotation for player name
+    (function() {
+      const el = document.getElementById('lo-player-name');
+      if (!el) return;
+      const text = el.textContent;
+      el.innerHTML = text.split('').map((ch, i) => {
+        if (ch === ' ') return '<span class="lo-char-space"> </span>';
+        const rot = i % 2 === 0 ? -3 : 3;
+        const ty  = i % 2 === 0 ?  2 : -2;
+        return `<span class="lo-char" style="transform:rotate(${rot}deg) translateY(${ty}px)">${ch}</span>`;
+      }).join('');
+    })();
+  </script>
 </body>
 </html>
