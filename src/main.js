@@ -206,6 +206,24 @@ function init() {
   loop();
 }
 
+// ── Dynamic ground height (ramps + platforms) ─────────────────────────────────
+function getGroundY(x, z) {
+  let y = GROUND_Y;
+  if (!colliders) return y;
+  for (const p of colliders.platforms || []) {
+    if (x >= p.xMin && x <= p.xMax && z >= p.zMin && z <= p.zMax)
+      y = Math.max(y, p.y);
+  }
+  for (const r of colliders.ramps || []) {
+    if (x >= r.xMin && x <= r.xMax && z >= r.zMin && z <= r.zMax) {
+      const a = r.axis === 'z' ? z : x;
+      const t = (a - r.axisStart) / (r.axisEnd - r.axisStart);
+      y = Math.max(y, r.yStart + t * (r.yEnd - r.yStart));
+    }
+  }
+  return y;
+}
+
 // ── Game loop ─────────────────────────────────────────────────────────────────
 function loop() {
   requestAnimationFrame(loop);
@@ -257,6 +275,19 @@ function update(delta) {
         localPlayer.position.z += (dz / dist) * overlap;
       }
     }
+    for (const box of (colliders.boxes || [])) {
+      if (localPlayer.position.y >= box.maxY - 0.3) continue; // on top — don't block
+      const px = localPlayer.position.x, pz = localPlayer.position.z;
+      if (px > box.xMin && px < box.xMax && pz > box.zMin && pz < box.zMax) {
+        const dxMin = px - box.xMin, dxMax = box.xMax - px;
+        const dzMin = pz - box.zMin, dzMax = box.zMax - pz;
+        const minD = Math.min(dxMin, dxMax, dzMin, dzMax);
+        if      (minD === dxMin) localPlayer.position.x = box.xMin - PR;
+        else if (minD === dxMax) localPlayer.position.x = box.xMax + PR;
+        else if (minD === dzMin) localPlayer.position.z = box.zMin - PR;
+        else                     localPlayer.position.z = box.zMax + PR;
+      }
+    }
   }
 
   // ── Air knockback decay ───────────────────────────────────────────────────
@@ -272,8 +303,9 @@ function update(delta) {
   }
   playerVelocityY -= GRAVITY * delta;
   localPlayer.position.y += playerVelocityY * delta;
-  if (localPlayer.position.y <= GROUND_Y) {
-    localPlayer.position.y = GROUND_Y;
+  const groundY = getGroundY(localPlayer.position.x, localPlayer.position.z);
+  if (localPlayer.position.y <= groundY) {
+    localPlayer.position.y = groundY;
     playerVelocityY = 0;
     isGrounded = true;
   }

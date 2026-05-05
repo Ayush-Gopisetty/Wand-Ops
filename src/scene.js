@@ -286,6 +286,91 @@ export function createScene(canvas) {
   TREE_POSITIONS.forEach(([x, z, vi]) => makeTree(x, z, vi));
 
 
+  // ── Elevated platforms + ramps ─────────────────────────────────────────────
+  const PLAT_H     = 3.0;
+  const RAMP_HDIST = 5.5;
+  const RAMP_SLEN  = Math.sqrt(RAMP_HDIST * RAMP_HDIST + PLAT_H * PLAT_H);
+  const RAMP_ANG   = Math.atan2(PLAT_H, RAMP_HDIST);
+  const PAR_H      = 1.2;
+  const PAR_T      = 0.45;
+  const GRND_Y_    = 0.75;
+
+  const elevPlatforms = [], elevRamps = [], elevBoxes = [];
+
+  function addBox(x, y, z, w, h, d) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), stoneMat);
+    m.position.set(x, y, z);
+    scene.add(m);
+    return m;
+  }
+
+  // [cx, cz, axis]  axis='z' → slope along Z (N/S platforms), 'x' → slope along X (W/E)
+  [
+    [0,     -30.5, 'z'],
+    [0,      30.5, 'z'],
+    [-30.5,  0,    'x'],
+    [ 30.5,  0,    'x'],
+  ].forEach(([cx, cz, axis]) => {
+    const isZ  = axis === 'z';
+    const sign = isZ ? Math.sign(cz) : Math.sign(cx);
+    const pw   = isZ ? 10 : 9;   // x-dimension of platform box
+    const pd   = isZ ?  9 : 10;  // z-dimension of platform box
+    const hw   = pw / 2, hd = pd / 2;
+
+    // Platform body
+    addBox(cx, PLAT_H / 2, cz, pw, PLAT_H, pd);
+
+    // Ramp — sloped box connecting ground to platform top
+    const edgeP = isZ ? (cz - sign * hd) : (cx - sign * hw); // platform edge facing center
+    const edgeG = edgeP - sign * RAMP_HDIST;                  // ramp's ground-level end
+    const rc    = (edgeP + edgeG) / 2;                        // ramp center on slope axis
+
+    const rampMesh = addBox(
+      isZ ? cx : rc,
+      PLAT_H / 2,
+      isZ ? rc : cz,
+      isZ ? pw : RAMP_SLEN,
+      0.5,
+      isZ ? RAMP_SLEN : pd
+    );
+    if (isZ) rampMesh.rotation.x = -sign * RAMP_ANG;
+    else     rampMesh.rotation.z =  sign * RAMP_ANG;
+
+    // Parapets — 3-sided stone wall on top for cover (visual only)
+    const parY = PLAT_H + PAR_H / 2;
+    if (isZ) {
+      addBox(cx,      parY, cz + sign * hd, pw,   PAR_H, PAR_T); // back wall
+      addBox(cx - hw, parY, cz,             PAR_T, PAR_H, pd);   // left wall
+      addBox(cx + hw, parY, cz,             PAR_T, PAR_H, pd);   // right wall
+    } else {
+      addBox(cx + sign * hw, parY, cz,      PAR_T, PAR_H, pd);   // back wall
+      addBox(cx, parY, cz - hd,             pw,   PAR_H, PAR_T); // left wall
+      addBox(cx, parY, cz + hd,             pw,   PAR_H, PAR_T); // right wall
+    }
+
+    // Collision data
+    if (isZ) {
+      elevPlatforms.push({ xMin: cx - hw, xMax: cx + hw, zMin: cz - hd, zMax: cz + hd, y: GRND_Y_ + PLAT_H });
+      elevBoxes.push({     xMin: cx - hw, xMax: cx + hw, zMin: cz - hd, zMax: cz + hd, maxY: GRND_Y_ + PLAT_H });
+      elevRamps.push({
+        xMin: cx - hw, xMax: cx + hw,
+        zMin: Math.min(edgeP, edgeG), zMax: Math.max(edgeP, edgeG),
+        axis: 'z', axisStart: edgeG, axisEnd: edgeP,
+        yStart: GRND_Y_, yEnd: GRND_Y_ + PLAT_H,
+      });
+    } else {
+      elevPlatforms.push({ xMin: cx - hw, xMax: cx + hw, zMin: cz - hd, zMax: cz + hd, y: GRND_Y_ + PLAT_H });
+      elevBoxes.push({     xMin: cx - hw, xMax: cx + hw, zMin: cz - hd, zMax: cz + hd, maxY: GRND_Y_ + PLAT_H });
+      elevRamps.push({
+        xMin: Math.min(edgeP, edgeG), xMax: Math.max(edgeP, edgeG),
+        zMin: cz - hd, zMax: cz + hd,
+        axis: 'x', axisStart: edgeG, axisEnd: edgeP,
+        yStart: GRND_Y_, yEnd: GRND_Y_ + PLAT_H,
+      });
+    }
+  });
+
+
   // ── Stars in the sky ──────────────────────────────────────────────────────
   const starGeo = new THREE.BufferGeometry();
   const starPositions = [];
@@ -313,6 +398,9 @@ export function createScene(canvas) {
   const colliders = {
     arenaSize: ARENA,
     trees: TREE_POSITIONS.map(([x, z]) => ({ x, z, radius: 0.7 })),
+    platforms: elevPlatforms,
+    ramps:     elevRamps,
+    boxes:     elevBoxes,
   };
 
   return { scene, camera, renderer, colliders };
