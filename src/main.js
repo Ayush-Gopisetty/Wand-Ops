@@ -156,8 +156,7 @@ function init() {
         localPlayer.applySpellEffect(data.sp || 'fire');
 
         if (data.sp === 'air' && data.kx !== undefined) {
-          _knockbackVel.set(data.kx, 0, data.kz).normalize().multiplyScalar(18);
-          playerVelocityY = Math.max(playerVelocityY + 4, 9);
+          _knockbackVel.set(data.kx, 0, data.kz).normalize().multiplyScalar(30);
         }
 
         ui.setHealth(localPlayer.health);
