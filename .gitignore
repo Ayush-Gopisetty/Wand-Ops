@@ -21,3 +21,4 @@ secrets.*
 Thumbs.db
 
 .env*.local
+.claude
