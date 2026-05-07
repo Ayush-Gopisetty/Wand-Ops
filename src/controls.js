@@ -7,6 +7,7 @@ export class Controls {
   constructor() {
     this.keys    = {};
     this.isLocked = false;
+    this.isAiming = false;
 
     // Accumulators — drained every frame
     this._dx = 0;
@@ -27,15 +28,28 @@ export class Controls {
     };
     this._onMD  = (e) => {
       if (e.button === 0 && this.isLocked) this._click = true;
+      if (e.button === 2 && this.isLocked) {
+        e.preventDefault();
+        this.isAiming = true;
+      }
+    };
+    this._onMU  = (e) => {
+      if (e.button === 2) this.isAiming = false;
+    };
+    this._onCM  = (e) => {
+      if (this.isLocked) e.preventDefault();
     };
     this._onPLC = () => {
       this.isLocked = document.pointerLockElement === document.body;
+      if (!this.isLocked) this.isAiming = false;
     };
 
     document.addEventListener('keydown',          this._onKD);
     document.addEventListener('keyup',            this._onKU);
     document.addEventListener('mousemove',        this._onMM);
     document.addEventListener('mousedown',        this._onMD);
+    document.addEventListener('mouseup',          this._onMU);
+    document.addEventListener('contextmenu',      this._onCM);
     document.addEventListener('pointerlockchange', this._onPLC);
   }
 
@@ -73,6 +87,8 @@ export class Controls {
     document.removeEventListener('keyup',            this._onKU);
     document.removeEventListener('mousemove',        this._onMM);
     document.removeEventListener('mousedown',        this._onMD);
+    document.removeEventListener('mouseup',          this._onMU);
+    document.removeEventListener('contextmenu',      this._onCM);
     document.removeEventListener('pointerlockchange', this._onPLC);
   }
 }

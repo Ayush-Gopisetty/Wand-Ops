@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import { createScene }    from './scene.js';
-import { Player, remoteColor } from './player.js';
+import { Player, remoteColor, createFirstPersonWand } from './player.js';
 import { Controls }       from './controls.js';
 import { FireballManager } from './fireball.js';
 import { NetworkManager } from './network.js';
 import { UIManager }      from './ui.js';
+import { SimpleBotController } from './bot.js';
 
 // ── Tuning constants ─────────────────────────────────────────────────────────
 const MOVE_SPEED       = 9;
@@ -12,17 +13,24 @@ const SLOW_FACTOR      = 0.3;    // movement multiplier while iced
 const MOUSE_SENS       = 0.0022;
 const PITCH_MIN        = -1.4;
 const PITCH_MAX        =  1.4;
+const DEFAULT_FOV      = 72;
+const ADS_FOV          = 44;
 const SHOOT_COOLDOWN   = 0.5;
 const NET_TICK         = 1 / 13;
 const EYE_HEIGHT       = 1.5;
 const JUMP_VELOCITY    = 8;
 const GRAVITY          = 22;
 const GROUND_Y         = 0.75;
+const BOT_ID           = 9001;
+const BOT_COLOR        = 0xffd166;
 
 // ── Module-level state ───────────────────────────────────────────────────────
 let scene, camera, renderer;
 let localPlayer;
+let firstPersonWand;
 const remotePlayers = new Map();
+let trainingBot = null;
+let trainingBotAI = null;
 
 let controls, fireballs, network, ui, colliders;
 const scores = new Map(); // actorNr → { kills, deaths }
@@ -32,6 +40,7 @@ let cameraPitch = 0;
 let shootTimer  = 0;
 let netTimer    = 0;
 let localActorId = -1;
+let aimBlend = 0;
 
 let playerVelocityY = 0;
 let isGrounded      = true;
@@ -42,6 +51,8 @@ const _yAxis        = new THREE.Vector3(0, 1, 0);
 const _forward      = new THREE.Vector3();
 const _lookAt       = new THREE.Vector3();
 const _knockbackVel = new THREE.Vector3();
+const _wandBasePos  = new THREE.Vector3(0.46, -0.42, -0.78);
+const _wandAimPos   = new THREE.Vector3(0.08, -0.22, -0.48);
 
 const clock = new THREE.Clock();
 
@@ -57,10 +68,90 @@ function updateLocalKDA() {
   ui.setKDA(localScore.kills, localScore.deaths, localScore.assists);
 }
 
+function hasHumanOpponents() {
+  for (const actorNr of remotePlayers.keys()) {
+    if (actorNr !== BOT_ID) return true;
+  }
+  return false;
+}
+
+function updateDisplayedPlayerCount() {
+  const baseCount = network ? network.getPlayerCount() : 1;
+  ui.setPlayerCount(baseCount + (trainingBot ? 1 : 0));
+}
+
+function spawnTrainingBot() {
+  if (trainingBot || localActorId < 0 || hasHumanOpponents()) return;
+  const bot = new Player(scene, true, BOT_COLOR);
+  bot.id = BOT_ID;
+  bot.position.set(10, GROUND_Y, 8);
+  bot.group.position.copy(bot.position);
+  trainingBot = bot;
+  trainingBotAI = new SimpleBotController(bot, colliders);
+  ensureScoreEntry(BOT_ID);
+  ui.updateScoreboard(scores, localActorId);
+  ui.addKillEntry('Training Bot joined the arena.');
+  updateDisplayedPlayerCount();
+}
+
+function removeTrainingBot(reason = '') {
+  if (!trainingBot) return;
+  trainingBot.remove();
+  trainingBot = null;
+  trainingBotAI = null;
+  scores.delete(BOT_ID);
+  ui.updateScoreboard(scores, localActorId);
+  if (reason) ui.addKillEntry(reason);
+  updateDisplayedPlayerCount();
+}
+
+function refreshTrainingBotState() {
+  if (hasHumanOpponents()) {
+    removeTrainingBot('Training Bot left for a live match.');
+    return;
+  }
+  spawnTrainingBot();
+}
+
+function getCombatTargets() {
+  const targets = new Map(remotePlayers);
+  targets.set(localActorId, localPlayer);
+  if (trainingBot) targets.set(BOT_ID, trainingBot);
+  return targets;
+}
+
+function getSimulatedOwners() {
+  const owners = new Set([localActorId]);
+  if (trainingBot) owners.add(BOT_ID);
+  return owners;
+}
+
+function handleDefeat(killerId, victimId, killerLabel, victimLabel) {
+  ensureScoreEntry(killerId).kills++;
+  ensureScoreEntry(victimId).deaths++;
+  ui.updateScoreboard(scores, localActorId);
+  updateLocalKDA();
+  if (killerId === localActorId) {
+    ui.addKillEntry(`You defeated ${victimLabel}!`);
+  } else if (victimId === localActorId) {
+    ui.addKillEntry(`${killerLabel} defeated you!`);
+  }
+}
+
+function handleRemoteHitDefeat(actorNr) {
+  localPlayer.respawn();
+  network.sendRespawn(); // tell others to reset our health on their client
+  ui.setHealth(localPlayer.health);
+  ui.addKillEntry(`Wizard ${actorNr} defeated you!`);
+}
+
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 function init() {
   const canvas = document.getElementById('game-canvas');
   ({ scene, camera, renderer, colliders } = createScene(canvas));
+  scene.add(camera);
+  camera.fov = DEFAULT_FOV;
+  camera.updateProjectionMatrix();
 
   controls  = new Controls();
   ui        = new UIManager();
@@ -68,6 +159,8 @@ function init() {
 
   localPlayer = new Player(scene, true, 0x9b59b6);
   localPlayer.group.visible = false;
+  firstPersonWand = createFirstPersonWand();
+  camera.add(firstPersonWand);
 
   // ── Spell picker ──────────────────────────────────────────────────────────
   document.querySelectorAll('.spell-btn').forEach(btn => {
@@ -90,6 +183,7 @@ function init() {
       // onPlayerJoin already ran for existing actors — only set own entry
       scores.set(actorNr, { kills: 0, deaths: 0, assists: 0 });
       updateLocalKDA();
+      refreshTrainingBotState();
       ui.setOverlayStatus('Click to play');
     },
 
@@ -101,7 +195,8 @@ function init() {
       remotePlayers.set(actorNr, player);
       // Fresh score for this player (reset covers rejoin)
       scores.set(actorNr, { kills: 0, deaths: 0, assists: 0 });
-      ui.setPlayerCount(remotePlayers.size + 1);
+      refreshTrainingBotState();
+      updateDisplayedPlayerCount();
       // Broadcast own current score so the new player sees everyone's totals
       if (localActorId >= 0) {
         const mine = scores.get(localActorId);
@@ -115,7 +210,8 @@ function init() {
       player.remove();
       remotePlayers.delete(actorNr);
       scores.delete(actorNr);
-      ui.setPlayerCount(remotePlayers.size + 1);
+      refreshTrainingBotState();
+      updateDisplayedPlayerCount();
     },
 
     onPosition(actorNr, data) {
@@ -162,6 +258,7 @@ function init() {
       localPlayer.id = 1;
       ensureScoreEntry(localActorId);
       updateLocalKDA();
+      refreshTrainingBotState();
     },
 
     onHit(actorNr, data) {
@@ -175,10 +272,7 @@ function init() {
 
         ui.setHealth(localPlayer.health);
         if (dead) {
-          localPlayer.respawn();
-          network.sendRespawn(); // tell others to reset our health on their client
-          ui.setHealth(localPlayer.health);
-          ui.addKillEntry(`Wizard ${actorNr} defeated you!`);
+          handleRemoteHitDefeat(actorNr);
         }
       } else {
         const target = remotePlayers.get(data.targetId);
@@ -191,7 +285,7 @@ function init() {
 
   ui.showOverlay(true);
   ui.setHealth(100);
-  ui.setPlayerCount(1);
+  updateDisplayedPlayerCount();
   ui.setKDA(0, 0, 0);
 
   document.getElementById('overlay').addEventListener('click', () => {
@@ -250,6 +344,7 @@ function loop() {
 // ── Per-frame update ──────────────────────────────────────────────────────────
 function update(delta) {
   if (!controls.isLocked || localActorId < 0) return;
+  aimBlend = THREE.MathUtils.lerp(aimBlend, controls.isAiming ? 1 : 0, 1 - Math.exp(-delta * 14));
 
   // ── Camera yaw / pitch ────────────────────────────────────────────────────
   const { dx, dy } = controls.consumeMouseDelta();
@@ -346,33 +441,46 @@ function update(delta) {
     castFireball();
   }
 
+  if (trainingBot && trainingBotAI) {
+    const botShot = trainingBotAI.update(delta, localPlayer);
+    if (botShot) fireballs.spawn(botShot.position, botShot.direction, BOT_ID, botShot.spell);
+  }
+
   // ── Update players ────────────────────────────────────────────────────────
   localPlayer.update(delta);
+  if (trainingBot) trainingBot.update(delta);
   remotePlayers.forEach(p => p.update(delta));
 
   // ── Fireball simulation + hit detection ──────────────────────────────────
-  fireballs.update(delta, remotePlayers, localActorId, (ownerId, targetId, damage, spell, dir) => {
-    if (ownerId !== localActorId) return;
-    network.sendHit(targetId, damage, spell, spell === 'air' ? dir : null);
-    const target = remotePlayers.get(targetId);
-    if (target) {
-      const dead = target.takeDamage(damage);
-      if (dead) {
-        // Reset remote health immediately — health stays 0 without this,
-        // making every subsequent hit also return dead=true
-        target.health = 100;
-        target.hitFlashTimer = 0;
+  fireballs.update(delta, getCombatTargets(), getSimulatedOwners(), (ownerId, targetId, damage, spell, dir) => {
+    if (ownerId === localActorId) {
+      network.sendHit(targetId, damage, spell, spell === 'air' ? dir : null);
+      const target = targetId === BOT_ID ? trainingBot : remotePlayers.get(targetId);
+      if (!target) return;
 
+      const dead = target.takeDamage(damage);
+      if (!dead) return;
+
+      target.respawn();
+      if (targetId !== BOT_ID) {
         network.sendKill(localActorId, targetId);
-        // raiseEvent doesn't loop back — apply locally and broadcast updated score
-        ensureScoreEntry(localActorId).kills++;
-        ensureScoreEntry(targetId).deaths++;
         const mine = scores.get(localActorId);
-        network.sendScoreUpdate(localActorId, mine.kills, mine.deaths);
-        ui.updateScoreboard(scores, localActorId);
-        updateLocalKDA();
-        ui.addKillEntry(`You defeated Wizard ${targetId}!`);
+        network.sendScoreUpdate(localActorId, mine.kills + 1, mine.deaths);
+      } else {
+        handleDefeat(localActorId, targetId, 'You', 'Training Bot');
       }
+      return;
+    }
+
+    if (ownerId === BOT_ID && targetId === localActorId) {
+      const dead = localPlayer.takeDamage(damage);
+      localPlayer.applySpellEffect(spell);
+      ui.setHealth(localPlayer.health);
+      if (!dead) return;
+
+      localPlayer.respawn();
+      ui.setHealth(localPlayer.health);
+      handleDefeat(BOT_ID, localActorId, 'Training Bot', 'you');
     }
   }, colliders);
 
@@ -381,7 +489,7 @@ function update(delta) {
   if (netTimer >= NET_TICK) {
     netTimer = 0;
     network.sendPosition(localPlayer.position, localPlayer.rotation);
-    ui.setPlayerCount(network.getPlayerCount());
+    updateDisplayedPlayerCount();
   }
 
 }
@@ -416,6 +524,22 @@ function updateCamera() {
     localPlayer.position.z - Math.cos(cameraYaw) * Math.cos(cameraPitch)
   );
   camera.lookAt(_lookAt);
+
+  if (firstPersonWand) {
+    const sway = controls.isLocked ? clock.elapsedTime : 0;
+    const moving = _moveDir.lengthSq() > 0 ? 1 - aimBlend * 0.85 : 0;
+    firstPersonWand.position.lerpVectors(_wandBasePos, _wandAimPos, aimBlend);
+    firstPersonWand.position.x += Math.sin(sway * 7.5) * 0.012 * moving;
+    firstPersonWand.position.y += Math.cos(sway * 15) * 0.01 * moving;
+    firstPersonWand.rotation.set(
+      THREE.MathUtils.lerp(-0.22, -0.06, aimBlend) + Math.sin(sway * 8.5) * 0.015 * moving,
+      THREE.MathUtils.lerp(Math.PI + 0.2, Math.PI + 0.04, aimBlend),
+      THREE.MathUtils.lerp(-0.04, -0.015, aimBlend)
+    );
+  }
+
+  camera.fov = THREE.MathUtils.lerp(DEFAULT_FOV, ADS_FOV, aimBlend);
+  camera.updateProjectionMatrix();
 }
 
 function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
