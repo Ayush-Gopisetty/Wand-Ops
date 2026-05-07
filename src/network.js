@@ -11,6 +11,7 @@ export const EV_HIT      = 3; // { targetId, damage }
 export const EV_KILL         = 4; // { killerId, victimId }
 export const EV_SCORE_UPDATE = 5; // { actorNr, kills, deaths }
 export const EV_RESPAWN      = 6; // {} — sent by victim on respawn
+export const EV_PLAYER_NAME  = 7; // { actorNr, name }
 
 export class NetworkManager {
   constructor(callbacks) {
@@ -107,6 +108,7 @@ export class NetworkManager {
         case EV_KILL:         this.callbacks.onKill(content);        break;
         case EV_SCORE_UPDATE: this.callbacks.onScoreUpdate(content);  break;
         case EV_RESPAWN:      this.callbacks.onRespawn(actorNr);     break;
+        case EV_PLAYER_NAME:  this.callbacks.onPlayerName(content);  break;
       }
     };
 
@@ -181,6 +183,11 @@ export class NetworkManager {
   sendRespawn() {
     if (!this.connected || !this.client) return;
     this.client.raiseEvent(EV_RESPAWN, {});
+  }
+
+  sendPlayerName(actorNr, name) {
+    if (!this.connected || !this.client) return;
+    this.client.raiseEvent(EV_PLAYER_NAME, { actorNr, name });
   }
 
   /** Number of players currently in the room. */

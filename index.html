@@ -30,6 +30,7 @@
     <div id="effect-status"></div>
 
     <div id="kill-feed"></div>
+    <div id="damage-numbers"></div>
   </div>
 
   <!-- Scoreboard (Tab) -->
@@ -53,6 +54,39 @@
 
   <!-- Landing / paused overlay -->
   <div id="overlay">
+    <h1 id="overlay-title">⚡ Wand Ops</h1>
+    <p id="overlay-status">Connecting…</p>
+    <label id="player-name-wrap" for="player-name-input">
+      <span id="player-name-label">Wizard Name</span>
+      <input id="player-name-input" type="text" maxlength="18" placeholder="ArcaneAce" autocomplete="off" />
+    </label>
+
+    <div id="spell-picker">
+      <button class="spell-btn active" data-spell="fire">
+        <span class="spell-icon">🔥</span>
+        <span class="spell-name">Fire</span>
+        <span class="spell-desc">Burn · 5 dmg/s · 3s</span>
+      </button>
+      <button class="spell-btn" data-spell="ice">
+        <span class="spell-icon">❄️</span>
+        <span class="spell-name">Ice</span>
+        <span class="spell-desc">Slow · 70% · 3s</span>
+      </button>
+      <button class="spell-btn" data-spell="lightning">
+        <span class="spell-icon">⚡</span>
+        <span class="spell-name">Lightning</span>
+        <span class="spell-desc">Silence · 2s</span>
+      </button>
+      <button class="spell-btn" data-spell="air">
+        <span class="spell-icon">💨</span>
+        <span class="spell-name">Air</span>
+        <span class="spell-desc">Knockback · pushes</span>
+      </button>
+      <button class="spell-btn" data-spell="earth">
+        <span class="spell-icon">🪨</span>
+        <span class="spell-name">Earth</span>
+        <span class="spell-desc">Grounded · 3s</span>
+      </button>
 
     <!-- ── Nav bar ── -->
     <nav class="lo-nav" onclick="event.stopPropagation()">

@@ -1,30 +1,28 @@
 import * as THREE from 'three';
-import { createScene }    from './scene.js';
+import { createScene } from './scene.js';
 import { Player, remoteColor, createFirstPersonWand } from './player.js';
-import { Controls }       from './controls.js';
+import { Controls } from './controls.js';
 import { FireballManager } from './fireball.js';
 import { NetworkManager } from './network.js';
-import { UIManager }      from './ui.js';
+import { UIManager } from './ui.js';
 import { SimpleBotController } from './bot.js';
 
-// ── Tuning constants ─────────────────────────────────────────────────────────
-const MOVE_SPEED       = 9;
-const SLOW_FACTOR      = 0.3;    // movement multiplier while iced
-const MOUSE_SENS       = 0.0022;
-const PITCH_MIN        = -1.4;
-const PITCH_MAX        =  1.4;
-const DEFAULT_FOV      = 72;
-const ADS_FOV          = 44;
-const SHOOT_COOLDOWN   = 0.5;
-const NET_TICK         = 1 / 13;
-const EYE_HEIGHT       = 1.5;
-const JUMP_VELOCITY    = 8;
-const GRAVITY          = 22;
-const GROUND_Y         = 0.75;
-const BOT_ID           = 9001;
-const BOT_COLOR        = 0xffd166;
+const MOVE_SPEED = 9;
+const SLOW_FACTOR = 0.3;
+const MOUSE_SENS = 0.0022;
+const PITCH_MIN = -1.4;
+const PITCH_MAX = 1.4;
+const DEFAULT_FOV = 72;
+const ADS_FOV = 44;
+const SHOOT_COOLDOWN = 0.5;
+const NET_TICK = 1 / 13;
+const EYE_HEIGHT = 1.5;
+const JUMP_VELOCITY = 8;
+const GRAVITY = 22;
+const GROUND_Y = 0.75;
+const BOT_ID = 9001;
+const BOT_COLOR = 0xffd166;
 
-// ── Module-level state ───────────────────────────────────────────────────────
 let scene, camera, renderer;
 let localPlayer;
 let firstPersonWand;
@@ -33,26 +31,28 @@ let trainingBot = null;
 let trainingBotAI = null;
 
 let controls, fireballs, network, ui, colliders;
-const scores = new Map(); // actorNr → { kills, deaths }
+const scores = new Map();
+const playerNames = new Map();
 
-let cameraYaw   = 0;
+let cameraYaw = 0;
 let cameraPitch = 0;
-let shootTimer  = 0;
-let netTimer    = 0;
+let shootTimer = 0;
+let netTimer = 0;
 let localActorId = -1;
 let aimBlend = 0;
+let localPlayerName = 'Wizard';
 
 let playerVelocityY = 0;
-let isGrounded      = true;
-let selectedSpell   = 'fire';
+let isGrounded = true;
+let selectedSpell = 'fire';
 
-const _moveDir      = new THREE.Vector3();
-const _yAxis        = new THREE.Vector3(0, 1, 0);
-const _forward      = new THREE.Vector3();
-const _lookAt       = new THREE.Vector3();
+const _moveDir = new THREE.Vector3();
+const _yAxis = new THREE.Vector3(0, 1, 0);
+const _forward = new THREE.Vector3();
+const _lookAt = new THREE.Vector3();
 const _knockbackVel = new THREE.Vector3();
-const _wandBasePos  = new THREE.Vector3(0.46, -0.42, -0.78);
-const _wandAimPos   = new THREE.Vector3(0.08, -0.22, -0.48);
+const _wandBasePos = new THREE.Vector3(0.46, -0.42, -0.78);
+const _wandAimPos = new THREE.Vector3(0.08, -0.22, -0.48);
 
 const clock = new THREE.Clock();
 
@@ -61,11 +61,26 @@ function ensureScoreEntry(actorNr) {
   return scores.get(actorNr);
 }
 
+function sanitizePlayerName(value) {
+  const cleaned = (value || '').replace(/\s+/g, ' ').trim().slice(0, 18);
+  return cleaned || 'Wizard';
+}
+
+function getPlayerLabel(actorNr, isLocal = false) {
+  if (isLocal || actorNr === localActorId) return '⚔ You';
+  if (actorNr === BOT_ID) return 'Training Bot';
+  return playerNames.get(actorNr) || `Wizard ${actorNr}`;
+}
+
 function updateLocalKDA() {
   const localScore = localActorId >= 0
     ? ensureScoreEntry(localActorId)
     : { kills: 0, deaths: 0, assists: 0 };
   ui.setKDA(localScore.kills, localScore.deaths, localScore.assists);
+}
+
+function refreshScoreboard() {
+  ui.updateScoreboard(scores, localActorId, getPlayerLabel);
 }
 
 function hasHumanOpponents() {
@@ -84,12 +99,14 @@ function spawnTrainingBot() {
   if (trainingBot || localActorId < 0 || hasHumanOpponents()) return;
   const bot = new Player(scene, true, BOT_COLOR);
   bot.id = BOT_ID;
+  bot.setName('Training Bot');
   bot.position.set(10, GROUND_Y, 8);
   bot.group.position.copy(bot.position);
   trainingBot = bot;
   trainingBotAI = new SimpleBotController(bot, colliders);
   ensureScoreEntry(BOT_ID);
-  ui.updateScoreboard(scores, localActorId);
+  playerNames.set(BOT_ID, 'Training Bot');
+  refreshScoreboard();
   ui.addKillEntry('Training Bot joined the arena.');
   updateDisplayedPlayerCount();
 }
@@ -100,7 +117,8 @@ function removeTrainingBot(reason = '') {
   trainingBot = null;
   trainingBotAI = null;
   scores.delete(BOT_ID);
-  ui.updateScoreboard(scores, localActorId);
+  playerNames.delete(BOT_ID);
+  refreshScoreboard();
   if (reason) ui.addKillEntry(reason);
   updateDisplayedPlayerCount();
 }
@@ -129,7 +147,7 @@ function getSimulatedOwners() {
 function handleDefeat(killerId, victimId, killerLabel, victimLabel) {
   ensureScoreEntry(killerId).kills++;
   ensureScoreEntry(victimId).deaths++;
-  ui.updateScoreboard(scores, localActorId);
+  refreshScoreboard();
   updateLocalKDA();
   if (killerId === localActorId) {
     ui.addKillEntry(`You defeated ${victimLabel}!`);
@@ -140,50 +158,68 @@ function handleDefeat(killerId, victimId, killerLabel, victimLabel) {
 
 function handleRemoteHitDefeat(actorNr) {
   localPlayer.respawn();
-  network.sendRespawn(); // tell others to reset our health on their client
+  network.sendRespawn();
   ui.setHealth(localPlayer.health);
-  ui.addKillEntry(`Wizard ${actorNr} defeated you!`);
+  ui.addKillEntry(`${getPlayerLabel(actorNr)} defeated you!`);
 }
 
-// ── Bootstrap ─────────────────────────────────────────────────────────────────
 function init() {
   const canvas = document.getElementById('game-canvas');
+  const playerNameInput = document.getElementById('player-name-input');
   ({ scene, camera, renderer, colliders } = createScene(canvas));
   scene.add(camera);
   camera.fov = DEFAULT_FOV;
   camera.updateProjectionMatrix();
 
-  controls  = new Controls();
-  ui        = new UIManager();
+  const storedName = localStorage.getItem('wand-ops-player-name');
+  localPlayerName = sanitizePlayerName(storedName);
+  playerNameInput.value = localPlayerName;
+
+  controls = new Controls();
+  ui = new UIManager();
   fireballs = new FireballManager(scene);
 
   localPlayer = new Player(scene, true, 0x9b59b6);
+  localPlayer.setName(localPlayerName);
   localPlayer.group.visible = false;
   firstPersonWand = createFirstPersonWand();
   camera.add(firstPersonWand);
 
-  // ── Spell picker ──────────────────────────────────────────────────────────
-  document.querySelectorAll('.spell-btn').forEach(btn => {
-    btn.addEventListener('click', e => {
+  playerNameInput.addEventListener('click', (e) => e.stopPropagation());
+  playerNameInput.addEventListener('keydown', (e) => e.stopPropagation());
+  playerNameInput.addEventListener('input', () => {
+    localPlayerName = sanitizePlayerName(playerNameInput.value);
+    if (playerNameInput.value !== localPlayerName) playerNameInput.value = localPlayerName;
+    localStorage.setItem('wand-ops-player-name', localPlayerName);
+    localPlayer.setName(localPlayerName);
+    if (localActorId >= 0) {
+      playerNames.set(localActorId, localPlayerName);
+      refreshScoreboard();
+      network.sendPlayerName(localActorId, localPlayerName);
+    }
+  });
+
+  document.querySelectorAll('.spell-btn').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
       e.stopPropagation();
       selectedSpell = btn.dataset.spell;
-      document.querySelectorAll('.spell-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.spell-btn').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       ui.setSpell(selectedSpell);
     });
   });
   ui.setSpell(selectedSpell);
 
-  // ── Network callbacks ──────────────────────────────────────────────────────
   network = new NetworkManager({
-
     onConnected(actorNr) {
-      localActorId   = actorNr;
+      localActorId = actorNr;
       localPlayer.id = actorNr;
-      // onPlayerJoin already ran for existing actors — only set own entry
+      playerNames.set(actorNr, localPlayerName);
       scores.set(actorNr, { kills: 0, deaths: 0, assists: 0 });
       updateLocalKDA();
       refreshTrainingBotState();
+      refreshScoreboard();
+      network.sendPlayerName(actorNr, localPlayerName);
       ui.setOverlayStatus('Click to play');
     },
 
@@ -191,16 +227,18 @@ function init() {
       if (actorNr === localActorId) return;
       if (remotePlayers.has(actorNr)) return;
       const player = new Player(scene, false, remoteColor(actorNr));
-      player.id    = actorNr;
+      player.id = actorNr;
+      player.setName(`Wizard ${actorNr}`);
       remotePlayers.set(actorNr, player);
-      // Fresh score for this player (reset covers rejoin)
+      playerNames.set(actorNr, `Wizard ${actorNr}`);
       scores.set(actorNr, { kills: 0, deaths: 0, assists: 0 });
       refreshTrainingBotState();
       updateDisplayedPlayerCount();
-      // Broadcast own current score so the new player sees everyone's totals
+      refreshScoreboard();
       if (localActorId >= 0) {
         const mine = scores.get(localActorId);
         if (mine) network.sendScoreUpdate(localActorId, mine.kills, mine.deaths);
+        network.sendPlayerName(localActorId, localPlayerName);
       }
     },
 
@@ -210,8 +248,10 @@ function init() {
       player.remove();
       remotePlayers.delete(actorNr);
       scores.delete(actorNr);
+      playerNames.delete(actorNr);
       refreshTrainingBotState();
       updateDisplayedPlayerCount();
+      refreshScoreboard();
     },
 
     onPosition(actorNr, data) {
@@ -231,14 +271,22 @@ function init() {
     onKill({ killerId, victimId }) {
       ensureScoreEntry(killerId).kills++;
       ensureScoreEntry(victimId).deaths++;
-      ui.updateScoreboard(scores, localActorId);
+      refreshScoreboard();
       updateLocalKDA();
     },
 
     onScoreUpdate({ actorNr, kills, deaths }) {
       if (actorNr === localActorId) return;
       scores.set(actorNr, { kills, deaths, assists: scores.get(actorNr)?.assists ?? 0 });
-      ui.updateScoreboard(scores, localActorId);
+      refreshScoreboard();
+    },
+
+    onPlayerName({ actorNr, name }) {
+      const cleanName = sanitizePlayerName(name);
+      playerNames.set(actorNr, cleanName);
+      const player = remotePlayers.get(actorNr);
+      if (player) player.setName(cleanName);
+      refreshScoreboard();
     },
 
     onRespawn(actorNr) {
@@ -256,14 +304,17 @@ function init() {
       ui.setOverlayStatus(`Multiplayer unavailable — ${reason}. Click to play solo.`);
       localActorId = 1;
       localPlayer.id = 1;
+      playerNames.set(1, localPlayerName);
       ensureScoreEntry(localActorId);
       updateLocalKDA();
       refreshTrainingBotState();
+      refreshScoreboard();
     },
 
     onHit(actorNr, data) {
       if (data.targetId === localActorId) {
         const dead = localPlayer.takeDamage(data.damage);
+        ui.addDamageNumber(data.damage, 'taken');
         localPlayer.applySpellEffect(data.sp || 'fire');
 
         if (data.sp === 'air' && data.kx !== undefined) {
@@ -271,12 +322,13 @@ function init() {
         }
 
         ui.setHealth(localPlayer.health);
-        if (dead) {
-          handleRemoteHitDefeat(actorNr);
-        }
+        if (dead) handleRemoteHitDefeat(actorNr);
       } else {
         const target = remotePlayers.get(data.targetId);
-        if (target) target.takeDamage(data.damage);
+        if (target) {
+          target.takeDamage(data.damage);
+          if (actorNr === localActorId) ui.addDamageNumber(data.damage, 'dealt');
+        }
       }
     },
   });
@@ -287,6 +339,7 @@ function init() {
   ui.setHealth(100);
   updateDisplayedPlayerCount();
   ui.setKDA(0, 0, 0);
+  refreshScoreboard();
 
   document.getElementById('overlay').addEventListener('click', () => {
     controls.requestLock();
@@ -341,23 +394,20 @@ function loop() {
   renderer.render(scene, camera);
 }
 
-// ── Per-frame update ──────────────────────────────────────────────────────────
 function update(delta) {
   if (!controls.isLocked || localActorId < 0) return;
   aimBlend = THREE.MathUtils.lerp(aimBlend, controls.isAiming ? 1 : 0, 1 - Math.exp(-delta * 14));
 
-  // ── Camera yaw / pitch ────────────────────────────────────────────────────
   const { dx, dy } = controls.consumeMouseDelta();
-  cameraYaw   -= dx * MOUSE_SENS;
-  cameraPitch  = clamp(cameraPitch - dy * MOUSE_SENS, PITCH_MIN, PITCH_MAX);
+  cameraYaw -= dx * MOUSE_SENS;
+  cameraPitch = clamp(cameraPitch - dy * MOUSE_SENS, PITCH_MIN, PITCH_MAX);
 
   localPlayer.rotation = cameraYaw;
 
-  // ── WASD movement ─────────────────────────────────────────────────────────
   _moveDir.set(0, 0, 0);
-  if (controls.isDown('KeyW') || controls.isDown('ArrowUp'))    _moveDir.z -= 1;
-  if (controls.isDown('KeyS') || controls.isDown('ArrowDown'))  _moveDir.z += 1;
-  if (controls.isDown('KeyA') || controls.isDown('ArrowLeft'))  _moveDir.x -= 1;
+  if (controls.isDown('KeyW') || controls.isDown('ArrowUp')) _moveDir.z -= 1;
+  if (controls.isDown('KeyS') || controls.isDown('ArrowDown')) _moveDir.z += 1;
+  if (controls.isDown('KeyA') || controls.isDown('ArrowLeft')) _moveDir.x -= 1;
   if (controls.isDown('KeyD') || controls.isDown('ArrowRight')) _moveDir.x += 1;
 
   if (_moveDir.lengthSq() > 0) {
@@ -366,22 +416,21 @@ function update(delta) {
     localPlayer.position.addScaledVector(_moveDir, speed * delta);
   }
 
-  // ── World collision ───────────────────────────────────────────────────────
   if (colliders) {
     const PR = 0.45;
     const bound = colliders.arenaSize - PR;
     localPlayer.position.x = clamp(localPlayer.position.x, -bound, bound);
     localPlayer.position.z = clamp(localPlayer.position.z, -bound, bound);
     for (const tree of colliders.trees) {
-      const dx = localPlayer.position.x - tree.x;
-      const dz = localPlayer.position.z - tree.z;
-      const distSq = dx * dx + dz * dz;
+      const dxTree = localPlayer.position.x - tree.x;
+      const dzTree = localPlayer.position.z - tree.z;
+      const distSq = dxTree * dxTree + dzTree * dzTree;
       const minDist = tree.radius + PR;
       if (distSq < minDist * minDist && distSq > 0.0001) {
         const dist = Math.sqrt(distSq);
         const overlap = minDist - dist;
-        localPlayer.position.x += (dx / dist) * overlap;
-        localPlayer.position.z += (dz / dist) * overlap;
+        localPlayer.position.x += (dxTree / dist) * overlap;
+        localPlayer.position.z += (dzTree / dist) * overlap;
       }
     }
     for (const box of (colliders.boxes || [])) {
@@ -399,13 +448,11 @@ function update(delta) {
     }
   }
 
-  // ── Air knockback decay ───────────────────────────────────────────────────
   if (_knockbackVel.lengthSq() > 0.01) {
     localPlayer.position.addScaledVector(_knockbackVel, delta);
     _knockbackVel.multiplyScalar(Math.max(0, 1 - delta * 7));
   }
 
-  // ── Jump + gravity ────────────────────────────────────────────────────────
   if (controls.consumeJump() && isGrounded && localPlayer.groundedTimer <= 0) {
     playerVelocityY = JUMP_VELOCITY;
     isGrounded = false;
@@ -419,22 +466,22 @@ function update(delta) {
     isGrounded = true;
   }
 
-  // ── Burn DoT ──────────────────────────────────────────────────────────────
   if (localPlayer.burnTimer > 0) {
     const dead = localPlayer.takeDamage(localPlayer.burnDps * delta);
     ui.setHealth(localPlayer.health);
-    if (dead) { localPlayer.respawn(); ui.setHealth(localPlayer.health); }
+    if (dead) {
+      localPlayer.respawn();
+      ui.setHealth(localPlayer.health);
+    }
   }
 
-  // ── Status effect HUD ─────────────────────────────────────────────────────
   ui.setEffect(
-    localPlayer.burnTimer     > 0 ? 'burn'    :
-    localPlayer.slowTimer     > 0 ? 'slow'    :
-    localPlayer.silenceTimer  > 0 ? 'silence' :
-    localPlayer.groundedTimer > 0 ? 'ground'  : null
+    localPlayer.burnTimer > 0 ? 'burn' :
+    localPlayer.slowTimer > 0 ? 'slow' :
+    localPlayer.silenceTimer > 0 ? 'silence' :
+    localPlayer.groundedTimer > 0 ? 'ground' : null
   );
 
-  // ── Shooting (blocked while silenced) ────────────────────────────────────
   shootTimer -= delta;
   if (controls.consumeClick() && shootTimer <= 0 && localPlayer.silenceTimer <= 0) {
     shootTimer = SHOOT_COOLDOWN;
@@ -446,12 +493,10 @@ function update(delta) {
     if (botShot) fireballs.spawn(botShot.position, botShot.direction, BOT_ID, botShot.spell);
   }
 
-  // ── Update players ────────────────────────────────────────────────────────
   localPlayer.update(delta);
   if (trainingBot) trainingBot.update(delta);
-  remotePlayers.forEach(p => p.update(delta));
+  remotePlayers.forEach((p) => p.update(delta));
 
-  // ── Fireball simulation + hit detection ──────────────────────────────────
   fireballs.update(delta, getCombatTargets(), getSimulatedOwners(), (ownerId, targetId, damage, spell, dir) => {
     if (ownerId === localActorId) {
       network.sendHit(targetId, damage, spell, spell === 'air' ? dir : null);
@@ -459,6 +504,7 @@ function update(delta) {
       if (!target) return;
 
       const dead = target.takeDamage(damage);
+      ui.addDamageNumber(damage, 'dealt');
       if (!dead) return;
 
       target.respawn();
@@ -474,6 +520,7 @@ function update(delta) {
 
     if (ownerId === BOT_ID && targetId === localActorId) {
       const dead = localPlayer.takeDamage(damage);
+      ui.addDamageNumber(damage, 'taken');
       localPlayer.applySpellEffect(spell);
       ui.setHealth(localPlayer.health);
       if (!dead) return;
@@ -484,17 +531,14 @@ function update(delta) {
     }
   }, colliders);
 
-  // ── Network position broadcast ────────────────────────────────────────────
   netTimer += delta;
   if (netTimer >= NET_TICK) {
     netTimer = 0;
     network.sendPosition(localPlayer.position, localPlayer.rotation);
     updateDisplayedPlayerCount();
   }
-
 }
 
-// ── Spawn a spell projectile ──────────────────────────────────────────────────
 function castFireball() {
   _forward.set(
     -Math.sin(cameraYaw) * Math.cos(cameraPitch),
@@ -510,7 +554,6 @@ function castFireball() {
   network.sendFireball(spawnPos, _forward, selectedSpell);
 }
 
-// ── First-person camera ───────────────────────────────────────────────────────
 function updateCamera() {
   camera.position.set(
     localPlayer.position.x,
@@ -542,6 +585,8 @@ function updateCamera() {
   camera.updateProjectionMatrix();
 }
 
-function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v));
+}
 
 init();
