@@ -36,7 +36,7 @@ export class FireballManager {
     this.fireballs.push({ mesh, dir: direction.clone().normalize(), ownerId, lifetime: LIFETIME, spell, cfg });
   }
 
-  update(delta, targets, localActorId, onHit, colliders) {
+  update(delta, targets, simulatedOwners, onHit, colliders) {
     for (let i = this.fireballs.length - 1; i >= 0; i--) {
       const fb = this.fireballs[i];
       fb.lifetime -= delta;
@@ -76,7 +76,7 @@ export class FireballManager {
         if (hitTree) { this._remove(i); continue; }
       }
 
-      if (fb.ownerId !== localActorId) continue;
+      if (!simulatedOwners.has(fb.ownerId)) continue;
       for (const [id, player] of targets) {
         if (id === fb.ownerId) continue;
         if (fb.mesh.position.distanceTo(player.position) < HIT_DIST) {

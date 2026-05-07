@@ -9,6 +9,90 @@ export function remoteColor(actorNr) {
   return PLAYER_COLORS[actorNr % PLAYER_COLORS.length];
 }
 
+export function createFirstPersonWand() {
+  const group = new THREE.Group();
+
+  const wandGeo = new THREE.CylinderGeometry(0.045, 0.055, 0.82, 8);
+  const wandMat = new THREE.MeshStandardMaterial({ color: 0x5b341c, roughness: 0.72 });
+  const wand = new THREE.Mesh(wandGeo, wandMat);
+  wand.rotation.z = Math.PI * 0.42;
+  wand.rotation.x = Math.PI * 0.06;
+  wand.position.set(0.42, -0.34, -0.72);
+  group.add(wand);
+
+  const gripGeo = new THREE.CylinderGeometry(0.055, 0.06, 0.2, 8);
+  const gripMat = new THREE.MeshStandardMaterial({ color: 0x2b170d, roughness: 0.85 });
+  const grip = new THREE.Mesh(gripGeo, gripMat);
+  grip.rotation.z = wand.rotation.z;
+  grip.rotation.x = wand.rotation.x;
+  grip.position.copy(wand.position).add(new THREE.Vector3(-0.09, -0.11, 0.07));
+  group.add(grip);
+
+  const crystalGeo = new THREE.OctahedronGeometry(0.07, 0);
+  const crystalMat = new THREE.MeshStandardMaterial({
+    color: 0xffb347,
+    emissive: 0xff7a18,
+    emissiveIntensity: 0.9,
+    roughness: 0.25,
+    metalness: 0.1,
+  });
+  const crystal = new THREE.Mesh(crystalGeo, crystalMat);
+  crystal.position.copy(wand.position).add(new THREE.Vector3(0.22, 0.29, -0.04));
+  group.add(crystal);
+
+  const scopeMat = new THREE.MeshStandardMaterial({
+    color: 0x2b2f39,
+    roughness: 0.38,
+    metalness: 0.72,
+  });
+  const glassMat = new THREE.MeshStandardMaterial({
+    color: 0x8edcff,
+    emissive: 0x2e8bc0,
+    emissiveIntensity: 0.35,
+    roughness: 0.08,
+    metalness: 0.15,
+    transparent: true,
+    opacity: 0.72,
+  });
+
+  const scopeMountGeo = new THREE.BoxGeometry(0.06, 0.15, 0.12);
+  const scopeMount = new THREE.Mesh(scopeMountGeo, scopeMat);
+  scopeMount.position.copy(wand.position).add(new THREE.Vector3(-0.02, 0.12, 0.02));
+  scopeMount.rotation.z = wand.rotation.z;
+  scopeMount.rotation.x = wand.rotation.x;
+  group.add(scopeMount);
+
+  const scopeTubeGeo = new THREE.CylinderGeometry(0.07, 0.07, 0.34, 12);
+  const scopeTube = new THREE.Mesh(scopeTubeGeo, scopeMat);
+  scopeTube.position.copy(wand.position).add(new THREE.Vector3(0.02, 0.2, -0.02));
+  scopeTube.rotation.z = wand.rotation.z;
+  scopeTube.rotation.x = wand.rotation.x;
+  group.add(scopeTube);
+
+  const scopeRingGeo = new THREE.TorusGeometry(0.052, 0.012, 8, 18);
+  const frontRing = new THREE.Mesh(scopeRingGeo, scopeMat);
+  frontRing.position.copy(scopeTube.position).add(new THREE.Vector3(0.12, 0.14, -0.02));
+  frontRing.rotation.y = Math.PI / 2;
+  frontRing.rotation.z = wand.rotation.z;
+  frontRing.rotation.x = wand.rotation.x;
+  group.add(frontRing);
+
+  const rearRing = frontRing.clone();
+  rearRing.position.copy(scopeTube.position).add(new THREE.Vector3(-0.12, -0.14, 0.02));
+  group.add(rearRing);
+
+  const lensGeo = new THREE.CircleGeometry(0.047, 20);
+  const frontLens = new THREE.Mesh(lensGeo, glassMat);
+  frontLens.position.copy(scopeTube.position).add(new THREE.Vector3(0.118, 0.135, -0.018));
+  frontLens.rotation.y = -Math.PI / 2;
+  frontLens.rotation.z = wand.rotation.z;
+  frontLens.rotation.x = wand.rotation.x;
+  group.add(frontLens);
+
+  group.userData = { crystal, frontLens };
+  return group;
+}
+
 export class Player {
   constructor(scene, isLocal = false, color = 0x9b59b6) {
     this.scene   = scene;
