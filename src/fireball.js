@@ -9,7 +9,7 @@ export const SPELL_CONFIG = {
   fire:      { damage: 15, outerColor: 0xff4400, coreColor: 0xffaa00 },
   ice:       { damage: 20, outerColor: 0x44aaff, coreColor: 0xaaddff },
   lightning: { damage: 20, outerColor: 0xffee00, coreColor: 0xffffff },
-  air:       { damage:  8, outerColor: 0x99eeff, coreColor: 0xffffff },
+  air:       { damage: 20, outerColor: 0x99eeff, coreColor: 0xffffff },
   earth:     { damage: 18, outerColor: 0x8b5e14, coreColor: 0x4a7c3f },
 };
 

@@ -247,7 +247,7 @@ export class Player {
     } else if (spell === 'ice') {
       this.slowTimer = 3;
     } else if (spell === 'lightning') {
-      this.silenceTimer = 2;
+      this.silenceTimer = 1;
     } else if (spell === 'earth') {
       this.groundedTimer = 3;
     }
