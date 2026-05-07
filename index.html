@@ -54,39 +54,6 @@
 
   <!-- Landing / paused overlay -->
   <div id="overlay">
-    <h1 id="overlay-title">⚡ Wand Ops</h1>
-    <p id="overlay-status">Connecting…</p>
-    <label id="player-name-wrap" for="player-name-input">
-      <span id="player-name-label">Wizard Name</span>
-      <input id="player-name-input" type="text" maxlength="18" placeholder="ArcaneAce" autocomplete="off" />
-    </label>
-
-    <div id="spell-picker">
-      <button class="spell-btn active" data-spell="fire">
-        <span class="spell-icon">🔥</span>
-        <span class="spell-name">Fire</span>
-        <span class="spell-desc">Burn · 5 dmg/s · 3s</span>
-      </button>
-      <button class="spell-btn" data-spell="ice">
-        <span class="spell-icon">❄️</span>
-        <span class="spell-name">Ice</span>
-        <span class="spell-desc">Slow · 70% · 3s</span>
-      </button>
-      <button class="spell-btn" data-spell="lightning">
-        <span class="spell-icon">⚡</span>
-        <span class="spell-name">Lightning</span>
-        <span class="spell-desc">Silence · 2s</span>
-      </button>
-      <button class="spell-btn" data-spell="air">
-        <span class="spell-icon">💨</span>
-        <span class="spell-name">Air</span>
-        <span class="spell-desc">Knockback · pushes</span>
-      </button>
-      <button class="spell-btn" data-spell="earth">
-        <span class="spell-icon">🪨</span>
-        <span class="spell-name">Earth</span>
-        <span class="spell-desc">Grounded · 3s</span>
-      </button>
 
     <!-- ── Nav bar ── -->
     <nav class="lo-nav" onclick="event.stopPropagation()">
@@ -186,6 +153,11 @@
         <div class="lo-level-row">
           <span class="lo-chip lo-chip-level">LVL 88</span>
           <span class="lo-chip lo-chip-rank">GRAND MASTER</span>
+        </div>
+
+        <div class="lo-name-field" onclick="event.stopPropagation()">
+          <span class="lo-name-field-label">Wizard Name</span>
+          <input id="player-name-input" type="text" maxlength="18" placeholder="ArcaneAce" autocomplete="off" />
         </div>
 
         <div class="lo-spell-tray" onclick="event.stopPropagation()">

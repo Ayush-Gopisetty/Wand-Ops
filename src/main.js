@@ -174,6 +174,8 @@ function init() {
   const storedName = localStorage.getItem('wand-ops-player-name');
   localPlayerName = sanitizePlayerName(storedName);
   playerNameInput.value = localPlayerName;
+  const loPlayerNameEl = document.getElementById('lo-player-name');
+  if (loPlayerNameEl) loPlayerNameEl.textContent = localPlayerName.toUpperCase();
 
   controls = new Controls();
   ui = new UIManager();
@@ -192,6 +194,7 @@ function init() {
     if (playerNameInput.value !== localPlayerName) playerNameInput.value = localPlayerName;
     localStorage.setItem('wand-ops-player-name', localPlayerName);
     localPlayer.setName(localPlayerName);
+    if (loPlayerNameEl) loPlayerNameEl.textContent = localPlayerName.toUpperCase();
     if (localActorId >= 0) {
       playerNames.set(localActorId, localPlayerName);
       refreshScoreboard();
