@@ -93,6 +93,50 @@ export function createFirstPersonWand() {
   return group;
 }
 
+function createNameTag(text = 'Wizard') {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 64;
+  const texture = new THREE.CanvasTexture(canvas);
+
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    depthWrite: false,
+  });
+
+  const sprite = new THREE.Sprite(material);
+  sprite.position.set(0, 2.35, 0);
+  sprite.scale.set(2.9, 0.72, 1);
+  sprite.renderOrder = 10;
+  sprite.userData = { canvas, texture };
+
+  updateNameTag(sprite, text);
+  return sprite;
+}
+
+function updateNameTag(sprite, text) {
+  const { canvas, texture } = sprite.userData;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = 'rgba(9, 8, 18, 0.72)';
+  roundRect(ctx, 8, 10, canvas.width - 16, canvas.height - 20, 18);
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+  ctx.lineWidth = 2;
+  roundRect(ctx, 8, 10, canvas.width - 16, canvas.height - 20, 18);
+  ctx.stroke();
+
+  ctx.fillStyle = '#f8f0ff';
+  ctx.font = '700 26px Cinzel, serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, canvas.width / 2, canvas.height / 2 + 1);
+  texture.needsUpdate = true;
+}
+
 export class Player {
   constructor(scene, isLocal = false, color = 0x9b59b6) {
     this.scene   = scene;
@@ -113,6 +157,7 @@ export class Player {
 
     this.hitFlashTimer = 0;
     this._bodyColor    = color;
+    this.name          = 'Wizard';
 
     // Status effects (ticked in update; burn damage applied in main.js)
     this.burnTimer     = 0;
@@ -165,6 +210,9 @@ export class Player {
     wand.position.set(0.56, 0.1, 0.0);
     this.group.add(wand);
 
+    this.nameTag = createNameTag(this.name);
+    this.group.add(this.nameTag);
+
     this.group.position.copy(this.position);
   }
 
@@ -212,6 +260,11 @@ export class Player {
     return this.health <= 0;
   }
 
+  setName(name) {
+    this.name = name;
+    if (this.nameTag) updateNameTag(this.nameTag, name);
+  }
+
   respawn() {
     this.health = 100;
     this.position.set(
@@ -240,4 +293,14 @@ function darken(hex, amount) {
   const g = ((hex >>  8) & 0xff) * (1 - amount);
   const b = ((hex)       & 0xff) * (1 - amount);
   return (r << 16) | (g << 8) | b;
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
 }

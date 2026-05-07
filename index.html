@@ -35,6 +35,7 @@
     <div id="effect-status"></div>
 
     <div id="kill-feed"></div>
+    <div id="damage-numbers"></div>
   </div>
 
   <!-- Scoreboard (Tab) -->
@@ -60,6 +61,10 @@
   <div id="overlay">
     <h1 id="overlay-title">⚡ Wand Ops</h1>
     <p id="overlay-status">Connecting…</p>
+    <label id="player-name-wrap" for="player-name-input">
+      <span id="player-name-label">Wizard Name</span>
+      <input id="player-name-input" type="text" maxlength="18" placeholder="ArcaneAce" autocomplete="off" />
+    </label>
 
     <div id="spell-picker">
       <button class="spell-btn active" data-spell="fire">
