@@ -103,6 +103,20 @@ body {
   border: 1px solid rgba(255,255,255,0.1);
 }
 
+#kda-tracker {
+  position: absolute;
+  top: 54px;
+  right: 16px;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  background: linear-gradient(180deg, rgba(28,12,48,0.86), rgba(12,8,20,0.82));
+  padding: 7px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(192,132,252,0.3);
+  box-shadow: 0 10px 24px rgba(0,0,0,0.22);
+  color: rgba(255,255,255,0.92);
+}
+
 /* ── Kill feed ── */
 #kill-feed {
   position: absolute;

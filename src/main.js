@@ -45,6 +45,18 @@ const _knockbackVel = new THREE.Vector3();
 
 const clock = new THREE.Clock();
 
+function ensureScoreEntry(actorNr) {
+  if (!scores.has(actorNr)) scores.set(actorNr, { kills: 0, deaths: 0, assists: 0 });
+  return scores.get(actorNr);
+}
+
+function updateLocalKDA() {
+  const localScore = localActorId >= 0
+    ? ensureScoreEntry(localActorId)
+    : { kills: 0, deaths: 0, assists: 0 };
+  ui.setKDA(localScore.kills, localScore.deaths, localScore.assists);
+}
+
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 function init() {
   const canvas = document.getElementById('game-canvas');
@@ -76,7 +88,8 @@ function init() {
       localActorId   = actorNr;
       localPlayer.id = actorNr;
       // onPlayerJoin already ran for existing actors — only set own entry
-      scores.set(actorNr, { kills: 0, deaths: 0 });
+      scores.set(actorNr, { kills: 0, deaths: 0, assists: 0 });
+      updateLocalKDA();
       ui.setOverlayStatus('Click to play');
     },
 
@@ -87,7 +100,7 @@ function init() {
       player.id    = actorNr;
       remotePlayers.set(actorNr, player);
       // Fresh score for this player (reset covers rejoin)
-      scores.set(actorNr, { kills: 0, deaths: 0 });
+      scores.set(actorNr, { kills: 0, deaths: 0, assists: 0 });
       ui.setPlayerCount(remotePlayers.size + 1);
       // Broadcast own current score so the new player sees everyone's totals
       if (localActorId >= 0) {
@@ -120,16 +133,15 @@ function init() {
     },
 
     onKill({ killerId, victimId }) {
-      if (!scores.has(killerId)) scores.set(killerId, { kills: 0, deaths: 0 });
-      if (!scores.has(victimId)) scores.set(victimId, { kills: 0, deaths: 0 });
-      scores.get(killerId).kills++;
-      scores.get(victimId).deaths++;
+      ensureScoreEntry(killerId).kills++;
+      ensureScoreEntry(victimId).deaths++;
       ui.updateScoreboard(scores, localActorId);
+      updateLocalKDA();
     },
 
     onScoreUpdate({ actorNr, kills, deaths }) {
       if (actorNr === localActorId) return;
-      scores.set(actorNr, { kills, deaths });
+      scores.set(actorNr, { kills, deaths, assists: scores.get(actorNr)?.assists ?? 0 });
       ui.updateScoreboard(scores, localActorId);
     },
 
@@ -148,6 +160,8 @@ function init() {
       ui.setOverlayStatus(`Multiplayer unavailable — ${reason}. Click to play solo.`);
       localActorId = 1;
       localPlayer.id = 1;
+      ensureScoreEntry(localActorId);
+      updateLocalKDA();
     },
 
     onHit(actorNr, data) {
@@ -179,6 +193,7 @@ function init() {
   ui.showOverlay(true);
   ui.setHealth(100);
   ui.setPlayerCount(1);
+  ui.setKDA(0, 0, 0);
 
   document.getElementById('overlay').addEventListener('click', () => {
     controls.requestLock();
@@ -319,13 +334,12 @@ function update(delta) {
 
         network.sendKill(localActorId, targetId);
         // raiseEvent doesn't loop back — apply locally and broadcast updated score
-        if (!scores.has(localActorId)) scores.set(localActorId, { kills: 0, deaths: 0 });
-        if (!scores.has(targetId))     scores.set(targetId,     { kills: 0, deaths: 0 });
-        scores.get(localActorId).kills++;
-        scores.get(targetId).deaths++;
+        ensureScoreEntry(localActorId).kills++;
+        ensureScoreEntry(targetId).deaths++;
         const mine = scores.get(localActorId);
         network.sendScoreUpdate(localActorId, mine.kills, mine.deaths);
         ui.updateScoreboard(scores, localActorId);
+        updateLocalKDA();
         ui.addKillEntry(`You defeated Wizard ${targetId}!`);
       }
     }

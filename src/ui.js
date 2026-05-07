@@ -7,6 +7,7 @@ export class UIManager {
     this._bar            = document.getElementById('health-bar');
     this._healthText     = document.getElementById('health-text');
     this._playerCnt      = document.getElementById('player-count');
+    this._kdaTracker     = document.getElementById('kda-tracker');
     this._overlay        = document.getElementById('overlay');
     this._status         = document.getElementById('overlay-status');
     this._killFeed       = document.getElementById('kill-feed');
@@ -31,6 +32,10 @@ export class UIManager {
   // ── Player count ────────────────────────────────────────────────────────────
   setPlayerCount(n) {
     this._playerCnt.textContent = 'Players: ' + n;
+  }
+
+  setKDA(kills = 0, deaths = 0, assists = 0) {
+    this._kdaTracker.textContent = `K/D/A: ${kills} / ${deaths} / ${assists}`;
   }
 
   // ── Overlay ──────────────────────────────────────────────────────────────────
