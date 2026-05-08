@@ -8,6 +8,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@vercel/speed-insights": "^2.0.0",
     "photon-realtime": "^4.4.0",
     "three": "^0.164.0"
   },
