@@ -5,8 +5,22 @@ const LERP_SPEED = 0.18;
 
 const PLAYER_COLORS = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf39c12, 0x1abc9c, 0xe91e63, 0xff6b35];
 
+export const PLAYER_SKINS = {
+  amethyst: { name: 'Amethyst', body: 0x9b59b6, accent: 0xffb347, glow: 0xff7a18 },
+  ember:    { name: 'Ember',    body: 0xd35400, accent: 0xffc36b, glow: 0xff6a00 },
+  tide:     { name: 'Tide',     body: 0x2980b9, accent: 0x8edcff, glow: 0x2e8bc0 },
+  verdant:  { name: 'Verdant',  body: 0x27ae60, accent: 0xb6ff8d, glow: 0x4ecb71 },
+  storm:    { name: 'Storm',    body: 0x5d6d7e, accent: 0xd6dbff, glow: 0x7d8cff },
+};
+
+export const DEFAULT_SKIN_ID = 'amethyst';
+
 export function remoteColor(actorNr) {
   return PLAYER_COLORS[actorNr % PLAYER_COLORS.length];
+}
+
+export function getSkinConfig(skinId = DEFAULT_SKIN_ID) {
+  return PLAYER_SKINS[skinId] || PLAYER_SKINS[DEFAULT_SKIN_ID];
 }
 
 export function createFirstPersonWand() {
@@ -90,7 +104,22 @@ export function createFirstPersonWand() {
   group.add(frontLens);
 
   group.userData = { crystal, frontLens };
+  applyFirstPersonWandSkin(group, DEFAULT_SKIN_ID);
   return group;
+}
+
+export function applyFirstPersonWandSkin(wandGroup, skinId) {
+  if (!wandGroup?.userData) return;
+  const skin = getSkinConfig(skinId);
+  const { crystal, frontLens } = wandGroup.userData;
+  if (crystal?.material) {
+    crystal.material.color.setHex(skin.accent);
+    crystal.material.emissive.setHex(skin.glow);
+  }
+  if (frontLens?.material) {
+    frontLens.material.color.setHex(skin.accent);
+    frontLens.material.emissive.setHex(skin.glow);
+  }
 }
 
 function createNameTag(text = 'Wizard') {
@@ -139,10 +168,11 @@ function updateNameTag(sprite, text) {
 
 export class Player {
   constructor(scene, isLocal = false, color = 0x9b59b6) {
-    this.scene   = scene;
+    this.scene = scene;
     this.isLocal = isLocal;
-    this.id      = null;
-    this.health  = 100;
+    this.id = null;
+    this.health = 100;
+    this.skinId = DEFAULT_SKIN_ID;
 
     this.position = new THREE.Vector3(
       (Math.random() - 0.5) * 24,
@@ -156,14 +186,13 @@ export class Player {
     this.targetRotation = 0;
 
     this.hitFlashTimer = 0;
-    this._bodyColor    = color;
-    this.name          = 'Wizard';
+    this._bodyColor = color;
+    this.name = 'Wizard';
 
-    // Status effects (ticked in update; burn damage applied in main.js)
-    this.burnTimer     = 0;
-    this.burnDps       = 0;
-    this.slowTimer     = 0;
-    this.silenceTimer  = 0;
+    this.burnTimer = 0;
+    this.burnDps = 0;
+    this.slowTimer = 0;
+    this.silenceTimer = 0;
     this.groundedTimer = 0;
 
     this._buildMesh(color);
@@ -179,25 +208,25 @@ export class Player {
     this.group.add(this.bodyMesh);
 
     const trimGeo = new THREE.BoxGeometry(0.95, 0.6, 0.95);
-    const trimMat = new THREE.MeshStandardMaterial({ color: darken(color, 0.4) });
-    const trim = new THREE.Mesh(trimGeo, trimMat);
+    this._trimMat = new THREE.MeshStandardMaterial({ color: darken(color, 0.4) });
+    const trim = new THREE.Mesh(trimGeo, this._trimMat);
     trim.position.y = -0.42;
     this.group.add(trim);
 
     const hatGeo = new THREE.ConeGeometry(0.38, 0.82, 8);
-    const hatMat = new THREE.MeshStandardMaterial({ color: 0x1a0033 });
-    const hat = new THREE.Mesh(hatGeo, hatMat);
+    this._hatMat = new THREE.MeshStandardMaterial({ color: 0x1a0033 });
+    const hat = new THREE.Mesh(hatGeo, this._hatMat);
     hat.position.y = 1.11;
     this.group.add(hat);
 
     const brimGeo = new THREE.CylinderGeometry(0.54, 0.54, 0.08, 12);
-    const brim = new THREE.Mesh(brimGeo, hatMat);
+    const brim = new THREE.Mesh(brimGeo, this._hatMat);
     brim.position.y = 0.74;
     this.group.add(brim);
 
     const eyeGeo = new THREE.SphereGeometry(0.07, 6, 6);
     const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    [-0.22, 0.22].forEach(x => {
+    [-0.22, 0.22].forEach((x) => {
       const eye = new THREE.Mesh(eyeGeo, eyeMat);
       eye.position.set(x, 0.18, 0.44);
       this.group.add(eye);
@@ -212,7 +241,6 @@ export class Player {
 
     this.nameTag = createNameTag(this.name);
     this.group.add(this.nameTag);
-
     this.group.position.copy(this.position);
   }
 
@@ -220,10 +248,9 @@ export class Player {
     if (this.isLocal) {
       this.position.x = clamp(this.position.x, -ARENA_HALF, ARENA_HALF);
       this.position.z = clamp(this.position.z, -ARENA_HALF, ARENA_HALF);
-      // Y managed by main.js (gravity + jump)
-      if (this.burnTimer     > 0) this.burnTimer     -= delta;
-      if (this.slowTimer     > 0) this.slowTimer     -= delta;
-      if (this.silenceTimer  > 0) this.silenceTimer  -= delta;
+      if (this.burnTimer > 0) this.burnTimer -= delta;
+      if (this.slowTimer > 0) this.slowTimer -= delta;
+      if (this.silenceTimer > 0) this.silenceTimer -= delta;
       if (this.groundedTimer > 0) this.groundedTimer -= delta;
     } else {
       this.position.lerp(this.targetPosition, LERP_SPEED);
@@ -243,7 +270,7 @@ export class Player {
   applySpellEffect(spell) {
     if (spell === 'fire') {
       this.burnTimer = 3;
-      this.burnDps   = 5;
+      this.burnDps = 5;
     } else if (spell === 'ice') {
       this.slowTimer = 3;
     } else if (spell === 'lightning') {
@@ -251,7 +278,6 @@ export class Player {
     } else if (spell === 'earth') {
       this.groundedTimer = 3;
     }
-    // air knockback is handled in main.js via velocity
   }
 
   takeDamage(amount) {
@@ -265,6 +291,14 @@ export class Player {
     if (this.nameTag) updateNameTag(this.nameTag, name);
   }
 
+  setSkin(skinId) {
+    const skin = getSkinConfig(skinId);
+    this.skinId = skinId in PLAYER_SKINS ? skinId : DEFAULT_SKIN_ID;
+    this._bodyColor = skin.body;
+    this._bodyMat.color.setHex(skin.body);
+    this._trimMat.color.setHex(darken(skin.body, 0.4));
+  }
+
   respawn() {
     this.health = 100;
     this.position.set(
@@ -273,11 +307,11 @@ export class Player {
       (Math.random() - 0.5) * 24
     );
     this.velocity.set(0, 0, 0);
-    this.hitFlashTimer  = 0;
-    this.burnTimer      = 0;
-    this.slowTimer      = 0;
-    this.silenceTimer   = 0;
-    this.groundedTimer  = 0;
+    this.hitFlashTimer = 0;
+    this.burnTimer = 0;
+    this.slowTimer = 0;
+    this.silenceTimer = 0;
+    this.groundedTimer = 0;
     this._bodyMat.color.setHex(this._bodyColor);
   }
 
@@ -286,12 +320,14 @@ export class Player {
   }
 }
 
-function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v));
+}
 
 function darken(hex, amount) {
   const r = ((hex >> 16) & 0xff) * (1 - amount);
-  const g = ((hex >>  8) & 0xff) * (1 - amount);
-  const b = ((hex)       & 0xff) * (1 - amount);
+  const g = ((hex >> 8) & 0xff) * (1 - amount);
+  const b = (hex & 0xff) * (1 - amount);
   return (r << 16) | (g << 8) | b;
 }
 

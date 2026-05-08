@@ -104,6 +104,8 @@
       </aside>
 
       <section class="lo-center">
+        <h1 class="lo-page-title">Wand Ops</h1>
+
         <div class="lo-avatar-wrap">
           <div class="lo-avatar-oval">
             <svg viewBox="0 0 80 100" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -124,6 +126,32 @@
         <div class="lo-name-field" onclick="event.stopPropagation()">
           <span class="lo-name-field-label">Wizard Name</span>
           <input id="player-name-input" type="text" maxlength="18" placeholder="ArcaneAce" autocomplete="off" />
+        </div>
+
+        <div class="lo-skin-picker" onclick="event.stopPropagation()">
+          <span class="lo-name-field-label">Skin Select</span>
+          <div class="lo-skin-grid" id="skin-picker">
+            <button class="lo-skin-btn active" data-skin="amethyst" title="Amethyst">
+              <span class="lo-skin-swatch" style="--skin:#9b59b6; --glow:#ff7a18;"></span>
+              <span class="lo-skin-name">Amethyst</span>
+            </button>
+            <button class="lo-skin-btn" data-skin="ember" title="Ember">
+              <span class="lo-skin-swatch" style="--skin:#d35400; --glow:#ff6a00;"></span>
+              <span class="lo-skin-name">Ember</span>
+            </button>
+            <button class="lo-skin-btn" data-skin="tide" title="Tide">
+              <span class="lo-skin-swatch" style="--skin:#2980b9; --glow:#2e8bc0;"></span>
+              <span class="lo-skin-name">Tide</span>
+            </button>
+            <button class="lo-skin-btn" data-skin="verdant" title="Verdant">
+              <span class="lo-skin-swatch" style="--skin:#27ae60; --glow:#4ecb71;"></span>
+              <span class="lo-skin-name">Verdant</span>
+            </button>
+            <button class="lo-skin-btn" data-skin="storm" title="Storm">
+              <span class="lo-skin-swatch" style="--skin:#5d6d7e; --glow:#7d8cff;"></span>
+              <span class="lo-skin-name">Storm</span>
+            </button>
+          </div>
         </div>
 
         <p id="overlay-hint" class="lo-hint">WASD · Mouse · LMB cast · Space jump</p>

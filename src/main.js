@@ -1,6 +1,14 @@
 import * as THREE from 'three';
 import { createScene } from './scene.js';
-import { Player, remoteColor, createFirstPersonWand } from './player.js';
+import {
+  Player,
+  remoteColor,
+  createFirstPersonWand,
+  applyFirstPersonWandSkin,
+  PLAYER_SKINS,
+  DEFAULT_SKIN_ID,
+  getSkinConfig,
+} from './player.js';
 import { Controls } from './controls.js';
 import { FireballManager } from './fireball.js';
 import { NetworkManager } from './network.js';
@@ -33,6 +41,7 @@ let trainingBotAI = null;
 let controls, fireballs, network, ui, colliders;
 const scores = new Map();
 const playerNames = new Map();
+const playerSkins = new Map();
 
 let cameraYaw = 0;
 let cameraPitch = 0;
@@ -41,6 +50,7 @@ let netTimer = 0;
 let localActorId = -1;
 let aimBlend = 0;
 let localPlayerName = 'Wizard';
+let localSkinId = DEFAULT_SKIN_ID;
 
 let playerVelocityY = 0;
 let isGrounded = true;
@@ -64,6 +74,10 @@ function ensureScoreEntry(actorNr) {
 function sanitizePlayerName(value) {
   const cleaned = (value || '').replace(/\s+/g, ' ').trim().slice(0, 18);
   return cleaned || 'Wizard';
+}
+
+function sanitizeSkinId(value) {
+  return value && value in PLAYER_SKINS ? value : DEFAULT_SKIN_ID;
 }
 
 function getPlayerLabel(actorNr, isLocal = false) {
@@ -95,6 +109,44 @@ function updateDisplayedPlayerCount() {
   ui.setPlayerCount(baseCount + (trainingBot ? 1 : 0));
 }
 
+function syncSkinPicker(skinId) {
+  document.querySelectorAll('.lo-skin-btn').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.skin === skinId);
+  });
+}
+
+function applyHomepageSkinPreview(skinId) {
+  const skin = getSkinConfig(skinId);
+  const avatar = document.querySelector('.lo-avatar-oval');
+  const statusDot = document.querySelector('.lo-status-dot');
+  const pageTitle = document.querySelector('.lo-page-title');
+
+  if (avatar) {
+    avatar.style.borderColor = hexToRgba(skin.accent, 0.35);
+    avatar.style.boxShadow = `0 0 28px ${hexToRgba(skin.glow, 0.18)}`;
+  }
+  if (statusDot) {
+    statusDot.style.background = `#${skin.accent.toString(16).padStart(6, '0')}`;
+    statusDot.style.boxShadow = `0 0 10px ${hexToRgba(skin.glow, 0.85)}`;
+  }
+  if (pageTitle) {
+    pageTitle.style.textShadow = `0 0 28px ${hexToRgba(skin.glow, 0.22)}`;
+  }
+}
+
+function setLocalSkin(skinId, shouldBroadcast = true) {
+  localSkinId = sanitizeSkinId(skinId);
+  localPlayer.setSkin(localSkinId);
+  applyFirstPersonWandSkin(firstPersonWand, localSkinId);
+  playerSkins.set(localActorId, localSkinId);
+  localStorage.setItem('wand-ops-player-skin', localSkinId);
+  applyHomepageSkinPreview(localSkinId);
+  syncSkinPicker(localSkinId);
+  if (shouldBroadcast && localActorId >= 0) {
+    network.sendPlayerSkin(localActorId, localSkinId);
+  }
+}
+
 function spawnTrainingBot() {
   if (trainingBot || localActorId < 0 || hasHumanOpponents()) return;
   const bot = new Player(scene, true, BOT_COLOR);
@@ -106,6 +158,7 @@ function spawnTrainingBot() {
   trainingBotAI = new SimpleBotController(bot, colliders);
   ensureScoreEntry(BOT_ID);
   playerNames.set(BOT_ID, 'Training Bot');
+  playerSkins.set(BOT_ID, DEFAULT_SKIN_ID);
   refreshScoreboard();
   ui.addKillEntry('Training Bot joined the arena.');
   updateDisplayedPlayerCount();
@@ -118,6 +171,7 @@ function removeTrainingBot(reason = '') {
   trainingBotAI = null;
   scores.delete(BOT_ID);
   playerNames.delete(BOT_ID);
+  playerSkins.delete(BOT_ID);
   refreshScoreboard();
   if (reason) ui.addKillEntry(reason);
   updateDisplayedPlayerCount();
@@ -167,13 +221,16 @@ function init() {
   const canvas = document.getElementById('game-canvas');
   const playerNameInput = document.getElementById('player-name-input');
   const playCard = document.getElementById('lo-play-card');
+  const skinButtons = [...document.querySelectorAll('.lo-skin-btn')];
   ({ scene, camera, renderer, colliders } = createScene(canvas));
   scene.add(camera);
   camera.fov = DEFAULT_FOV;
   camera.updateProjectionMatrix();
 
   const storedName = localStorage.getItem('wand-ops-player-name');
+  const storedSkin = localStorage.getItem('wand-ops-player-skin');
   localPlayerName = sanitizePlayerName(storedName);
+  localSkinId = sanitizeSkinId(storedSkin);
   playerNameInput.value = localPlayerName;
   const loPlayerNameEl = document.getElementById('lo-player-name');
   if (loPlayerNameEl) loPlayerNameEl.textContent = localPlayerName.toUpperCase();
@@ -182,11 +239,15 @@ function init() {
   ui = new UIManager();
   fireballs = new FireballManager(scene);
 
-  localPlayer = new Player(scene, true, 0x9b59b6);
+  localPlayer = new Player(scene, true, getSkinConfig(localSkinId).body);
   localPlayer.setName(localPlayerName);
+  localPlayer.setSkin(localSkinId);
   localPlayer.group.visible = false;
   firstPersonWand = createFirstPersonWand();
   camera.add(firstPersonWand);
+  applyFirstPersonWandSkin(firstPersonWand, localSkinId);
+  applyHomepageSkinPreview(localSkinId);
+  syncSkinPicker(localSkinId);
 
   playerNameInput.addEventListener('click', (e) => e.stopPropagation());
   playerNameInput.addEventListener('keydown', (e) => e.stopPropagation());
@@ -201,6 +262,13 @@ function init() {
       refreshScoreboard();
       network.sendPlayerName(localActorId, localPlayerName);
     }
+  });
+
+  skinButtons.forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setLocalSkin(btn.dataset.skin);
+    });
   });
 
   document.querySelectorAll('.spell-btn').forEach((btn) => {
@@ -219,11 +287,13 @@ function init() {
       localActorId = actorNr;
       localPlayer.id = actorNr;
       playerNames.set(actorNr, localPlayerName);
+      playerSkins.set(actorNr, localSkinId);
       scores.set(actorNr, { kills: 0, deaths: 0, assists: 0 });
       updateLocalKDA();
       refreshTrainingBotState();
       refreshScoreboard();
       network.sendPlayerName(actorNr, localPlayerName);
+      network.sendPlayerSkin(actorNr, localSkinId);
       ui.setOverlayStatus('Click to play');
     },
 
@@ -235,6 +305,7 @@ function init() {
       player.setName(`Wizard ${actorNr}`);
       remotePlayers.set(actorNr, player);
       playerNames.set(actorNr, `Wizard ${actorNr}`);
+      playerSkins.set(actorNr, DEFAULT_SKIN_ID);
       scores.set(actorNr, { kills: 0, deaths: 0, assists: 0 });
       refreshTrainingBotState();
       updateDisplayedPlayerCount();
@@ -243,6 +314,7 @@ function init() {
         const mine = scores.get(localActorId);
         if (mine) network.sendScoreUpdate(localActorId, mine.kills, mine.deaths);
         network.sendPlayerName(localActorId, localPlayerName);
+        network.sendPlayerSkin(localActorId, localSkinId);
       }
     },
 
@@ -253,6 +325,7 @@ function init() {
       remotePlayers.delete(actorNr);
       scores.delete(actorNr);
       playerNames.delete(actorNr);
+      playerSkins.delete(actorNr);
       refreshTrainingBotState();
       updateDisplayedPlayerCount();
       refreshScoreboard();
@@ -293,6 +366,13 @@ function init() {
       refreshScoreboard();
     },
 
+    onPlayerSkin({ actorNr, skinId }) {
+      const cleanSkin = sanitizeSkinId(skinId);
+      playerSkins.set(actorNr, cleanSkin);
+      const player = remotePlayers.get(actorNr);
+      if (player) player.setSkin(cleanSkin);
+    },
+
     onRespawn(actorNr) {
       const p = remotePlayers.get(actorNr);
       if (p) {
@@ -309,6 +389,7 @@ function init() {
       localActorId = 1;
       localPlayer.id = 1;
       playerNames.set(1, localPlayerName);
+      playerSkins.set(1, localSkinId);
       ensureScoreEntry(localActorId);
       updateLocalKDA();
       refreshTrainingBotState();
@@ -372,13 +453,11 @@ function init() {
   loop();
 }
 
-// ── Dynamic ground height (ramps + platforms) ─────────────────────────────────
 function getGroundY(x, z) {
   let y = GROUND_Y;
   if (!colliders) return y;
   for (const p of colliders.platforms || []) {
-    if (x >= p.xMin && x <= p.xMax && z >= p.zMin && z <= p.zMax)
-      y = Math.max(y, p.y);
+    if (x >= p.xMin && x <= p.xMax && z >= p.zMin && z <= p.zMax) y = Math.max(y, p.y);
   }
   for (const r of colliders.ramps || []) {
     if (x >= r.xMin && x <= r.xMax && z >= r.zMin && z <= r.zMax) {
@@ -390,7 +469,6 @@ function getGroundY(x, z) {
   return y;
 }
 
-// ── Game loop ─────────────────────────────────────────────────────────────────
 function loop() {
   requestAnimationFrame(loop);
   const delta = Math.min(clock.getDelta(), 0.05);
@@ -422,15 +500,15 @@ function update(delta) {
   }
 
   if (colliders) {
-    const PR = 0.45;
-    const bound = colliders.arenaSize - PR;
+    const pr = 0.45;
+    const bound = colliders.arenaSize - pr;
     localPlayer.position.x = clamp(localPlayer.position.x, -bound, bound);
     localPlayer.position.z = clamp(localPlayer.position.z, -bound, bound);
     for (const tree of colliders.trees) {
       const dxTree = localPlayer.position.x - tree.x;
       const dzTree = localPlayer.position.z - tree.z;
       const distSq = dxTree * dxTree + dzTree * dzTree;
-      const minDist = tree.radius + PR;
+      const minDist = tree.radius + pr;
       if (distSq < minDist * minDist && distSq > 0.0001) {
         const dist = Math.sqrt(distSq);
         const overlap = minDist - dist;
@@ -438,17 +516,20 @@ function update(delta) {
         localPlayer.position.z += (dzTree / dist) * overlap;
       }
     }
-    for (const box of (colliders.boxes || [])) {
-      if (localPlayer.position.y >= box.maxY - 0.3) continue; // on top — don't block
-      const px = localPlayer.position.x, pz = localPlayer.position.z;
+    for (const box of colliders.boxes || []) {
+      if (localPlayer.position.y >= box.maxY - 0.3) continue;
+      const px = localPlayer.position.x;
+      const pz = localPlayer.position.z;
       if (px > box.xMin && px < box.xMax && pz > box.zMin && pz < box.zMax) {
-        const dxMin = px - box.xMin, dxMax = box.xMax - px;
-        const dzMin = pz - box.zMin, dzMax = box.zMax - pz;
+        const dxMin = px - box.xMin;
+        const dxMax = box.xMax - px;
+        const dzMin = pz - box.zMin;
+        const dzMax = box.zMax - pz;
         const minD = Math.min(dxMin, dxMax, dzMin, dzMax);
-        if      (minD === dxMin) localPlayer.position.x = box.xMin - PR;
-        else if (minD === dxMax) localPlayer.position.x = box.xMax + PR;
-        else if (minD === dzMin) localPlayer.position.z = box.zMin - PR;
-        else                     localPlayer.position.z = box.zMax + PR;
+        if (minD === dxMin) localPlayer.position.x = box.xMin - pr;
+        else if (minD === dxMax) localPlayer.position.x = box.xMax + pr;
+        else if (minD === dzMin) localPlayer.position.z = box.zMin - pr;
+        else localPlayer.position.z = box.zMax + pr;
       }
     }
   }
@@ -481,10 +562,11 @@ function update(delta) {
   }
 
   ui.setEffect(
-    localPlayer.burnTimer > 0 ? 'burn' :
-    localPlayer.slowTimer > 0 ? 'slow' :
-    localPlayer.silenceTimer > 0 ? 'silence' :
-    localPlayer.groundedTimer > 0 ? 'ground' : null
+    localPlayer.burnTimer > 0 ? 'burn'
+      : localPlayer.slowTimer > 0 ? 'slow'
+        : localPlayer.silenceTimer > 0 ? 'silence'
+          : localPlayer.groundedTimer > 0 ? 'ground'
+            : null
   );
 
   shootTimer -= delta;
@@ -592,6 +674,13 @@ function updateCamera() {
 
 function clamp(v, min, max) {
   return Math.max(min, Math.min(max, v));
+}
+
+function hexToRgba(hex, alpha) {
+  const r = (hex >> 16) & 0xff;
+  const g = (hex >> 8) & 0xff;
+  const b = hex & 0xff;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 init();
