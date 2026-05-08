@@ -5,6 +5,7 @@ import {
   remoteColor,
   createFirstPersonWand,
   applyFirstPersonWandSkin,
+  createWizardModel,
   PLAYER_SKINS,
   DEFAULT_SKIN_ID,
   getSkinConfig,
@@ -30,10 +31,48 @@ const GRAVITY = 22;
 const GROUND_Y = 0.75;
 const BOT_ID = 9001;
 const BOT_COLOR = 0xffd166;
+const WEAPON_STATS = {
+  fire: {
+    name: 'Fire Wand',
+    damage: 88,
+    speed: 74,
+    control: 52,
+    impact: 70,
+  },
+  ice: {
+    name: 'Ice Wand',
+    damage: 60,
+    speed: 68,
+    control: 90,
+    impact: 46,
+  },
+  lightning: {
+    name: 'Lightning Wand',
+    damage: 72,
+    speed: 96,
+    control: 62,
+    impact: 58,
+  },
+  air: {
+    name: 'Air Wand',
+    damage: 42,
+    speed: 82,
+    control: 78,
+    impact: 92,
+  },
+  earth: {
+    name: 'Earth Wand',
+    damage: 84,
+    speed: 44,
+    control: 66,
+    impact: 95,
+  },
+};
 
 let scene, camera, renderer;
 let localPlayer;
 let firstPersonWand;
+let previewScene, previewCamera, previewRenderer, previewModel;
 const remotePlayers = new Map();
 let trainingBot = null;
 let trainingBotAI = null;
@@ -109,6 +148,24 @@ function updateDisplayedPlayerCount() {
   ui.setPlayerCount(baseCount + (trainingBot ? 1 : 0));
 }
 
+function updateWeaponStats(spell) {
+  const stats = WEAPON_STATS[spell] || WEAPON_STATS.fire;
+  const nameEl = document.getElementById('weapon-stats-name');
+  if (nameEl) nameEl.textContent = stats.name;
+
+  const entries = [
+    ['stat-damage', stats.damage],
+    ['stat-speed', stats.speed],
+    ['stat-control', stats.control],
+    ['stat-impact', stats.impact],
+  ];
+
+  entries.forEach(([id, value]) => {
+    const bar = document.getElementById(id);
+    if (bar) bar.style.width = `${value}%`;
+  });
+}
+
 function syncSkinPicker(skinId) {
   document.querySelectorAll('.lo-skin-btn').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.skin === skinId);
@@ -131,6 +188,10 @@ function applyHomepageSkinPreview(skinId) {
   }
   if (pageTitle) {
     pageTitle.style.textShadow = `0 0 28px ${hexToRgba(skin.glow, 0.22)}`;
+  }
+  if (previewModel?.userData?.bodyMat && previewModel?.userData?.trimMat) {
+    previewModel.userData.bodyMat.color.setHex(skin.body);
+    previewModel.userData.trimMat.color.setHex(darkenHex(skin.body, 0.4));
   }
 }
 
@@ -219,6 +280,7 @@ function handleRemoteHitDefeat(actorNr) {
 
 function init() {
   const canvas = document.getElementById('game-canvas');
+  const heroPreviewCanvas = document.getElementById('hero-preview-canvas');
   const playerNameInput = document.getElementById('player-name-input');
   const playCard = document.getElementById('lo-play-card');
   const skinButtons = [...document.querySelectorAll('.lo-skin-btn')];
@@ -238,6 +300,39 @@ function init() {
   controls = new Controls();
   ui = new UIManager();
   fireballs = new FireballManager(scene);
+
+  if (heroPreviewCanvas) {
+    previewScene = new THREE.Scene();
+    previewCamera = new THREE.PerspectiveCamera(28, 200 / 260, 0.1, 100);
+    previewCamera.position.set(0, 1.25, 5.2);
+
+    previewRenderer = new THREE.WebGLRenderer({
+      canvas: heroPreviewCanvas,
+      alpha: true,
+      antialias: true,
+    });
+    previewRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    previewRenderer.setClearColor(0x000000, 0);
+
+    const keyLight = new THREE.DirectionalLight(0xf8eaff, 2.2);
+    keyLight.position.set(2.4, 3.2, 4.6);
+    previewScene.add(keyLight);
+
+    const rimLight = new THREE.DirectionalLight(0x74b9ff, 1.15);
+    rimLight.position.set(-2.8, 1.6, -3.6);
+    previewScene.add(rimLight);
+
+    const fillLight = new THREE.AmbientLight(0xffffff, 1.25);
+    previewScene.add(fillLight);
+
+    previewModel = createWizardModel(getSkinConfig(localSkinId).body, {
+      includeNameTag: false,
+    });
+    previewModel.position.set(0, -0.75, 0);
+    previewModel.rotation.y = -0.45;
+    previewScene.add(previewModel);
+    updateHeroPreviewSize();
+  }
 
   localPlayer = new Player(scene, true, getSkinConfig(localSkinId).body);
   localPlayer.setName(localPlayerName);
@@ -278,9 +373,11 @@ function init() {
       document.querySelectorAll('.spell-btn').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       ui.setSpell(selectedSpell);
+      updateWeaponStats(selectedSpell);
     });
   });
   ui.setSpell(selectedSpell);
+  updateWeaponStats(selectedSpell);
 
   network = new NetworkManager({
     onConnected(actorNr) {
@@ -449,6 +546,8 @@ function init() {
     }
   });
 
+  window.addEventListener('resize', updateHeroPreviewSize);
+
   clock.start();
   loop();
 }
@@ -475,6 +574,7 @@ function loop() {
   update(delta);
   updateCamera();
   renderer.render(scene, camera);
+  renderHeroPreview(delta);
 }
 
 function update(delta) {
@@ -676,11 +776,36 @@ function clamp(v, min, max) {
   return Math.max(min, Math.min(max, v));
 }
 
+function updateHeroPreviewSize() {
+  const previewCanvas = document.getElementById('hero-preview-canvas');
+  if (!previewRenderer || !previewCamera || !previewCanvas) return;
+  const rect = previewCanvas.getBoundingClientRect();
+  const width = Math.max(1, Math.floor(rect.width));
+  const height = Math.max(1, Math.floor(rect.height));
+  previewRenderer.setSize(width, height, false);
+  previewCamera.aspect = width / height;
+  previewCamera.updateProjectionMatrix();
+}
+
+function renderHeroPreview(delta) {
+  if (!previewRenderer || !previewScene || !previewCamera || !previewModel) return;
+  previewModel.rotation.y += delta * 0.55;
+  previewModel.position.y = -0.75 + Math.sin(clock.elapsedTime * 1.8) * 0.05;
+  previewRenderer.render(previewScene, previewCamera);
+}
+
 function hexToRgba(hex, alpha) {
   const r = (hex >> 16) & 0xff;
   const g = (hex >> 8) & 0xff;
   const b = hex & 0xff;
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function darkenHex(hex, amount) {
+  const r = Math.max(0, Math.round(((hex >> 16) & 0xff) * (1 - amount)));
+  const g = Math.max(0, Math.round(((hex >> 8) & 0xff) * (1 - amount)));
+  const b = Math.max(0, Math.round((hex & 0xff) * (1 - amount)));
+  return (r << 16) | (g << 8) | b;
 }
 
 init();
