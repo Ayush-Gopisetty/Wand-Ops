@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { inject } from '@vercel/analytics';
 import { createScene } from './scene.js';
 import { Player, remoteColor, createFirstPersonWand } from './player.js';
 import { Controls } from './controls.js';
@@ -6,6 +7,12 @@ import { FireballManager } from './fireball.js';
 import { NetworkManager } from './network.js';
 import { UIManager } from './ui.js';
 import { SimpleBotController } from './bot.js';
+
+// Initialize Vercel Web Analytics
+// Debug mode is automatically enabled in development
+inject({
+  mode: import.meta.env.MODE === 'development' ? 'development' : 'production'
+});
 
 const MOVE_SPEED = 9;
 const SLOW_FACTOR = 0.3;
