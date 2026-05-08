@@ -166,6 +166,7 @@ function handleRemoteHitDefeat(actorNr) {
 function init() {
   const canvas = document.getElementById('game-canvas');
   const playerNameInput = document.getElementById('player-name-input');
+  const playCard = document.getElementById('lo-play-card');
   ({ scene, camera, renderer, colliders } = createScene(canvas));
   scene.add(camera);
   camera.fov = DEFAULT_FOV;
@@ -344,7 +345,8 @@ function init() {
   ui.setKDA(0, 0, 0);
   refreshScoreboard();
 
-  document.getElementById('overlay').addEventListener('click', () => {
+  playCard.addEventListener('click', (e) => {
+    e.stopPropagation();
     controls.requestLock();
   });
 
