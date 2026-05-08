@@ -568,9 +568,19 @@ function getGroundY(x, z) {
   return y;
 }
 
+let _fpsFrames = 0, _fpsAccum = 0;
+
 function loop() {
   requestAnimationFrame(loop);
   const delta = Math.min(clock.getDelta(), 0.05);
+  _fpsFrames++;
+  _fpsAccum += delta;
+  if (_fpsAccum >= 0.5) {
+    const fpsEl = document.getElementById('fps-counter');
+    if (fpsEl) fpsEl.textContent = `${Math.round(_fpsFrames / _fpsAccum)} FPS`;
+    _fpsFrames = 0;
+    _fpsAccum = 0;
+  }
   update(delta);
   updateCamera();
   renderer.render(scene, camera);
