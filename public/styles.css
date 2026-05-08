@@ -874,11 +874,24 @@ body {
   cursor: default;
 }
 
+.lo-spell-tray-sidebar {
+  max-width: 100%;
+}
+
 #spell-picker {
   display: flex;
   gap: 8px;
   justify-content: center;
   flex-wrap: nowrap;
+}
+
+.lo-spell-tray-sidebar #spell-picker {
+  flex-wrap: wrap;
+}
+
+.lo-spell-tray-sidebar .spell-btn {
+  flex: 1 1 calc(50% - 8px);
+  max-width: calc(50% - 4px);
 }
 
 .spell-btn {

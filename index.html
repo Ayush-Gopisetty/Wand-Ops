@@ -12,7 +12,6 @@
 <body>
   <canvas id="game-canvas"></canvas>
 
-  <!-- HUD -->
   <div id="ui">
     <div id="crosshair"></div>
 
@@ -33,7 +32,6 @@
     <div id="damage-numbers"></div>
   </div>
 
-  <!-- Scoreboard (Tab) -->
   <div id="scoreboard">
     <div id="scoreboard-inner">
       <h2 id="scoreboard-title">Scoreboard</h2>
@@ -52,21 +50,8 @@
     </div>
   </div>
 
-  <!-- Landing / paused overlay -->
   <div id="overlay">
-
-    <!-- ── Nav bar ── -->
     <nav class="lo-nav" onclick="event.stopPropagation()">
-      <div class="lo-nav-brand">
-        <span class="lo-live-badge">WIZARD LIVE</span>
-        <div class="lo-nav-user">
-          <div class="lo-nav-avatar"></div>
-          <div>
-            <div class="lo-nav-name">Archmage_Hex</div>
-            <div class="lo-nav-viewers">1,248 viewers</div>
-          </div>
-        </div>
-      </div>
       <div class="lo-nav-actions">
         <div class="lo-currency">
           <span class="lo-coin">$</span><span>5990</span>
@@ -79,88 +64,15 @@
       </div>
     </nav>
 
-    <!-- ── 3-column body ── -->
     <div class="lo-body">
-
-      <!-- Left: play + stats + arsenal -->
       <aside class="lo-left">
-
         <div class="lo-play-card" id="lo-play-card">
           <p id="overlay-status" class="lo-play-status">Connecting…</p>
           <h2 class="lo-play-label">PLAY</h2>
           <p class="lo-play-mode">QUICK MATCH: ARENA</p>
         </div>
 
-        <div class="lo-card">
-          <div class="lo-card-head"><span>📊</span> SEASON STATS</div>
-          <div class="lo-stat-row">
-            <span class="lo-stat-label">WIN RATE</span>
-            <span class="lo-stat-value lo-accent">68%</span>
-          </div>
-          <div class="lo-stat-row">
-            <span class="lo-stat-label">K/D RATIO</span>
-            <span class="lo-stat-value lo-accent">2.45</span>
-          </div>
-          <div class="lo-stat-row">
-            <span class="lo-stat-label">WANDS MASTERY</span>
-            <span class="lo-stat-value">Level 42</span>
-          </div>
-        </div>
-
-        <div class="lo-card lo-card-arsenal" onclick="event.stopPropagation()">
-          <div class="lo-card-head"><span>⚔️</span> ARSENAL</div>
-          <div class="lo-gear-item lo-gear-top">
-            <div class="lo-gear-ico">🪄</div>
-            <div>
-              <div class="lo-gear-name">ELDER STAFF</div>
-              <div class="lo-rarity lo-rarity-legendary">LEGENDARY</div>
-            </div>
-          </div>
-          <div class="lo-gear-item">
-            <div class="lo-gear-ico">✨</div>
-            <div>
-              <div class="lo-gear-name">CRYSTAL FOCUS</div>
-              <div class="lo-rarity lo-rarity-rare">LVL 15 • RARE</div>
-            </div>
-          </div>
-          <div class="lo-gear-item">
-            <div class="lo-gear-ico">🛡️</div>
-            <div>
-              <div class="lo-gear-name">RUNE SHIELD</div>
-              <div class="lo-rarity lo-rarity-common">LVL 08 • COMMON</div>
-            </div>
-          </div>
-          <button class="lo-view-gear-btn">VIEW ALL GEAR</button>
-        </div>
-
-      </aside>
-
-      <!-- Center: avatar + player info + spell picker -->
-      <section class="lo-center">
-
-        <div class="lo-avatar-wrap">
-          <div class="lo-avatar-oval">
-            <svg viewBox="0 0 80 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="40" cy="34" r="17" fill="rgba(216,185,255,0.3)"/>
-              <path d="M10 94 C10 64 70 64 70 94" fill="rgba(216,185,255,0.3)"/>
-            </svg>
-          </div>
-          <div class="lo-status-dot"></div>
-        </div>
-
-        <h1 class="lo-player-name" id="lo-player-name">ARCHMAGE HEX</h1>
-
-        <div class="lo-level-row">
-          <span class="lo-chip lo-chip-level">LVL 88</span>
-          <span class="lo-chip lo-chip-rank">GRAND MASTER</span>
-        </div>
-
-        <div class="lo-name-field" onclick="event.stopPropagation()">
-          <span class="lo-name-field-label">Wizard Name</span>
-          <input id="player-name-input" type="text" maxlength="18" placeholder="ArcaneAce" autocomplete="off" />
-        </div>
-
-        <div class="lo-spell-tray" onclick="event.stopPropagation()">
+        <div class="lo-spell-tray lo-spell-tray-sidebar" onclick="event.stopPropagation()">
           <div id="spell-picker">
             <button class="spell-btn active" data-spell="fire">
               <span class="spell-icon">🔥</span>
@@ -189,13 +101,50 @@
             </button>
           </div>
         </div>
+      </aside>
+
+      <section class="lo-center">
+        <div class="lo-avatar-wrap">
+          <div class="lo-avatar-oval">
+            <svg viewBox="0 0 80 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="40" cy="34" r="17" fill="rgba(216,185,255,0.3)"/>
+              <path d="M10 94 C10 64 70 64 70 94" fill="rgba(216,185,255,0.3)"/>
+            </svg>
+          </div>
+          <div class="lo-status-dot"></div>
+        </div>
+
+        <h1 class="lo-player-name" id="lo-player-name">ARCHMAGE HEX</h1>
+
+        <div class="lo-level-row">
+          <span class="lo-chip lo-chip-level">LVL 88</span>
+          <span class="lo-chip lo-chip-rank">GRAND MASTER</span>
+        </div>
+
+        <div class="lo-name-field" onclick="event.stopPropagation()">
+          <span class="lo-name-field-label">Wizard Name</span>
+          <input id="player-name-input" type="text" maxlength="18" placeholder="ArcaneAce" autocomplete="off" />
+        </div>
 
         <p id="overlay-hint" class="lo-hint">WASD · Mouse · LMB cast · Space jump</p>
-
       </section>
 
-      <!-- Right: news -->
       <aside class="lo-right">
+        <div class="lo-card">
+          <div class="lo-card-head"><span>📊</span> SEASON STATS</div>
+          <div class="lo-stat-row">
+            <span class="lo-stat-label">WIN RATE</span>
+            <span class="lo-stat-value lo-accent">68%</span>
+          </div>
+          <div class="lo-stat-row">
+            <span class="lo-stat-label">K/D RATIO</span>
+            <span class="lo-stat-value lo-accent">2.45</span>
+          </div>
+          <div class="lo-stat-row">
+            <span class="lo-stat-label">WANDS MASTERY</span>
+            <span class="lo-stat-value">Level 42</span>
+          </div>
+        </div>
 
         <div class="lo-card lo-news-card" onclick="event.stopPropagation()">
           <div class="lo-card-head"><span>📣</span> WIZARD NEWS</div>
@@ -215,11 +164,9 @@
             </div>
           </div>
         </div>
-
       </aside>
     </div>
 
-    <!-- ── Footer ── -->
     <footer class="lo-footer" onclick="event.stopPropagation()">
       <div class="lo-footer-links">
         <span>V0.25.7</span>
@@ -233,13 +180,11 @@
         <span class="lo-footer-copy">© 2024 Blue Wizard Digital</span>
       </div>
     </footer>
-
   </div>
 
   <script type="module" src="/src/main.js"></script>
 
   <script>
-    // Bouncy character rotation for player name
     (function() {
       const el = document.getElementById('lo-player-name');
       if (!el) return;
@@ -247,7 +192,7 @@
       el.innerHTML = text.split('').map((ch, i) => {
         if (ch === ' ') return '<span class="lo-char-space"> </span>';
         const rot = i % 2 === 0 ? -3 : 3;
-        const ty  = i % 2 === 0 ?  2 : -2;
+        const ty = i % 2 === 0 ? 2 : -2;
         return `<span class="lo-char" style="transform:rotate(${rot}deg) translateY(${ty}px)">${ch}</span>`;
       }).join('');
     })();
