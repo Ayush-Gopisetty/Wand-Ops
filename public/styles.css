@@ -588,6 +588,17 @@ body {
   min-width: 0;
 }
 
+.lo-page-title {
+  font-size: clamp(2.6rem, 5vw, 4.6rem);
+  font-weight: 800;
+  font-style: italic;
+  letter-spacing: -0.04em;
+  line-height: 0.95;
+  color: #fff6ff;
+  text-transform: uppercase;
+  text-shadow: 0 0 28px rgba(216,185,255,0.22);
+}
+
 /* ── Play card ── */
 .lo-play-card {
   position: relative;
@@ -836,6 +847,14 @@ body {
   align-items: center;
   gap: 5px;
 }
+.lo-skin-picker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 340px;
+}
 .lo-name-field-label {
   font-family: var(--font-label);
   font-size: 10px;
@@ -862,6 +881,56 @@ body {
   box-shadow: 0 0 0 3px rgba(216,185,255,0.18);
 }
 .lo-name-field input::placeholder { color: var(--outline); }
+
+.lo-skin-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.lo-skin-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 6px;
+  border-radius: var(--radius);
+  border: 1.5px solid var(--outline-variant);
+  background: var(--surface-container-high);
+  color: var(--on-surface-dim);
+  cursor: pointer;
+  transition: transform 0.12s, border-color 0.12s, background 0.12s, color 0.12s;
+}
+
+.lo-skin-btn:hover {
+  transform: translateY(-2px);
+  border-color: var(--outline);
+  background: var(--surface-container-top);
+}
+
+.lo-skin-btn.active {
+  border-color: var(--primary);
+  background: rgba(216,185,255,0.14);
+  color: var(--on-surface);
+  box-shadow: 0 0 0 2px rgba(216,185,255,0.12);
+}
+
+.lo-skin-swatch {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 32% 28%, #ffffff, var(--skin) 42%, var(--glow) 100%);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--glow) 55%, transparent);
+  border: 2px solid rgba(255,255,255,0.18);
+}
+
+.lo-skin-name {
+  font-family: var(--font-label);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
 
 /* ── Center: spell tray ── */
 .lo-spell-tray {
