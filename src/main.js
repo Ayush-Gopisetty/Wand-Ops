@@ -288,23 +288,19 @@ function updateAuthUi(session) {
 }
 
 async function setupSupabaseAuth() {
-  try {
-    supabase = createSupabaseClient();
-  } catch (error) {
-    const signInBtn = document.getElementById('auth-signin-btn');
-    if (signInBtn) {
-      signInBtn.disabled = true;
-      signInBtn.title = 'Supabase environment variables are missing';
-    }
-    return;
-  }
-
   const signInBtn = document.getElementById('auth-signin-btn');
   const signOutBtn = document.getElementById('auth-signout-btn');
   const closeBtn = document.getElementById('auth-close-btn');
   const backdrop = document.getElementById('auth-modal-backdrop');
   const googleBtn = document.getElementById('auth-google-btn');
   const guestBtn = document.getElementById('auth-guest-btn');
+
+  try {
+    supabase = createSupabaseClient();
+  } catch (error) {
+    supabase = null;
+    if (signInBtn) signInBtn.title = 'Supabase environment variables are missing';
+  }
 
   signInBtn?.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -324,7 +320,10 @@ async function setupSupabaseAuth() {
   closeBtn?.addEventListener('click', () => toggleAuthModal(false));
   backdrop?.addEventListener('click', () => toggleAuthModal(false));
   googleBtn?.addEventListener('click', async () => {
-    if (!supabase) return;
+    if (!supabase) {
+      setAuthStatus('Supabase auth is not configured in this environment.', 'error');
+      return;
+    }
     googleBtn.disabled = true;
     setAuthStatus('Redirecting to Google…');
 
@@ -347,6 +346,11 @@ async function setupSupabaseAuth() {
     updateAuthUi(null);
     toggleAuthModal(false);
   });
+
+  if (!supabase) {
+    updateLifetimeStatsUi();
+    return;
+  }
 
   const { data, error } = await supabase.auth.getSession();
   if (!error) {
