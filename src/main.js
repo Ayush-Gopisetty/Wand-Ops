@@ -16,6 +16,12 @@ import { NetworkManager } from './network.js';
 import { UIManager } from './ui.js';
 import { SimpleBotController } from './bot.js';
 import { createSupabaseClient } from './lib/supabase.js';
+import {
+  EMPTY_LIFETIME_STATS,
+  fetchLifetimeStats,
+  incrementLifetimeStats,
+  normalizeLifetimeStats,
+} from './lib/lifetime-stats.js';
 
 const MOVE_SPEED = 9;
 const SLOW_FACTOR = 0.3;
@@ -92,11 +98,14 @@ let localActorId = -1;
 let aimBlend = 0;
 let localPlayerName = 'Wizard';
 let localSkinId = DEFAULT_SKIN_ID;
-
+let isGuestMode = false;
+let authSession = null;
 let playerVelocityY = 0;
 let isGrounded = true;
 let selectedSpell = 'fire';
-let authMode = 'signin';
+let lifetimeStats = { ...EMPTY_LIFETIME_STATS };
+let pendingLifetimeDelta = { ...EMPTY_LIFETIME_STATS };
+let lifetimeFlushPromise = null;
 
 const _moveDir = new THREE.Vector3();
 const _yAxis = new THREE.Vector3(0, 1, 0);
@@ -151,6 +160,93 @@ function updateDisplayedPlayerCount() {
   ui.setPlayerCount(baseCount + (trainingBot ? 1 : 0));
 }
 
+function updateLifetimeStatsUi() {
+  const killsEl = document.getElementById('lifetime-kills');
+  const deathsEl = document.getElementById('lifetime-deaths');
+  const kdEl = document.getElementById('lifetime-kd');
+  const damageEl = document.getElementById('lifetime-damage');
+  const noteEl = document.getElementById('lifetime-stats-note');
+  const kdRatio = lifetimeStats.deaths > 0
+    ? (lifetimeStats.kills / lifetimeStats.deaths).toFixed(2)
+    : lifetimeStats.kills.toFixed(2);
+
+  if (killsEl) killsEl.textContent = String(lifetimeStats.kills);
+  if (deathsEl) deathsEl.textContent = String(lifetimeStats.deaths);
+  if (kdEl) kdEl.textContent = kdRatio;
+  if (damageEl) damageEl.textContent = String(Math.round(lifetimeStats.damage_dealt));
+  if (noteEl) {
+    noteEl.textContent = authSession?.user
+      ? 'Signed-in lifetime stats are saved to Supabase.'
+      : 'Sign in with Google to save lifetime stats.';
+  }
+}
+
+function mergeLifetimeStats(delta) {
+  Object.keys(EMPTY_LIFETIME_STATS).forEach((key) => {
+    lifetimeStats[key] += Number(delta[key] || 0);
+  });
+  updateLifetimeStatsUi();
+}
+
+function isZeroLifetimeDelta(delta) {
+  return Object.keys(EMPTY_LIFETIME_STATS).every((key) => !delta[key]);
+}
+
+async function flushLifetimeStats() {
+  if (lifetimeFlushPromise || !supabase || !authSession?.user) return;
+  if (isZeroLifetimeDelta(pendingLifetimeDelta)) return;
+
+  const delta = { ...pendingLifetimeDelta };
+  pendingLifetimeDelta = { ...EMPTY_LIFETIME_STATS };
+
+  lifetimeFlushPromise = incrementLifetimeStats(supabase, delta)
+    .then((row) => {
+      lifetimeStats = normalizeLifetimeStats(row);
+      updateLifetimeStatsUi();
+    })
+    .catch((error) => {
+      console.warn('Failed to persist lifetime stats:', error);
+      Object.keys(EMPTY_LIFETIME_STATS).forEach((key) => {
+        pendingLifetimeDelta[key] += Number(delta[key] || 0);
+      });
+    })
+    .finally(() => {
+      lifetimeFlushPromise = null;
+      if (!isZeroLifetimeDelta(pendingLifetimeDelta)) flushLifetimeStats();
+    });
+
+  await lifetimeFlushPromise;
+}
+
+function queueLifetimeStats(delta) {
+  if (isGuestMode || !authSession?.user) return;
+  mergeLifetimeStats(delta);
+
+  Object.keys(EMPTY_LIFETIME_STATS).forEach((key) => {
+    pendingLifetimeDelta[key] += Number(delta[key] || 0);
+  });
+  flushLifetimeStats();
+}
+
+async function loadLifetimeStats(session) {
+  authSession = session;
+  if (!supabase || !session?.user) {
+    lifetimeStats = { ...EMPTY_LIFETIME_STATS };
+    pendingLifetimeDelta = { ...EMPTY_LIFETIME_STATS };
+    updateLifetimeStatsUi();
+    return;
+  }
+
+  try {
+    lifetimeStats = await fetchLifetimeStats(supabase, session.user.id);
+  } catch (error) {
+    console.warn('Failed to load lifetime stats:', error);
+    lifetimeStats = { ...EMPTY_LIFETIME_STATS };
+  }
+  pendingLifetimeDelta = { ...EMPTY_LIFETIME_STATS };
+  updateLifetimeStatsUi();
+}
+
 function setAuthStatus(message = '', type = '') {
   const statusEl = document.getElementById('auth-status-text');
   if (!statusEl) return;
@@ -159,31 +255,21 @@ function setAuthStatus(message = '', type = '') {
   if (type) statusEl.classList.add(type);
 }
 
-function setAuthMode(mode) {
-  authMode = mode;
-  const titleEl = document.getElementById('auth-modal-title');
-  const submitEl = document.getElementById('auth-submit-btn');
-  const signInModeBtn = document.getElementById('auth-mode-signin');
-  const signUpModeBtn = document.getElementById('auth-mode-signup');
-  const passwordEl = document.getElementById('auth-password');
-
-  if (titleEl) titleEl.textContent = mode === 'signin' ? 'Sign In' : 'Create Account';
-  if (submitEl) submitEl.textContent = mode === 'signin' ? 'Sign In' : 'Create Account';
-  if (passwordEl) passwordEl.autocomplete = mode === 'signin' ? 'current-password' : 'new-password';
-  signInModeBtn?.classList.toggle('active', mode === 'signin');
-  signUpModeBtn?.classList.toggle('active', mode === 'signup');
-  setAuthStatus('');
-}
-
 function toggleAuthModal(visible) {
   const backdrop = document.getElementById('auth-modal-backdrop');
   if (!backdrop) return;
   backdrop.hidden = !visible;
-  if (visible) {
-    document.getElementById('auth-email')?.focus();
-  } else {
-    setAuthStatus('');
+  if (!visible) setAuthStatus('');
+}
+
+function setGuestMode(enabled) {
+  isGuestMode = enabled;
+  localStorage.setItem('wand-ops-guest-mode', enabled ? 'true' : 'false');
+  if (enabled) {
+    pendingLifetimeDelta = { ...EMPTY_LIFETIME_STATS };
+    lifetimeStats = { ...EMPTY_LIFETIME_STATS };
   }
+  updateLifetimeStatsUi();
 }
 
 function updateAuthUi(session) {
@@ -191,12 +277,13 @@ function updateAuthUi(session) {
   const signOutBtn = document.getElementById('auth-signout-btn');
   const userBadge = document.getElementById('auth-user-badge');
   const email = session?.user?.email || '';
+  const showGuest = !session && isGuestMode;
 
   if (signInBtn) signInBtn.hidden = Boolean(session);
   if (signOutBtn) signOutBtn.hidden = !session;
   if (userBadge) {
-    userBadge.hidden = !session;
-    userBadge.textContent = email ? email : 'Signed In';
+    userBadge.hidden = !session && !showGuest;
+    userBadge.textContent = session ? (email || 'Signed In') : 'Guest';
   }
 }
 
@@ -216,18 +303,17 @@ async function setupSupabaseAuth() {
   const signOutBtn = document.getElementById('auth-signout-btn');
   const closeBtn = document.getElementById('auth-close-btn');
   const backdrop = document.getElementById('auth-modal-backdrop');
-  const authForm = document.getElementById('auth-form');
-  const signInModeBtn = document.getElementById('auth-mode-signin');
-  const signUpModeBtn = document.getElementById('auth-mode-signup');
+  const googleBtn = document.getElementById('auth-google-btn');
+  const guestBtn = document.getElementById('auth-guest-btn');
 
   signInBtn?.addEventListener('click', (e) => {
     e.stopPropagation();
-    setAuthMode('signin');
     toggleAuthModal(true);
   });
 
   signOutBtn?.addEventListener('click', async (e) => {
     e.stopPropagation();
+    await flushLifetimeStats();
     const { error } = await supabase.auth.signOut();
     if (error) {
       setAuthStatus(error.message, 'error');
@@ -237,60 +323,45 @@ async function setupSupabaseAuth() {
 
   closeBtn?.addEventListener('click', () => toggleAuthModal(false));
   backdrop?.addEventListener('click', () => toggleAuthModal(false));
-  signInModeBtn?.addEventListener('click', () => setAuthMode('signin'));
-  signUpModeBtn?.addEventListener('click', () => setAuthMode('signup'));
-
-  authForm?.addEventListener('submit', async (e) => {
-    e.preventDefault();
+  googleBtn?.addEventListener('click', async () => {
     if (!supabase) return;
-
-    const submitBtn = document.getElementById('auth-submit-btn');
-    const email = document.getElementById('auth-email')?.value.trim() || '';
-    const password = document.getElementById('auth-password')?.value || '';
-
-    if (!email || !password) {
-      setAuthStatus('Enter both email and password.', 'error');
-      return;
-    }
-
-    if (submitBtn) submitBtn.disabled = true;
-    setAuthStatus(authMode === 'signin' ? 'Signing in…' : 'Creating account…');
+    googleBtn.disabled = true;
+    setAuthStatus('Redirecting to Google…');
 
     try {
-      if (authMode === 'signin') {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        setAuthStatus('Signed in successfully.', 'success');
-        toggleAuthModal(false);
-      } else {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            emailRedirectTo: window.location.origin,
-          },
-        });
-        if (error) throw error;
-
-        if (data.session) {
-          setAuthStatus('Account created and signed in.', 'success');
-          toggleAuthModal(false);
-        } else {
-          setAuthStatus('Account created. Check your email to confirm the sign-in.', 'success');
-        }
-      }
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin,
+        },
+      });
+      if (error) throw error;
     } catch (error) {
-      setAuthStatus(error.message || 'Authentication failed.', 'error');
-    } finally {
-      if (submitBtn) submitBtn.disabled = false;
+      setAuthStatus(error.message || 'Google sign-in failed.', 'error');
+      googleBtn.disabled = false;
     }
   });
 
-  const { data, error } = await supabase.auth.getSession();
-  if (!error) updateAuthUi(data.session);
+  guestBtn?.addEventListener('click', () => {
+    setGuestMode(true);
+    updateAuthUi(null);
+    toggleAuthModal(false);
+  });
 
-  supabase.auth.onAuthStateChange((_event, session) => {
+  const { data, error } = await supabase.auth.getSession();
+  if (!error) {
+    if (data.session) setGuestMode(false);
+    updateAuthUi(data.session);
+    await loadLifetimeStats(data.session);
+  } else {
+    updateLifetimeStatsUi();
+  }
+
+  supabase.auth.onAuthStateChange(async (_event, session) => {
+    if (session) setGuestMode(false);
     updateAuthUi(session);
+    await loadLifetimeStats(session);
+    if (session) toggleAuthModal(false);
   });
 }
 
@@ -408,6 +479,8 @@ function getSimulatedOwners() {
 function handleDefeat(killerId, victimId, killerLabel, victimLabel) {
   ensureScoreEntry(killerId).kills++;
   ensureScoreEntry(victimId).deaths++;
+  if (killerId === localActorId) queueLifetimeStats({ kills: 1 });
+  if (victimId === localActorId) queueLifetimeStats({ deaths: 1 });
   refreshScoreboard();
   updateLocalKDA();
   if (killerId === localActorId) {
@@ -421,6 +494,7 @@ function handleRemoteHitDefeat(actorNr) {
   localPlayer.respawn();
   network.sendRespawn();
   ui.setHealth(localPlayer.health);
+  queueLifetimeStats({ deaths: 1 });
   ui.addKillEntry(`${getPlayerLabel(actorNr)} defeated you!`);
 }
 
@@ -437,6 +511,7 @@ function init() {
 
   const storedName = localStorage.getItem('wand-ops-player-name');
   const storedSkin = localStorage.getItem('wand-ops-player-skin');
+  isGuestMode = localStorage.getItem('wand-ops-guest-mode') === 'true';
   localPlayerName = sanitizePlayerName(storedName);
   localSkinId = sanitizeSkinId(storedSkin);
   playerNameInput.value = localPlayerName;
@@ -446,8 +521,8 @@ function init() {
   controls = new Controls();
   ui = new UIManager();
   fireballs = new FireballManager(scene);
-  setAuthMode('signin');
   setupSupabaseAuth();
+  updateLifetimeStatsUi();
 
   if (heroPreviewCanvas) {
     previewScene = new THREE.Scene();
@@ -659,6 +734,7 @@ function init() {
       if (data.targetId === localActorId) {
         const dead = localPlayer.takeDamage(data.damage);
         ui.addDamageNumber(data.damage, 'taken');
+        queueLifetimeStats({ damage_taken: data.damage });
         localPlayer.applySpellEffect(data.sp || 'fire');
 
         if (data.sp === 'air' && data.kx !== undefined) {
@@ -828,6 +904,7 @@ function update(delta) {
     const dead = localPlayer.takeDamage(localPlayer.burnDps * delta);
     ui.setHealth(localPlayer.health);
     if (dead) {
+      queueLifetimeStats({ deaths: 1 });
       localPlayer.respawn();
       ui.setHealth(localPlayer.health);
     }
@@ -864,10 +941,12 @@ function update(delta) {
 
       const dead = target.takeDamage(damage);
       ui.addDamageNumber(damage, 'dealt');
+      queueLifetimeStats({ damage_dealt: damage });
       if (!dead) return;
 
       target.respawn();
       if (targetId !== BOT_ID) {
+        queueLifetimeStats({ kills: 1 });
         network.sendKill(localActorId, targetId);
         const mine = scores.get(localActorId);
         network.sendScoreUpdate(localActorId, mine.kills + 1, mine.deaths);
@@ -880,6 +959,7 @@ function update(delta) {
     if (ownerId === BOT_ID && targetId === localActorId) {
       const dead = localPlayer.takeDamage(damage);
       ui.addDamageNumber(damage, 'taken');
+      queueLifetimeStats({ damage_taken: damage });
       localPlayer.applySpellEffect(spell);
       ui.setHealth(localPlayer.health);
       if (!dead) return;
@@ -911,6 +991,7 @@ function castFireball() {
 
   fireballs.spawn(spawnPos, _forward.clone(), localActorId, selectedSpell);
   network.sendFireball(spawnPos, _forward, selectedSpell);
+  queueLifetimeStats({ spells_cast: 1 });
 }
 
 function updateCamera() {
