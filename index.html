@@ -177,19 +177,24 @@
 
       <aside class="lo-right">
         <div class="lo-card">
-          <div class="lo-card-head"><span>📊</span> SEASON STATS</div>
+          <div class="lo-card-head"><span>📊</span> LIFETIME STATS</div>
           <div class="lo-stat-row">
-            <span class="lo-stat-label">WIN RATE</span>
-            <span class="lo-stat-value lo-accent">68%</span>
+            <span class="lo-stat-label">KILLS</span>
+            <span class="lo-stat-value lo-accent" id="lifetime-kills">0</span>
+          </div>
+          <div class="lo-stat-row">
+            <span class="lo-stat-label">DEATHS</span>
+            <span class="lo-stat-value" id="lifetime-deaths">0</span>
           </div>
           <div class="lo-stat-row">
             <span class="lo-stat-label">K/D RATIO</span>
-            <span class="lo-stat-value lo-accent">2.45</span>
+            <span class="lo-stat-value" id="lifetime-kd">0.00</span>
           </div>
           <div class="lo-stat-row">
-            <span class="lo-stat-label">WANDS MASTERY</span>
-            <span class="lo-stat-value">Level 42</span>
+            <span class="lo-stat-label">DAMAGE DEALT</span>
+            <span class="lo-stat-value" id="lifetime-damage">0</span>
           </div>
+          <div class="lo-stat-note" id="lifetime-stats-note">Sign in with Google to save lifetime stats.</div>
         </div>
 
         <div class="lo-card lo-news-card" onclick="event.stopPropagation()">
@@ -232,26 +237,25 @@
         <div class="lo-auth-modal-head">
           <div>
             <div class="lo-auth-kicker">Supabase Auth</div>
-            <h2 class="lo-auth-title" id="auth-modal-title">Sign In</h2>
+            <h2 class="lo-auth-title">Sign In With Google</h2>
           </div>
           <button class="lo-auth-close" id="auth-close-btn" type="button" aria-label="Close auth dialog">×</button>
         </div>
 
-        <div class="lo-auth-mode-row">
-          <button class="lo-auth-mode-btn active" id="auth-mode-signin" type="button">Sign In</button>
-          <button class="lo-auth-mode-btn" id="auth-mode-signup" type="button">Create Account</button>
+        <div class="lo-auth-copy">
+          Use your Google account to sign into Wand Ops. Email/password auth is disabled for this build.
         </div>
 
-        <form class="lo-auth-form" id="auth-form">
-          <label class="lo-auth-label" for="auth-email">Email</label>
-          <input class="lo-auth-input" id="auth-email" type="email" autocomplete="email" required />
-
-          <label class="lo-auth-label" for="auth-password">Password</label>
-          <input class="lo-auth-input" id="auth-password" type="password" minlength="6" autocomplete="current-password" required />
-
-          <button class="lo-auth-submit" id="auth-submit-btn" type="submit">Sign In</button>
+        <div class="lo-auth-form">
+          <button class="lo-auth-submit lo-auth-google-btn" id="auth-google-btn" type="button">
+            <span class="lo-auth-google-mark">G</span>
+            <span>Continue With Google</span>
+          </button>
+          <button class="lo-auth-submit lo-auth-guest-btn" id="auth-guest-btn" type="button">
+            Continue As Guest
+          </button>
           <p class="lo-auth-status" id="auth-status-text"></p>
-        </form>
+        </div>
       </div>
     </div>
   </div>
