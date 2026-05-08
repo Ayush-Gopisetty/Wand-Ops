@@ -122,6 +122,68 @@ export function applyFirstPersonWandSkin(wandGroup, skinId) {
   }
 }
 
+export function createWizardModel(color = getSkinConfig(DEFAULT_SKIN_ID).body, options = {}) {
+  const { includeNameTag = true, name = 'Wizard' } = options;
+  const group = new THREE.Group();
+
+  const bodyGeo = new THREE.BoxGeometry(0.85, 1.4, 0.85);
+  const bodyMat = new THREE.MeshStandardMaterial({ color });
+  const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
+  group.add(bodyMesh);
+
+  const trimGeo = new THREE.BoxGeometry(0.95, 0.6, 0.95);
+  const trimMat = new THREE.MeshStandardMaterial({ color: darken(color, 0.4) });
+  const trimMesh = new THREE.Mesh(trimGeo, trimMat);
+  trimMesh.position.y = -0.42;
+  group.add(trimMesh);
+
+  const hatMat = new THREE.MeshStandardMaterial({ color: 0x1a0033 });
+  const hatGeo = new THREE.ConeGeometry(0.38, 0.82, 8);
+  const hatMesh = new THREE.Mesh(hatGeo, hatMat);
+  hatMesh.position.y = 1.11;
+  group.add(hatMesh);
+
+  const brimGeo = new THREE.CylinderGeometry(0.54, 0.54, 0.08, 12);
+  const brimMesh = new THREE.Mesh(brimGeo, hatMat);
+  brimMesh.position.y = 0.74;
+  group.add(brimMesh);
+
+  const eyeGeo = new THREE.SphereGeometry(0.07, 6, 6);
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  [-0.22, 0.22].forEach((x) => {
+    const eye = new THREE.Mesh(eyeGeo, eyeMat);
+    eye.position.set(x, 0.18, 0.44);
+    group.add(eye);
+  });
+
+  const wandGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.7, 6);
+  const wandMat = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
+  const wandMesh = new THREE.Mesh(wandGeo, wandMat);
+  wandMesh.rotation.z = Math.PI / 6;
+  wandMesh.position.set(0.56, 0.1, 0.0);
+  group.add(wandMesh);
+
+  let nameTag = null;
+  if (includeNameTag) {
+    nameTag = createNameTag(name);
+    group.add(nameTag);
+  }
+
+  group.userData = {
+    bodyMat,
+    trimMat,
+    hatMat,
+    bodyMesh,
+    trimMesh,
+    hatMesh,
+    brimMesh,
+    wandMesh,
+    nameTag,
+  };
+
+  return group;
+}
+
 function createNameTag(text = 'Wizard') {
   const canvas = document.createElement('canvas');
   canvas.width = 256;
@@ -200,47 +262,12 @@ export class Player {
   }
 
   _buildMesh(color) {
-    this.group = new THREE.Group();
-
-    const bodyGeo = new THREE.BoxGeometry(0.85, 1.4, 0.85);
-    this._bodyMat = new THREE.MeshStandardMaterial({ color });
-    this.bodyMesh = new THREE.Mesh(bodyGeo, this._bodyMat);
-    this.group.add(this.bodyMesh);
-
-    const trimGeo = new THREE.BoxGeometry(0.95, 0.6, 0.95);
-    this._trimMat = new THREE.MeshStandardMaterial({ color: darken(color, 0.4) });
-    const trim = new THREE.Mesh(trimGeo, this._trimMat);
-    trim.position.y = -0.42;
-    this.group.add(trim);
-
-    const hatGeo = new THREE.ConeGeometry(0.38, 0.82, 8);
-    this._hatMat = new THREE.MeshStandardMaterial({ color: 0x1a0033 });
-    const hat = new THREE.Mesh(hatGeo, this._hatMat);
-    hat.position.y = 1.11;
-    this.group.add(hat);
-
-    const brimGeo = new THREE.CylinderGeometry(0.54, 0.54, 0.08, 12);
-    const brim = new THREE.Mesh(brimGeo, this._hatMat);
-    brim.position.y = 0.74;
-    this.group.add(brim);
-
-    const eyeGeo = new THREE.SphereGeometry(0.07, 6, 6);
-    const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    [-0.22, 0.22].forEach((x) => {
-      const eye = new THREE.Mesh(eyeGeo, eyeMat);
-      eye.position.set(x, 0.18, 0.44);
-      this.group.add(eye);
-    });
-
-    const wandGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.7, 6);
-    const wandMat = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
-    const wand = new THREE.Mesh(wandGeo, wandMat);
-    wand.rotation.z = Math.PI / 6;
-    wand.position.set(0.56, 0.1, 0.0);
-    this.group.add(wand);
-
-    this.nameTag = createNameTag(this.name);
-    this.group.add(this.nameTag);
+    this.group = createWizardModel(color, { includeNameTag: true, name: this.name });
+    this._bodyMat = this.group.userData.bodyMat;
+    this._trimMat = this.group.userData.trimMat;
+    this._hatMat = this.group.userData.hatMat;
+    this.bodyMesh = this.group.userData.bodyMesh;
+    this.nameTag = this.group.userData.nameTag;
     this.group.position.copy(this.position);
   }
 

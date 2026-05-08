@@ -101,6 +101,29 @@
             </button>
           </div>
         </div>
+
+        <div class="lo-card lo-weapon-stats" onclick="event.stopPropagation()">
+          <div class="lo-card-head"><span>+</span> WEAPON STATS</div>
+          <div class="lo-weapon-name" id="weapon-stats-name">Fire Wand</div>
+          <div class="lo-stat-bars" id="weapon-stat-bars">
+            <div class="lo-stat-bar-row">
+              <div class="lo-stat-bar-label">Damage</div>
+              <div class="lo-stat-bar-track"><div class="lo-stat-bar-fill" id="stat-damage"></div></div>
+            </div>
+            <div class="lo-stat-bar-row">
+              <div class="lo-stat-bar-label">Projectile Speed</div>
+              <div class="lo-stat-bar-track"><div class="lo-stat-bar-fill" id="stat-speed"></div></div>
+            </div>
+            <div class="lo-stat-bar-row">
+              <div class="lo-stat-bar-label">Control</div>
+              <div class="lo-stat-bar-track"><div class="lo-stat-bar-fill" id="stat-control"></div></div>
+            </div>
+            <div class="lo-stat-bar-row">
+              <div class="lo-stat-bar-label">Impact</div>
+              <div class="lo-stat-bar-track"><div class="lo-stat-bar-fill" id="stat-impact"></div></div>
+            </div>
+          </div>
+        </div>
       </aside>
 
       <section class="lo-center">
@@ -108,20 +131,12 @@
 
         <div class="lo-avatar-wrap">
           <div class="lo-avatar-oval">
-            <svg viewBox="0 0 80 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="40" cy="34" r="17" fill="rgba(216,185,255,0.3)"/>
-              <path d="M10 94 C10 64 70 64 70 94" fill="rgba(216,185,255,0.3)"/>
-            </svg>
+            <canvas id="hero-preview-canvas" aria-label="Wizard preview"></canvas>
           </div>
           <div class="lo-status-dot"></div>
         </div>
 
         <h1 class="lo-player-name" id="lo-player-name">ARCHMAGE HEX</h1>
-
-        <div class="lo-level-row">
-          <span class="lo-chip lo-chip-level">LVL 88</span>
-          <span class="lo-chip lo-chip-rank">GRAND MASTER</span>
-        </div>
 
         <div class="lo-name-field" onclick="event.stopPropagation()">
           <span class="lo-name-field-label">Wizard Name</span>

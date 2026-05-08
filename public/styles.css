@@ -446,7 +446,7 @@ body {
 .lo-nav {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   width: 100%;
   padding: 0 20px;
   height: 58px;
@@ -769,19 +769,24 @@ body {
 .lo-avatar-oval {
   width: 200px;
   height: 260px;
-  background: var(--surface-container-high);
-  border: 2px solid var(--outline-variant);
+  background:
+    radial-gradient(circle at 50% 24%, rgba(255,255,255,0.06), transparent 28%),
+    linear-gradient(180deg, rgba(60,58,100,0.85), rgba(26,27,52,0.95));
+  border: 2px solid rgba(151, 141, 160, 0.55);
   border-radius: 100px / 130px;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.08),
+    0 24px 40px rgba(0,0,0,0.28);
 }
 
-.lo-avatar-oval svg {
-  width: 120px;
-  height: 150px;
-  opacity: 0.85;
+#hero-preview-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
 .lo-status-dot {
@@ -961,6 +966,60 @@ body {
 .lo-spell-tray-sidebar .spell-btn {
   flex: 1 1 calc(50% - 8px);
   max-width: calc(50% - 4px);
+}
+
+.lo-weapon-stats {
+  gap: 12px;
+}
+
+.lo-weapon-name {
+  font-size: 1.05rem;
+  font-weight: 800;
+  font-style: italic;
+  letter-spacing: 0.01em;
+  color: #fff0ff;
+  text-transform: uppercase;
+}
+
+.lo-stat-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lo-stat-bar-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.lo-stat-bar-label {
+  font-family: var(--font-label);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--on-surface-dim);
+}
+
+.lo-stat-bar-track {
+  position: relative;
+  height: 14px;
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(255,255,255,0.14);
+  background:
+    linear-gradient(90deg, rgba(255,255,255,0.05) 0 24%, transparent 24% 25%, rgba(255,255,255,0.05) 25% 49%, transparent 49% 50%, rgba(255,255,255,0.05) 50% 74%, transparent 74% 75%, rgba(255,255,255,0.05) 75% 100%),
+    rgba(11, 9, 24, 0.78);
+  overflow: hidden;
+}
+
+.lo-stat-bar-fill {
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #f1ff3a, #ffb703);
+  box-shadow: 0 0 18px rgba(255, 196, 0, 0.36);
+  transition: width 0.22s ease;
 }
 
 .spell-btn {
