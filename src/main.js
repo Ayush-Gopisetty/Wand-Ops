@@ -1,3 +1,4 @@
+import { inject } from '@vercel/analytics';
 import * as THREE from 'three';
 import { createScene } from './scene.js';
 import {
@@ -15,6 +16,8 @@ import { FireballManager } from './fireball.js';
 import { NetworkManager } from './network.js';
 import { UIManager } from './ui.js';
 import { SimpleBotController } from './bot.js';
+
+inject();
 
 const MOVE_SPEED = 9;
 const SLOW_FACTOR = 0.3;
