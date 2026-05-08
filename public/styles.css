@@ -433,6 +433,8 @@ body {
   background: var(--surface);
   display: flex;
   flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
   z-index: 50;
   cursor: pointer;
   font-family: var(--font-display);
@@ -445,6 +447,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  width: 100%;
   padding: 0 20px;
   height: 58px;
   background: var(--surface-container);
@@ -557,6 +560,7 @@ body {
 .lo-body {
   flex: 1;
   display: flex;
+  width: 100%;
   gap: 16px;
   padding: 16px 20px;
   overflow: hidden;
@@ -1007,6 +1011,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  width: 100%;
   padding: 0 20px;
   height: 36px;
   background: var(--surface-container);
