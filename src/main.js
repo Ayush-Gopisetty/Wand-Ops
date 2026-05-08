@@ -15,6 +15,7 @@ import { FireballManager } from './fireball.js';
 import { NetworkManager } from './network.js';
 import { UIManager } from './ui.js';
 import { SimpleBotController } from './bot.js';
+import { createSupabaseClient } from './lib/supabase.js';
 
 const MOVE_SPEED = 9;
 const SLOW_FACTOR = 0.3;
@@ -76,6 +77,7 @@ let previewScene, previewCamera, previewRenderer, previewModel;
 const remotePlayers = new Map();
 let trainingBot = null;
 let trainingBotAI = null;
+let supabase = null;
 
 let controls, fireballs, network, ui, colliders;
 const scores = new Map();
@@ -94,6 +96,7 @@ let localSkinId = DEFAULT_SKIN_ID;
 let playerVelocityY = 0;
 let isGrounded = true;
 let selectedSpell = 'fire';
+let authMode = 'signin';
 
 const _moveDir = new THREE.Vector3();
 const _yAxis = new THREE.Vector3(0, 1, 0);
@@ -146,6 +149,149 @@ function hasHumanOpponents() {
 function updateDisplayedPlayerCount() {
   const baseCount = network ? network.getPlayerCount() : 1;
   ui.setPlayerCount(baseCount + (trainingBot ? 1 : 0));
+}
+
+function setAuthStatus(message = '', type = '') {
+  const statusEl = document.getElementById('auth-status-text');
+  if (!statusEl) return;
+  statusEl.textContent = message;
+  statusEl.className = 'lo-auth-status';
+  if (type) statusEl.classList.add(type);
+}
+
+function setAuthMode(mode) {
+  authMode = mode;
+  const titleEl = document.getElementById('auth-modal-title');
+  const submitEl = document.getElementById('auth-submit-btn');
+  const signInModeBtn = document.getElementById('auth-mode-signin');
+  const signUpModeBtn = document.getElementById('auth-mode-signup');
+  const passwordEl = document.getElementById('auth-password');
+
+  if (titleEl) titleEl.textContent = mode === 'signin' ? 'Sign In' : 'Create Account';
+  if (submitEl) submitEl.textContent = mode === 'signin' ? 'Sign In' : 'Create Account';
+  if (passwordEl) passwordEl.autocomplete = mode === 'signin' ? 'current-password' : 'new-password';
+  signInModeBtn?.classList.toggle('active', mode === 'signin');
+  signUpModeBtn?.classList.toggle('active', mode === 'signup');
+  setAuthStatus('');
+}
+
+function toggleAuthModal(visible) {
+  const backdrop = document.getElementById('auth-modal-backdrop');
+  if (!backdrop) return;
+  backdrop.hidden = !visible;
+  if (visible) {
+    document.getElementById('auth-email')?.focus();
+  } else {
+    setAuthStatus('');
+  }
+}
+
+function updateAuthUi(session) {
+  const signInBtn = document.getElementById('auth-signin-btn');
+  const signOutBtn = document.getElementById('auth-signout-btn');
+  const userBadge = document.getElementById('auth-user-badge');
+  const email = session?.user?.email || '';
+
+  if (signInBtn) signInBtn.hidden = Boolean(session);
+  if (signOutBtn) signOutBtn.hidden = !session;
+  if (userBadge) {
+    userBadge.hidden = !session;
+    userBadge.textContent = email ? email : 'Signed In';
+  }
+}
+
+async function setupSupabaseAuth() {
+  try {
+    supabase = createSupabaseClient();
+  } catch (error) {
+    const signInBtn = document.getElementById('auth-signin-btn');
+    if (signInBtn) {
+      signInBtn.disabled = true;
+      signInBtn.title = 'Supabase environment variables are missing';
+    }
+    return;
+  }
+
+  const signInBtn = document.getElementById('auth-signin-btn');
+  const signOutBtn = document.getElementById('auth-signout-btn');
+  const closeBtn = document.getElementById('auth-close-btn');
+  const backdrop = document.getElementById('auth-modal-backdrop');
+  const authForm = document.getElementById('auth-form');
+  const signInModeBtn = document.getElementById('auth-mode-signin');
+  const signUpModeBtn = document.getElementById('auth-mode-signup');
+
+  signInBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setAuthMode('signin');
+    toggleAuthModal(true);
+  });
+
+  signOutBtn?.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      setAuthStatus(error.message, 'error');
+      toggleAuthModal(true);
+    }
+  });
+
+  closeBtn?.addEventListener('click', () => toggleAuthModal(false));
+  backdrop?.addEventListener('click', () => toggleAuthModal(false));
+  signInModeBtn?.addEventListener('click', () => setAuthMode('signin'));
+  signUpModeBtn?.addEventListener('click', () => setAuthMode('signup'));
+
+  authForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!supabase) return;
+
+    const submitBtn = document.getElementById('auth-submit-btn');
+    const email = document.getElementById('auth-email')?.value.trim() || '';
+    const password = document.getElementById('auth-password')?.value || '';
+
+    if (!email || !password) {
+      setAuthStatus('Enter both email and password.', 'error');
+      return;
+    }
+
+    if (submitBtn) submitBtn.disabled = true;
+    setAuthStatus(authMode === 'signin' ? 'Signing in…' : 'Creating account…');
+
+    try {
+      if (authMode === 'signin') {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        setAuthStatus('Signed in successfully.', 'success');
+        toggleAuthModal(false);
+      } else {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: window.location.origin,
+          },
+        });
+        if (error) throw error;
+
+        if (data.session) {
+          setAuthStatus('Account created and signed in.', 'success');
+          toggleAuthModal(false);
+        } else {
+          setAuthStatus('Account created. Check your email to confirm the sign-in.', 'success');
+        }
+      }
+    } catch (error) {
+      setAuthStatus(error.message || 'Authentication failed.', 'error');
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  });
+
+  const { data, error } = await supabase.auth.getSession();
+  if (!error) updateAuthUi(data.session);
+
+  supabase.auth.onAuthStateChange((_event, session) => {
+    updateAuthUi(session);
+  });
 }
 
 function updateWeaponStats(spell) {
@@ -300,11 +446,14 @@ function init() {
   controls = new Controls();
   ui = new UIManager();
   fireballs = new FireballManager(scene);
+  setAuthMode('signin');
+  setupSupabaseAuth();
 
   if (heroPreviewCanvas) {
     previewScene = new THREE.Scene();
     previewCamera = new THREE.PerspectiveCamera(28, 200 / 260, 0.1, 100);
-    previewCamera.position.set(0, 1.25, 5.2);
+    previewCamera.position.set(0, 0.95, 4.2);
+    previewCamera.lookAt(0, 0.75, 0);
 
     previewRenderer = new THREE.WebGLRenderer({
       canvas: heroPreviewCanvas,
@@ -314,22 +463,35 @@ function init() {
     previewRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     previewRenderer.setClearColor(0x000000, 0);
 
-    const keyLight = new THREE.DirectionalLight(0xf8eaff, 2.2);
-    keyLight.position.set(2.4, 3.2, 4.6);
+    const keyLight = new THREE.DirectionalLight(0xf8eaff, 2.9);
+    keyLight.position.set(2.8, 3.4, 4.4);
     previewScene.add(keyLight);
 
-    const rimLight = new THREE.DirectionalLight(0x74b9ff, 1.15);
-    rimLight.position.set(-2.8, 1.6, -3.6);
+    const rimLight = new THREE.DirectionalLight(0x74b9ff, 1.4);
+    rimLight.position.set(-2.4, 2.2, -3.2);
     previewScene.add(rimLight);
 
-    const fillLight = new THREE.AmbientLight(0xffffff, 1.25);
+    const fillLight = new THREE.AmbientLight(0xffffff, 1.65);
     previewScene.add(fillLight);
+
+    const floorGlow = new THREE.Mesh(
+      new THREE.CircleGeometry(1.35, 32),
+      new THREE.MeshBasicMaterial({
+        color: 0x6f5cff,
+        transparent: true,
+        opacity: 0.16,
+      }),
+    );
+    floorGlow.rotation.x = -Math.PI / 2;
+    floorGlow.position.set(0, -0.98, 0);
+    previewScene.add(floorGlow);
 
     previewModel = createWizardModel(getSkinConfig(localSkinId).body, {
       includeNameTag: false,
     });
-    previewModel.position.set(0, -0.75, 0);
-    previewModel.rotation.y = -0.45;
+    previewModel.scale.setScalar(1.18);
+    previewModel.position.set(0, -0.18, 0);
+    previewModel.rotation.y = -0.58;
     previewScene.add(previewModel);
     updateHeroPreviewSize();
   }
@@ -800,7 +962,7 @@ function updateHeroPreviewSize() {
 function renderHeroPreview(delta) {
   if (!previewRenderer || !previewScene || !previewCamera || !previewModel) return;
   previewModel.rotation.y += delta * 0.55;
-  previewModel.position.y = -0.75 + Math.sin(clock.elapsedTime * 1.8) * 0.05;
+  previewModel.position.y = -0.18 + Math.sin(clock.elapsedTime * 1.8) * 0.035;
   previewRenderer.render(previewScene, previewCamera);
 }
 

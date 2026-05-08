@@ -54,6 +54,7 @@
   <div id="overlay">
     <nav class="lo-nav" onclick="event.stopPropagation()">
       <div class="lo-nav-actions">
+        <span class="lo-auth-user" id="auth-user-badge" hidden></span>
         <div class="lo-currency">
           <span class="lo-coin">$</span><span>5990</span>
         </div>
@@ -61,7 +62,8 @@
         <button class="lo-icon-btn" title="Help">❓</button>
         <button class="lo-icon-btn" title="Settings">⚙️</button>
         <button class="lo-icon-btn" title="Chat">💬</button>
-        <button class="lo-signout-btn">Sign Out</button>
+        <button class="lo-auth-btn" id="auth-signin-btn" type="button">Sign In</button>
+        <button class="lo-signout-btn" id="auth-signout-btn" type="button" hidden>Sign Out</button>
       </div>
     </nav>
 
@@ -224,6 +226,34 @@
         <span class="lo-footer-copy">© 2024 Blue Wizard Digital</span>
       </div>
     </footer>
+
+    <div class="lo-auth-modal-backdrop" id="auth-modal-backdrop" hidden>
+      <div class="lo-auth-modal" onclick="event.stopPropagation()">
+        <div class="lo-auth-modal-head">
+          <div>
+            <div class="lo-auth-kicker">Supabase Auth</div>
+            <h2 class="lo-auth-title" id="auth-modal-title">Sign In</h2>
+          </div>
+          <button class="lo-auth-close" id="auth-close-btn" type="button" aria-label="Close auth dialog">×</button>
+        </div>
+
+        <div class="lo-auth-mode-row">
+          <button class="lo-auth-mode-btn active" id="auth-mode-signin" type="button">Sign In</button>
+          <button class="lo-auth-mode-btn" id="auth-mode-signup" type="button">Create Account</button>
+        </div>
+
+        <form class="lo-auth-form" id="auth-form">
+          <label class="lo-auth-label" for="auth-email">Email</label>
+          <input class="lo-auth-input" id="auth-email" type="email" autocomplete="email" required />
+
+          <label class="lo-auth-label" for="auth-password">Password</label>
+          <input class="lo-auth-input" id="auth-password" type="password" minlength="6" autocomplete="current-password" required />
+
+          <button class="lo-auth-submit" id="auth-submit-btn" type="submit">Sign In</button>
+          <p class="lo-auth-status" id="auth-status-text"></p>
+        </form>
+      </div>
+    </div>
   </div>
 
   <script type="module" src="/src/main.js"></script>
