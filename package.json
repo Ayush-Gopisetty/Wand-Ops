@@ -8,8 +8,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@supabase/ssr": "^0.10.3",
-    "@supabase/supabase-js": "^2.105.3",
+    "firebase": "^12.13.0",
     "photon-realtime": "^4.4.0",
     "three": "^0.164.0"
   },
