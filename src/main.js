@@ -108,6 +108,7 @@ let authSession = null;
 let playerVelocityY = 0;
 let isGrounded = true;
 let selectedSpell = 'fire';
+let coinCount = 0;
 let lifetimeStats = { ...EMPTY_LIFETIME_STATS };
 let pendingLifetimeDelta = { ...EMPTY_LIFETIME_STATS };
 let lifetimeFlushPromise = null;
@@ -165,6 +166,28 @@ function updateDisplayedPlayerCount() {
   ui.setPlayerCount(baseCount + (trainingBot ? 1 : 0));
 }
 
+function readGuestCoins() {
+  const value = Number(localStorage.getItem('wand-ops-guest-coins') || localStorage.getItem('wand-ops-coins') || 0);
+  return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+}
+
+function writeGuestCoins(value) {
+  localStorage.setItem('wand-ops-guest-coins', String(value));
+}
+
+function updateCoinUi() {
+  const coinEl = document.getElementById('coin-count');
+  if (coinEl) coinEl.textContent = String(coinCount);
+}
+
+function awardCoins(amount) {
+  const earned = Math.max(0, Math.floor(amount));
+  coinCount = Math.max(0, coinCount + earned);
+  if (authSession?.user) queueLifetimeStats({ coins: earned });
+  else writeGuestCoins(coinCount);
+  updateCoinUi();
+}
+
 function updateLifetimeStatsUi() {
   const killsEl = document.getElementById('lifetime-kills');
   const deathsEl = document.getElementById('lifetime-deaths');
@@ -207,6 +230,8 @@ async function flushLifetimeStats() {
   lifetimeFlushPromise = incrementLifetimeStats(firebaseServices.db, authSession.user.id, delta)
     .then((row) => {
       lifetimeStats = normalizeLifetimeStats(row);
+      coinCount = lifetimeStats.coins;
+      updateCoinUi();
       updateLifetimeStatsUi();
     })
     .catch((error) => {
@@ -238,17 +263,22 @@ async function loadLifetimeStats(session) {
   if (!firebaseServices?.db || !session?.user) {
     lifetimeStats = { ...EMPTY_LIFETIME_STATS };
     pendingLifetimeDelta = { ...EMPTY_LIFETIME_STATS };
+    coinCount = readGuestCoins();
+    updateCoinUi();
     updateLifetimeStatsUi();
     return;
   }
 
   try {
     lifetimeStats = await fetchLifetimeStats(firebaseServices.db, session.user.id);
+    coinCount = lifetimeStats.coins;
   } catch (error) {
     console.warn('Failed to load lifetime stats:', error);
     lifetimeStats = { ...EMPTY_LIFETIME_STATS };
+    coinCount = 0;
   }
   pendingLifetimeDelta = { ...EMPTY_LIFETIME_STATS };
+  updateCoinUi();
   updateLifetimeStatsUi();
 }
 
@@ -265,6 +295,10 @@ function toggleAuthModal(visible) {
   if (!backdrop) return;
   backdrop.hidden = !visible;
   if (!visible) setAuthStatus('');
+}
+
+function closeAuthModal() {
+  toggleAuthModal(false);
 }
 
 function setGuestMode(enabled) {
@@ -327,9 +361,19 @@ async function setupFirebaseAuth() {
     }
   });
 
-  closeBtn?.addEventListener('click', () => toggleAuthModal(false));
-  backdrop?.addEventListener('click', () => toggleAuthModal(false));
-  googleBtn?.addEventListener('click', async () => {
+  closeBtn?.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    closeAuthModal();
+  });
+  backdrop?.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    closeAuthModal();
+  });
+  googleBtn?.addEventListener('click', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
     if (!firebaseServices) {
       setAuthStatus('Firebase auth is not configured in this environment.', 'error');
       return;
@@ -347,10 +391,12 @@ async function setupFirebaseAuth() {
     }
   });
 
-  guestBtn?.addEventListener('click', () => {
+  guestBtn?.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
     setGuestMode(true);
     updateAuthUi(null);
-    toggleAuthModal(false);
+    closeAuthModal();
   });
 
   if (!firebaseServices) {
@@ -371,7 +417,7 @@ async function setupFirebaseAuth() {
     if (session) setGuestMode(false);
     updateAuthUi(session);
     await loadLifetimeStats(session);
-    if (session) toggleAuthModal(false);
+    if (session) closeAuthModal();
   });
 }
 
@@ -490,6 +536,7 @@ function handleDefeat(killerId, victimId, killerLabel, victimLabel) {
   ensureScoreEntry(killerId).kills++;
   ensureScoreEntry(victimId).deaths++;
   if (killerId === localActorId) queueLifetimeStats({ kills: 1 });
+  if (killerId === localActorId) awardCoins(1);
   if (victimId === localActorId) queueLifetimeStats({ deaths: 1 });
   refreshScoreboard();
   updateLocalKDA();
@@ -524,6 +571,7 @@ function init() {
   isGuestMode = localStorage.getItem('wand-ops-guest-mode') === 'true';
   localPlayerName = sanitizePlayerName(storedName);
   localSkinId = sanitizeSkinId(storedSkin);
+  coinCount = readGuestCoins();
   playerNameInput.value = localPlayerName;
   const loPlayerNameEl = document.getElementById('lo-player-name');
   if (loPlayerNameEl) loPlayerNameEl.textContent = localPlayerName.toUpperCase();
@@ -534,6 +582,7 @@ function init() {
   toggleAuthModal(false);
   setupFirebaseAuth();
   updateLifetimeStatsUi();
+  updateCoinUi();
 
   if (heroPreviewCanvas) {
     previewScene = new THREE.Scene();
@@ -957,6 +1006,7 @@ function update(delta) {
 
       target.respawn();
       if (targetId !== BOT_ID) {
+        awardCoins(1);
         queueLifetimeStats({ kills: 1 });
         network.sendKill(localActorId, targetId);
         const mine = scores.get(localActorId);

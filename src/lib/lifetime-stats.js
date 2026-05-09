@@ -13,6 +13,7 @@ export const EMPTY_LIFETIME_STATS = {
   damage_dealt: 0,
   damage_taken: 0,
   spells_cast: 0,
+  coins: 0,
 };
 
 export function normalizeLifetimeStats(row) {
@@ -23,6 +24,7 @@ export function normalizeLifetimeStats(row) {
     damage_dealt: Number(row?.damage_dealt || 0),
     damage_taken: Number(row?.damage_taken || 0),
     spells_cast: Number(row?.spells_cast || 0),
+    coins: Number(row?.coins || 0),
   };
 }
 
@@ -41,6 +43,7 @@ export async function incrementLifetimeStats(db, userId, delta) {
     damage_dealt: increment(delta.damage_dealt || 0),
     damage_taken: increment(delta.damage_taken || 0),
     spells_cast: increment(delta.spells_cast || 0),
+    coins: increment(delta.coins || 0),
     updated_at: serverTimestamp(),
   }, { merge: true });
 
