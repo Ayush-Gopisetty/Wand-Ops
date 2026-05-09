@@ -1,3 +1,4 @@
+import { inject } from '@vercel/analytics';
 import * as THREE from 'three';
 import { createScene } from './scene.js';
 import {
@@ -31,6 +32,8 @@ import {
   normalizeLifetimeStats,
   savePlayerProfile,
 } from './lib/lifetime-stats.js';
+
+inject();
 
 const MOVE_SPEED = 9;
 const SLOW_FACTOR = 0.3;
