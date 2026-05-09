@@ -6,14 +6,17 @@ const LERP_SPEED = 0.18;
 const PLAYER_COLORS = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf39c12, 0x1abc9c, 0xe91e63, 0xff6b35];
 
 export const PLAYER_SKINS = {
-  amethyst: { name: 'Amethyst', body: 0x9b59b6, accent: 0xffb347, glow: 0xff7a18 },
-  ember:    { name: 'Ember',    body: 0xd35400, accent: 0xffc36b, glow: 0xff6a00 },
-  tide:     { name: 'Tide',     body: 0x2980b9, accent: 0x8edcff, glow: 0x2e8bc0 },
-  verdant:  { name: 'Verdant',  body: 0x27ae60, accent: 0xb6ff8d, glow: 0x4ecb71 },
-  storm:    { name: 'Storm',    body: 0x5d6d7e, accent: 0xd6dbff, glow: 0x7d8cff },
+  amethyst: { name: 'Amethyst', body: 0x9b59b6, accent: 0xffb347, glow: 0xff7a18, price: 0, unlockByDefault: true },
+  ember:    { name: 'Ember',    body: 0xd35400, accent: 0xffc36b, glow: 0xff6a00, price: 12, unlockByDefault: false },
+  tide:     { name: 'Tide',     body: 0x2980b9, accent: 0x8edcff, glow: 0x2e8bc0, price: 16, unlockByDefault: false },
+  verdant:  { name: 'Verdant',  body: 0x27ae60, accent: 0xb6ff8d, glow: 0x4ecb71, price: 20, unlockByDefault: false },
+  storm:    { name: 'Storm',    body: 0x5d6d7e, accent: 0xd6dbff, glow: 0x7d8cff, price: 24, unlockByDefault: false },
 };
 
 export const DEFAULT_SKIN_ID = 'amethyst';
+export const DEFAULT_UNLOCKED_SKIN_IDS = Object.entries(PLAYER_SKINS)
+  .filter(([, skin]) => skin.unlockByDefault)
+  .map(([skinId]) => skinId);
 
 export function remoteColor(actorNr) {
   return PLAYER_COLORS[actorNr % PLAYER_COLORS.length];
