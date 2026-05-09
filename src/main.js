@@ -17,6 +17,7 @@ import { FireballManager } from './fireball.js';
 import { NetworkManager } from './network.js';
 import { UIManager } from './ui.js';
 import { SimpleBotController } from './bot.js';
+import { injectSpeedInsights } from '@vercel/speed-insights';
 import {
   onAuthStateChanged,
   signInWithPopup,
@@ -876,6 +877,9 @@ function handleRemoteHitDefeat(actorNr) {
 }
 
 function init() {
+  // Initialize Vercel Speed Insights
+  injectSpeedInsights();
+
   const canvas = document.getElementById('game-canvas');
   const heroPreviewCanvas = document.getElementById('hero-preview-canvas');
   const playerNameInput = document.getElementById('player-name-input');
