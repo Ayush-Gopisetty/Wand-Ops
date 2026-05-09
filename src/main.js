@@ -9,6 +9,7 @@ import {
   createWizardModel,
   PLAYER_SKINS,
   DEFAULT_SKIN_ID,
+  DEFAULT_UNLOCKED_SKIN_IDS,
   getSkinConfig,
 } from './player.js';
 import { Controls } from './controls.js';
@@ -16,6 +17,21 @@ import { FireballManager } from './fireball.js';
 import { NetworkManager } from './network.js';
 import { UIManager } from './ui.js';
 import { SimpleBotController } from './bot.js';
+import {
+  onAuthStateChanged,
+  signInWithPopup,
+  signOut,
+} from 'firebase/auth';
+import { createFirebaseServices } from './lib/firebase.js';
+import {
+  EMPTY_LIFETIME_STATS,
+  EMPTY_PLAYER_PROFILE,
+  fetchLifetimeStats,
+  fetchPlayerProfile,
+  incrementLifetimeStats,
+  normalizeLifetimeStats,
+  savePlayerProfile,
+} from './lib/lifetime-stats.js';
 
 inject();
 
@@ -71,6 +87,15 @@ const WEAPON_STATS = {
     impact: 95,
   },
 };
+const GUEST_PROFILE_KEY = 'wand-ops-guest-profile';
+const DAILY_QUEST_TEMPLATES = [
+  { id: 'kills-3', metric: 'kills', label: 'Get 3 kills', target: 3, reward: 8 },
+  { id: 'kills-6', metric: 'kills', label: 'Get 6 kills', target: 6, reward: 14 },
+  { id: 'damage-400', metric: 'damage_dealt', label: 'Deal 400 damage', target: 400, reward: 7 },
+  { id: 'damage-900', metric: 'damage_dealt', label: 'Deal 900 damage', target: 900, reward: 14 },
+  { id: 'casts-12', metric: 'spells_cast', label: 'Cast 12 spells', target: 12, reward: 6 },
+  { id: 'casts-25', metric: 'spells_cast', label: 'Cast 25 spells', target: 25, reward: 12 },
+];
 
 let scene, camera, renderer;
 let localPlayer;
@@ -79,6 +104,7 @@ let previewScene, previewCamera, previewRenderer, previewModel;
 const remotePlayers = new Map();
 let trainingBot = null;
 let trainingBotAI = null;
+let firebaseServices = null;
 
 let controls, fireballs, network, ui, colliders;
 const scores = new Map();
@@ -93,10 +119,17 @@ let localActorId = -1;
 let aimBlend = 0;
 let localPlayerName = 'Wizard';
 let localSkinId = DEFAULT_SKIN_ID;
-
+let isGuestMode = false;
+let authSession = null;
 let playerVelocityY = 0;
 let isGrounded = true;
 let selectedSpell = 'fire';
+let coinCount = 0;
+let lifetimeStats = { ...EMPTY_LIFETIME_STATS };
+let pendingLifetimeDelta = { ...EMPTY_LIFETIME_STATS };
+let lifetimeFlushPromise = null;
+let ownedSkinIds = new Set(DEFAULT_UNLOCKED_SKIN_IDS);
+let dailyQuestState = createDailyQuestState();
 
 const _moveDir = new THREE.Vector3();
 const _yAxis = new THREE.Vector3(0, 1, 0);
@@ -120,6 +153,95 @@ function sanitizePlayerName(value) {
 
 function sanitizeSkinId(value) {
   return value && value in PLAYER_SKINS ? value : DEFAULT_SKIN_ID;
+}
+
+function getTodayQuestKey() {
+  return new Date().toLocaleDateString('en-CA', {
+    timeZone: 'America/Chicago',
+  });
+}
+
+function createDailyQuestState(dateKey = getTodayQuestKey()) {
+  const seedBase = dateKey.split('-').reduce((sum, part) => sum + Number(part || 0), 0);
+  const quests = [];
+  for (let offset = 0; offset < 3; offset++) {
+    const template = DAILY_QUEST_TEMPLATES[(seedBase + offset * 2) % DAILY_QUEST_TEMPLATES.length];
+    if (quests.some((quest) => quest.id === template.id)) continue;
+    quests.push({
+      ...template,
+      progress: 0,
+      completed: false,
+      claimed: false,
+    });
+  }
+
+  while (quests.length < 3) {
+    const template = DAILY_QUEST_TEMPLATES[quests.length];
+    quests.push({
+      ...template,
+      progress: 0,
+      completed: false,
+      claimed: false,
+    });
+  }
+
+  return { dateKey, quests };
+}
+
+function normalizeDailyQuestState(rawState) {
+  const todayKey = getTodayQuestKey();
+  if (!rawState || rawState.dateKey !== todayKey || !Array.isArray(rawState.quests)) {
+    return createDailyQuestState(todayKey);
+  }
+
+  return {
+    dateKey: todayKey,
+    quests: rawState.quests
+      .map((quest) => {
+        const template = DAILY_QUEST_TEMPLATES.find((candidate) => candidate.id === quest.id);
+        if (!template) return null;
+        const progress = Math.max(0, Number(quest.progress || 0));
+        const completed = progress >= template.target || Boolean(quest.completed);
+        return {
+          ...template,
+          progress: Math.min(template.target, progress),
+          completed,
+          claimed: completed && Boolean(quest.claimed),
+        };
+      })
+      .filter(Boolean),
+  };
+}
+
+function readGuestProfile() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(GUEST_PROFILE_KEY) || '{}');
+    const ownedSkins = Array.isArray(raw.owned_skins)
+      ? raw.owned_skins.map(sanitizeSkinId)
+      : [...DEFAULT_UNLOCKED_SKIN_IDS];
+    const selectedSkinId = sanitizeSkinId(raw.selected_skin_id || localStorage.getItem('wand-ops-player-skin'));
+
+    return {
+      owned_skins: [...new Set([...DEFAULT_UNLOCKED_SKIN_IDS, ...ownedSkins])],
+      selected_skin_id: selectedSkinId,
+      daily_quests: normalizeDailyQuestState(raw.daily_quests),
+    };
+  } catch (error) {
+    return {
+      ...EMPTY_PLAYER_PROFILE,
+      owned_skins: [...DEFAULT_UNLOCKED_SKIN_IDS],
+      selected_skin_id: sanitizeSkinId(localStorage.getItem('wand-ops-player-skin')),
+      daily_quests: createDailyQuestState(),
+    };
+  }
+}
+
+function writeGuestProfile() {
+  localStorage.setItem(GUEST_PROFILE_KEY, JSON.stringify({
+    owned_skins: [...ownedSkinIds],
+    selected_skin_id: localSkinId,
+    daily_quests: dailyQuestState,
+  }));
 }
 
 function getPlayerLabel(actorNr, isLocal = false) {
@@ -149,6 +271,470 @@ function hasHumanOpponents() {
 function updateDisplayedPlayerCount() {
   const baseCount = network ? network.getPlayerCount() : 1;
   ui.setPlayerCount(baseCount + (trainingBot ? 1 : 0));
+}
+
+function readGuestCoins() {
+  const value = Number(localStorage.getItem('wand-ops-guest-coins') || localStorage.getItem('wand-ops-coins') || 0);
+  return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+}
+
+function writeGuestCoins(value) {
+  localStorage.setItem('wand-ops-guest-coins', String(value));
+}
+
+function ownsSkin(skinId) {
+  return ownedSkinIds.has(sanitizeSkinId(skinId));
+}
+
+function getCurrentUserId(session = authSession) {
+  return session?.user?.uid || null;
+}
+
+function updateCoinUi() {
+  const coinEl = document.getElementById('coin-count');
+  if (coinEl) coinEl.textContent = String(coinCount);
+}
+
+function updateShopSummary() {
+  const nameEl = document.getElementById('shop-selected-skin-name');
+  const copyEl = document.getElementById('shop-selected-skin-copy');
+  const buttonEl = document.getElementById('shop-selected-skin-btn');
+  const noteEl = document.getElementById('shop-signedin-note');
+  const skin = getSkinConfig(localSkinId);
+
+  if (nameEl) nameEl.textContent = skin.name;
+  if (copyEl) {
+    copyEl.textContent = ownsSkin(localSkinId)
+      ? `${skin.name} is ready for your next match.`
+      : `${skin.name} costs ${skin.price} coins.`;
+  }
+  if (buttonEl) {
+    buttonEl.textContent = ownsSkin(localSkinId) ? 'Equipped' : `Buy ${skin.price}`;
+    buttonEl.disabled = ownsSkin(localSkinId);
+  }
+  if (noteEl) {
+    noteEl.textContent = authSession?.user
+      ? 'Purchases and equipped skins are saved to Firebase.'
+      : 'Guest purchases stay on this browser. Sign in to save them to your account.';
+  }
+}
+
+function renderSkinShop() {
+  document.querySelectorAll('.lo-skin-btn').forEach((btn) => {
+    const skinId = sanitizeSkinId(btn.dataset.skin);
+    const skin = getSkinConfig(skinId);
+    const priceEl = btn.querySelector('.lo-skin-price');
+    const actionEl = btn.querySelector('.lo-skin-action');
+    const unlocked = ownsSkin(skinId);
+    const equipped = localSkinId === skinId;
+
+    btn.classList.toggle('active', equipped);
+    btn.classList.toggle('owned', unlocked);
+    btn.classList.toggle('locked', !unlocked);
+    if (priceEl) priceEl.textContent = skin.price > 0 ? `${skin.price} coins` : 'Free';
+    if (actionEl) {
+      actionEl.textContent = equipped ? 'Equipped' : unlocked ? 'Equip' : `Buy ${skin.price}`;
+    }
+  });
+
+  updateShopSummary();
+}
+
+function renderDailyQuests() {
+  const listEl = document.getElementById('daily-quest-list');
+  const resetEl = document.getElementById('daily-quest-reset');
+  if (!listEl) return;
+
+  if (resetEl) resetEl.textContent = `Quest board for ${dailyQuestState.dateKey}`;
+
+  listEl.innerHTML = dailyQuestState.quests.map((quest) => {
+    const progress = Math.min(quest.target, quest.progress);
+    const progressPct = Math.round((progress / quest.target) * 100);
+    const buttonLabel = quest.claimed ? 'Claimed' : quest.completed ? `Claim ${quest.reward}` : `${progress}/${quest.target}`;
+    const disabled = quest.claimed || !quest.completed ? 'disabled' : '';
+
+    return `
+      <div class="lo-quest-item">
+        <div>
+          <div class="lo-quest-title">${quest.label}</div>
+          <div class="lo-quest-meta">${progress}/${quest.target} complete · reward ${quest.reward} coins</div>
+          <div class="lo-quest-progress-track">
+            <div class="lo-quest-progress-fill" style="width:${progressPct}%"></div>
+          </div>
+        </div>
+        <button class="lo-quest-claim" type="button" data-quest-id="${quest.id}" ${disabled}>${buttonLabel}</button>
+      </div>
+    `;
+  }).join('');
+
+  listEl.querySelectorAll('.lo-quest-claim').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      claimDailyQuest(button.dataset.questId);
+    });
+  });
+}
+
+function awardCoins(amount) {
+  const earned = Math.max(0, Math.floor(amount));
+  coinCount = Math.max(0, coinCount + earned);
+  if (authSession?.user) queueLifetimeStats({ coins: earned });
+  else writeGuestCoins(coinCount);
+  updateCoinUi();
+}
+
+async function persistProfile() {
+  const profile = {
+    owned_skins: [...ownedSkinIds],
+    selected_skin_id: localSkinId,
+    daily_quests: dailyQuestState,
+  };
+  const userId = getCurrentUserId();
+
+  if (firebaseServices?.db && userId && !isGuestMode) {
+    try {
+      await savePlayerProfile(firebaseServices.db, userId, profile);
+    } catch (error) {
+      console.warn('Failed to persist player profile:', error);
+    }
+    return;
+  }
+
+  writeGuestProfile();
+}
+
+function progressDailyQuests(metric, amount = 1) {
+  let changed = false;
+  dailyQuestState = normalizeDailyQuestState(dailyQuestState);
+
+  dailyQuestState = {
+    ...dailyQuestState,
+    quests: dailyQuestState.quests.map((quest) => {
+      if (quest.metric !== metric || quest.claimed) return quest;
+      const nextProgress = Math.min(quest.target, quest.progress + amount);
+      if (nextProgress === quest.progress) return quest;
+      changed = true;
+      return {
+        ...quest,
+        progress: nextProgress,
+        completed: nextProgress >= quest.target,
+      };
+    }),
+  };
+
+  if (!changed) return;
+  renderDailyQuests();
+  persistProfile();
+}
+
+function claimDailyQuest(questId) {
+  let reward = 0;
+  let changed = false;
+  const nextState = normalizeDailyQuestState(dailyQuestState);
+
+  dailyQuestState = {
+    ...nextState,
+    quests: nextState.quests.map((quest) => {
+      if (quest.id !== questId || quest.claimed || !quest.completed) return quest;
+      reward = quest.reward;
+      changed = true;
+      return { ...quest, claimed: true };
+    }),
+  };
+
+  if (!changed) return;
+  awardCoins(reward);
+  renderDailyQuests();
+  persistProfile();
+}
+
+async function buySkin(skinId) {
+  const cleanSkin = sanitizeSkinId(skinId);
+  const skin = getSkinConfig(cleanSkin);
+  if (ownsSkin(cleanSkin) || skin.price <= 0) {
+    ownedSkinIds.add(cleanSkin);
+    setLocalSkin(cleanSkin);
+    renderSkinShop();
+    await persistProfile();
+    return;
+  }
+  if (coinCount < skin.price) return;
+
+  coinCount -= skin.price;
+  if (authSession?.user) queueLifetimeStats({ coins: -skin.price });
+  else writeGuestCoins(coinCount);
+
+  ownedSkinIds.add(cleanSkin);
+  setLocalSkin(cleanSkin);
+  updateCoinUi();
+  renderSkinShop();
+  await persistProfile();
+}
+
+function updateLifetimeStatsUi() {
+  const killsEl = document.getElementById('lifetime-kills');
+  const deathsEl = document.getElementById('lifetime-deaths');
+  const kdEl = document.getElementById('lifetime-kd');
+  const damageEl = document.getElementById('lifetime-damage');
+  const noteEl = document.getElementById('lifetime-stats-note');
+  const kdRatio = lifetimeStats.deaths > 0
+    ? (lifetimeStats.kills / lifetimeStats.deaths).toFixed(2)
+    : lifetimeStats.kills.toFixed(2);
+
+  if (killsEl) killsEl.textContent = String(lifetimeStats.kills);
+  if (deathsEl) deathsEl.textContent = String(lifetimeStats.deaths);
+  if (kdEl) kdEl.textContent = kdRatio;
+  if (damageEl) damageEl.textContent = String(Math.round(lifetimeStats.damage_dealt));
+  if (noteEl) {
+    noteEl.textContent = authSession?.user
+      ? 'Signed-in lifetime stats are saved to Firebase.'
+      : 'Sign in with Google to save lifetime stats.';
+  }
+}
+
+function mergeLifetimeStats(delta) {
+  Object.keys(EMPTY_LIFETIME_STATS).forEach((key) => {
+    lifetimeStats[key] += Number(delta[key] || 0);
+  });
+  updateLifetimeStatsUi();
+}
+
+function isZeroLifetimeDelta(delta) {
+  return Object.keys(EMPTY_LIFETIME_STATS).every((key) => !delta[key]);
+}
+
+async function flushLifetimeStats() {
+  const userId = getCurrentUserId();
+  if (lifetimeFlushPromise || !firebaseServices?.db || !userId) return;
+  if (isZeroLifetimeDelta(pendingLifetimeDelta)) return;
+
+  const delta = { ...pendingLifetimeDelta };
+  pendingLifetimeDelta = { ...EMPTY_LIFETIME_STATS };
+
+  lifetimeFlushPromise = incrementLifetimeStats(firebaseServices.db, userId, delta)
+    .then((row) => {
+      lifetimeStats = normalizeLifetimeStats(row);
+      coinCount = lifetimeStats.coins;
+      updateCoinUi();
+      updateLifetimeStatsUi();
+    })
+    .catch((error) => {
+      console.warn('Failed to persist lifetime stats:', error);
+      Object.keys(EMPTY_LIFETIME_STATS).forEach((key) => {
+        pendingLifetimeDelta[key] += Number(delta[key] || 0);
+      });
+    })
+    .finally(() => {
+      lifetimeFlushPromise = null;
+      if (!isZeroLifetimeDelta(pendingLifetimeDelta)) flushLifetimeStats();
+    });
+
+  await lifetimeFlushPromise;
+}
+
+function queueLifetimeStats(delta) {
+  if (isGuestMode || !authSession?.user) return;
+  mergeLifetimeStats(delta);
+
+  Object.keys(EMPTY_LIFETIME_STATS).forEach((key) => {
+    pendingLifetimeDelta[key] += Number(delta[key] || 0);
+  });
+  flushLifetimeStats();
+}
+
+async function loadLifetimeStats(session) {
+  authSession = session;
+  if (!firebaseServices?.db || !session?.user) {
+    lifetimeStats = { ...EMPTY_LIFETIME_STATS };
+    pendingLifetimeDelta = { ...EMPTY_LIFETIME_STATS };
+    coinCount = readGuestCoins();
+    const guestProfile = readGuestProfile();
+    ownedSkinIds = new Set(guestProfile.owned_skins);
+    dailyQuestState = guestProfile.daily_quests;
+    localSkinId = ownsSkin(guestProfile.selected_skin_id) ? guestProfile.selected_skin_id : DEFAULT_SKIN_ID;
+    updateCoinUi();
+    updateLifetimeStatsUi();
+    renderDailyQuests();
+    renderSkinShop();
+    return;
+  }
+
+  try {
+    const userId = getCurrentUserId(session);
+    const [stats, profile] = await Promise.all([
+      fetchLifetimeStats(firebaseServices.db, userId),
+      fetchPlayerProfile(firebaseServices.db, userId),
+    ]);
+    lifetimeStats = stats;
+    ownedSkinIds = new Set([...DEFAULT_UNLOCKED_SKIN_IDS, ...profile.owned_skins.map(sanitizeSkinId)]);
+    dailyQuestState = normalizeDailyQuestState(profile.daily_quests);
+    localSkinId = ownsSkin(profile.selected_skin_id) ? sanitizeSkinId(profile.selected_skin_id) : DEFAULT_SKIN_ID;
+    coinCount = lifetimeStats.coins;
+  } catch (error) {
+    console.warn('Failed to load lifetime stats:', error);
+    lifetimeStats = { ...EMPTY_LIFETIME_STATS };
+    coinCount = 0;
+    ownedSkinIds = new Set(DEFAULT_UNLOCKED_SKIN_IDS);
+    dailyQuestState = createDailyQuestState();
+    localSkinId = DEFAULT_SKIN_ID;
+  }
+  pendingLifetimeDelta = { ...EMPTY_LIFETIME_STATS };
+  updateCoinUi();
+  updateLifetimeStatsUi();
+  renderDailyQuests();
+  renderSkinShop();
+  if (localPlayer && firstPersonWand) {
+    setLocalSkin(localSkinId, false);
+  }
+}
+
+function setAuthStatus(message = '', type = '') {
+  const statusEl = document.getElementById('auth-status-text');
+  if (!statusEl) return;
+  statusEl.textContent = message;
+  statusEl.className = 'lo-auth-status';
+  if (type) statusEl.classList.add(type);
+}
+
+function toggleAuthModal(visible) {
+  const backdrop = document.getElementById('auth-modal-backdrop');
+  if (!backdrop) return;
+  backdrop.hidden = !visible;
+  if (!visible) setAuthStatus('');
+}
+
+function closeAuthModal() {
+  toggleAuthModal(false);
+}
+
+function setGuestMode(enabled) {
+  isGuestMode = enabled;
+  localStorage.setItem('wand-ops-guest-mode', enabled ? 'true' : 'false');
+  if (enabled) {
+    pendingLifetimeDelta = { ...EMPTY_LIFETIME_STATS };
+    lifetimeStats = { ...EMPTY_LIFETIME_STATS };
+  }
+  updateLifetimeStatsUi();
+}
+
+function updateAuthUi(session) {
+  const signInBtn = document.getElementById('auth-signin-btn');
+  const signOutBtn = document.getElementById('auth-signout-btn');
+  const userBadge = document.getElementById('auth-user-badge');
+  const email = session?.user?.email || '';
+  const showGuest = !session && isGuestMode;
+
+  if (signInBtn) signInBtn.hidden = Boolean(session);
+  if (signOutBtn) signOutBtn.hidden = !session;
+  if (userBadge) {
+    userBadge.hidden = !session && !showGuest;
+    userBadge.textContent = session ? (email || 'Signed In') : 'Guest';
+  }
+}
+
+async function setupFirebaseAuth() {
+  const signInBtn = document.getElementById('auth-signin-btn');
+  const signOutBtn = document.getElementById('auth-signout-btn');
+  const closeBtn = document.getElementById('auth-close-btn');
+  const backdrop = document.getElementById('auth-modal-backdrop');
+  const googleBtn = document.getElementById('auth-google-btn');
+  const guestBtn = document.getElementById('auth-guest-btn');
+
+  // Startup should always land on the main menu. Auth stays opt-in.
+  toggleAuthModal(false);
+
+  try {
+    firebaseServices = createFirebaseServices();
+  } catch (error) {
+    firebaseServices = null;
+    if (signInBtn) signInBtn.title = 'Firebase environment variables are missing';
+  }
+
+  signInBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleAuthModal(true);
+  });
+
+  signOutBtn?.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    await flushLifetimeStats();
+    if (!firebaseServices) return;
+    try {
+      await signOut(firebaseServices.auth);
+    } catch (error) {
+      setAuthStatus(error.message, 'error');
+      toggleAuthModal(true);
+    }
+  });
+
+  closeBtn?.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    closeAuthModal();
+  });
+  backdrop?.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    closeAuthModal();
+  });
+  googleBtn?.addEventListener('click', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!firebaseServices) {
+      setAuthStatus('Firebase auth is not configured in this environment.', 'error');
+      return;
+    }
+
+    googleBtn.disabled = true;
+    setAuthStatus('Opening Google sign-in...');
+
+    try {
+      const result = await signInWithPopup(firebaseServices.auth, firebaseServices.googleProvider);
+      const session = result?.user ? { user: result.user } : null;
+      if (session) {
+        setGuestMode(false);
+        updateAuthUi(session);
+        closeAuthModal();
+        await loadLifetimeStats(session);
+      } else {
+        closeAuthModal();
+      }
+      setAuthStatus('');
+    } catch (error) {
+      setAuthStatus(error.message || 'Google sign-in failed.', 'error');
+    } finally {
+      googleBtn.disabled = false;
+    }
+  });
+
+  guestBtn?.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setGuestMode(true);
+    updateAuthUi(null);
+    closeAuthModal();
+  });
+
+  if (!firebaseServices) {
+    updateAuthUi(null);
+    updateLifetimeStatsUi();
+    return;
+  }
+
+  const initialUser = firebaseServices.auth.currentUser;
+  const initialSession = initialUser ? { user: initialUser } : null;
+  if (initialSession) setGuestMode(false);
+  updateAuthUi(initialSession);
+  await loadLifetimeStats(initialSession);
+
+  onAuthStateChanged(firebaseServices.auth, async (user) => {
+    const session = user ? { user } : null;
+    googleBtn.disabled = false;
+    if (session) setGuestMode(false);
+    updateAuthUi(session);
+    await loadLifetimeStats(session);
+    if (session) closeAuthModal();
+  });
 }
 
 function updateWeaponStats(spell) {
@@ -199,13 +785,16 @@ function applyHomepageSkinPreview(skinId) {
 }
 
 function setLocalSkin(skinId, shouldBroadcast = true) {
-  localSkinId = sanitizeSkinId(skinId);
+  const cleanSkin = sanitizeSkinId(skinId);
+  if (!ownsSkin(cleanSkin)) return;
+  localSkinId = cleanSkin;
   localPlayer.setSkin(localSkinId);
   applyFirstPersonWandSkin(firstPersonWand, localSkinId);
   playerSkins.set(localActorId, localSkinId);
   localStorage.setItem('wand-ops-player-skin', localSkinId);
   applyHomepageSkinPreview(localSkinId);
   syncSkinPicker(localSkinId);
+  updateShopSummary();
   if (shouldBroadcast && localActorId >= 0) {
     network.sendPlayerSkin(localActorId, localSkinId);
   }
@@ -265,6 +854,10 @@ function getSimulatedOwners() {
 function handleDefeat(killerId, victimId, killerLabel, victimLabel) {
   ensureScoreEntry(killerId).kills++;
   ensureScoreEntry(victimId).deaths++;
+  if (killerId === localActorId) queueLifetimeStats({ kills: 1 });
+  if (killerId === localActorId) awardCoins(1);
+  if (killerId === localActorId) progressDailyQuests('kills', 1);
+  if (victimId === localActorId) queueLifetimeStats({ deaths: 1 });
   refreshScoreboard();
   updateLocalKDA();
   if (killerId === localActorId) {
@@ -278,6 +871,7 @@ function handleRemoteHitDefeat(actorNr) {
   localPlayer.respawn();
   network.sendRespawn();
   ui.setHealth(localPlayer.health);
+  queueLifetimeStats({ deaths: 1 });
   ui.addKillEntry(`${getPlayerLabel(actorNr)} defeated you!`);
 }
 
@@ -293,9 +887,15 @@ function init() {
   camera.updateProjectionMatrix();
 
   const storedName = localStorage.getItem('wand-ops-player-name');
-  const storedSkin = localStorage.getItem('wand-ops-player-skin');
+  isGuestMode = localStorage.getItem('wand-ops-guest-mode') === 'true';
+  const guestProfile = readGuestProfile();
   localPlayerName = sanitizePlayerName(storedName);
-  localSkinId = sanitizeSkinId(storedSkin);
+  ownedSkinIds = new Set(guestProfile.owned_skins);
+  dailyQuestState = guestProfile.daily_quests;
+  localSkinId = ownsSkin(guestProfile.selected_skin_id)
+    ? guestProfile.selected_skin_id
+    : DEFAULT_SKIN_ID;
+  coinCount = readGuestCoins();
   playerNameInput.value = localPlayerName;
   const loPlayerNameEl = document.getElementById('lo-player-name');
   if (loPlayerNameEl) loPlayerNameEl.textContent = localPlayerName.toUpperCase();
@@ -303,11 +903,18 @@ function init() {
   controls = new Controls();
   ui = new UIManager();
   fireballs = new FireballManager(scene);
+  toggleAuthModal(false);
+  setupFirebaseAuth();
+  updateLifetimeStatsUi();
+  updateCoinUi();
+  renderDailyQuests();
+  renderSkinShop();
 
   if (heroPreviewCanvas) {
     previewScene = new THREE.Scene();
     previewCamera = new THREE.PerspectiveCamera(28, 200 / 260, 0.1, 100);
-    previewCamera.position.set(0, 1.25, 5.2);
+    previewCamera.position.set(0, 0.95, 4.2);
+    previewCamera.lookAt(0, 0.75, 0);
 
     previewRenderer = new THREE.WebGLRenderer({
       canvas: heroPreviewCanvas,
@@ -317,22 +924,35 @@ function init() {
     previewRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     previewRenderer.setClearColor(0x000000, 0);
 
-    const keyLight = new THREE.DirectionalLight(0xf8eaff, 2.2);
-    keyLight.position.set(2.4, 3.2, 4.6);
+    const keyLight = new THREE.DirectionalLight(0xf8eaff, 2.9);
+    keyLight.position.set(2.8, 3.4, 4.4);
     previewScene.add(keyLight);
 
-    const rimLight = new THREE.DirectionalLight(0x74b9ff, 1.15);
-    rimLight.position.set(-2.8, 1.6, -3.6);
+    const rimLight = new THREE.DirectionalLight(0x74b9ff, 1.4);
+    rimLight.position.set(-2.4, 2.2, -3.2);
     previewScene.add(rimLight);
 
-    const fillLight = new THREE.AmbientLight(0xffffff, 1.25);
+    const fillLight = new THREE.AmbientLight(0xffffff, 1.65);
     previewScene.add(fillLight);
+
+    const floorGlow = new THREE.Mesh(
+      new THREE.CircleGeometry(1.35, 32),
+      new THREE.MeshBasicMaterial({
+        color: 0x6f5cff,
+        transparent: true,
+        opacity: 0.16,
+      }),
+    );
+    floorGlow.rotation.x = -Math.PI / 2;
+    floorGlow.position.set(0, -0.98, 0);
+    previewScene.add(floorGlow);
 
     previewModel = createWizardModel(getSkinConfig(localSkinId).body, {
       includeNameTag: false,
     });
-    previewModel.position.set(0, -0.75, 0);
-    previewModel.rotation.y = -0.45;
+    previewModel.scale.setScalar(1.18);
+    previewModel.position.set(0, -0.18, 0);
+    previewModel.rotation.y = -0.58;
     previewScene.add(previewModel);
     updateHeroPreviewSize();
   }
@@ -345,7 +965,7 @@ function init() {
   camera.add(firstPersonWand);
   applyFirstPersonWandSkin(firstPersonWand, localSkinId);
   applyHomepageSkinPreview(localSkinId);
-  syncSkinPicker(localSkinId);
+  renderSkinShop();
 
   playerNameInput.addEventListener('click', (e) => e.stopPropagation());
   playerNameInput.addEventListener('keydown', (e) => e.stopPropagation());
@@ -363,10 +983,22 @@ function init() {
   });
 
   skinButtons.forEach((btn) => {
-    btn.addEventListener('click', (e) => {
+    btn.addEventListener('click', async (e) => {
       e.stopPropagation();
-      setLocalSkin(btn.dataset.skin);
+      const skinId = btn.dataset.skin;
+      if (ownsSkin(skinId)) {
+        setLocalSkin(skinId);
+        renderSkinShop();
+        await persistProfile();
+        return;
+      }
+      await buySkin(skinId);
     });
+  });
+
+  document.getElementById('shop-selected-skin-btn')?.addEventListener('click', async (event) => {
+    event.stopPropagation();
+    await buySkin(localSkinId);
   });
 
   document.querySelectorAll('.spell-btn').forEach((btn) => {
@@ -500,6 +1132,7 @@ function init() {
       if (data.targetId === localActorId) {
         const dead = localPlayer.takeDamage(data.damage);
         ui.addDamageNumber(data.damage, 'taken');
+        queueLifetimeStats({ damage_taken: data.damage });
         localPlayer.applySpellEffect(data.sp || 'fire');
 
         if (data.sp === 'air' && data.kx !== undefined) {
@@ -571,9 +1204,19 @@ function getGroundY(x, z) {
   return y;
 }
 
+let _fpsFrames = 0, _fpsAccum = 0;
+
 function loop() {
   requestAnimationFrame(loop);
   const delta = Math.min(clock.getDelta(), 0.05);
+  _fpsFrames++;
+  _fpsAccum += delta;
+  if (_fpsAccum >= 0.5) {
+    const fpsEl = document.getElementById('fps-counter');
+    if (fpsEl) fpsEl.textContent = `${Math.round(_fpsFrames / _fpsAccum)} FPS`;
+    _fpsFrames = 0;
+    _fpsAccum = 0;
+  }
   update(delta);
   updateCamera();
   renderer.render(scene, camera);
@@ -659,6 +1302,7 @@ function update(delta) {
     const dead = localPlayer.takeDamage(localPlayer.burnDps * delta);
     ui.setHealth(localPlayer.health);
     if (dead) {
+      queueLifetimeStats({ deaths: 1 });
       localPlayer.respawn();
       ui.setHealth(localPlayer.health);
     }
@@ -695,10 +1339,15 @@ function update(delta) {
 
       const dead = target.takeDamage(damage);
       ui.addDamageNumber(damage, 'dealt');
+      queueLifetimeStats({ damage_dealt: damage });
+      progressDailyQuests('damage_dealt', damage);
       if (!dead) return;
 
       target.respawn();
       if (targetId !== BOT_ID) {
+        awardCoins(1);
+        queueLifetimeStats({ kills: 1 });
+        progressDailyQuests('kills', 1);
         network.sendKill(localActorId, targetId);
         const mine = scores.get(localActorId);
         network.sendScoreUpdate(localActorId, mine.kills + 1, mine.deaths);
@@ -711,6 +1360,7 @@ function update(delta) {
     if (ownerId === BOT_ID && targetId === localActorId) {
       const dead = localPlayer.takeDamage(damage);
       ui.addDamageNumber(damage, 'taken');
+      queueLifetimeStats({ damage_taken: damage });
       localPlayer.applySpellEffect(spell);
       ui.setHealth(localPlayer.health);
       if (!dead) return;
@@ -742,6 +1392,8 @@ function castFireball() {
 
   fireballs.spawn(spawnPos, _forward.clone(), localActorId, selectedSpell);
   network.sendFireball(spawnPos, _forward, selectedSpell);
+  queueLifetimeStats({ spells_cast: 1 });
+  progressDailyQuests('spells_cast', 1);
 }
 
 function updateCamera() {
@@ -793,7 +1445,7 @@ function updateHeroPreviewSize() {
 function renderHeroPreview(delta) {
   if (!previewRenderer || !previewScene || !previewCamera || !previewModel) return;
   previewModel.rotation.y += delta * 0.55;
-  previewModel.position.y = -0.75 + Math.sin(clock.elapsedTime * 1.8) * 0.05;
+  previewModel.position.y = -0.18 + Math.sin(clock.elapsedTime * 1.8) * 0.035;
   previewRenderer.render(previewScene, previewCamera);
 }
 
