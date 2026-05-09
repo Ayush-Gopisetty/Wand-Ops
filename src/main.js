@@ -1350,7 +1350,7 @@ function update(delta) {
         progressDailyQuests('kills', 1);
         network.sendKill(localActorId, targetId);
         const mine = scores.get(localActorId);
-        network.sendScoreUpdate(localActorId, mine.kills + 1, mine.deaths);
+        if (mine) network.sendScoreUpdate(localActorId, mine.kills + 1, mine.deaths);
       } else {
         handleDefeat(localActorId, targetId, 'You', 'Training Bot');
       }
