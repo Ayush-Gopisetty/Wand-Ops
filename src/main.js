@@ -600,7 +600,7 @@ function setAuthStatus(message = '', type = '') {
 function toggleAuthModal(visible) {
   const backdrop = document.getElementById('auth-modal-backdrop');
   if (!backdrop) return;
-  backdrop.hidden = !visible;
+  backdrop.style.display = visible ? 'flex' : 'none';
   if (!visible) setAuthStatus('');
 }
 
