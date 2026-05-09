@@ -293,7 +293,6 @@ export class Player {
     if (this.hitFlashTimer > 0) {
       this.hitFlashTimer -= delta;
       this._bodyMat.color.setHex(this.hitFlashTimer > 0 ? 0xff2222 : this._bodyColor);
-      if (this.hitFlashTimer <= 0) this._bodyMat.color.setHex(this._bodyColor);
     }
   }
 
@@ -304,7 +303,7 @@ export class Player {
     } else if (spell === 'ice') {
       this.slowTimer = 3;
     } else if (spell === 'lightning') {
-      this.silenceTimer = 1;
+      this.silenceTimer = 2;
     } else if (spell === 'earth') {
       this.groundedTimer = 3;
     }
