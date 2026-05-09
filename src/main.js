@@ -15,7 +15,12 @@ import { FireballManager } from './fireball.js';
 import { NetworkManager } from './network.js';
 import { UIManager } from './ui.js';
 import { SimpleBotController } from './bot.js';
-import { createSupabaseClient } from './lib/supabase.js';
+import {
+  onAuthStateChanged,
+  signInWithPopup,
+  signOut,
+} from 'firebase/auth';
+import { createFirebaseServices } from './lib/firebase.js';
 import {
   EMPTY_LIFETIME_STATS,
   fetchLifetimeStats,
@@ -83,7 +88,7 @@ let previewScene, previewCamera, previewRenderer, previewModel;
 const remotePlayers = new Map();
 let trainingBot = null;
 let trainingBotAI = null;
-let supabase = null;
+let firebaseServices = null;
 
 let controls, fireballs, network, ui, colliders;
 const scores = new Map();
@@ -176,7 +181,7 @@ function updateLifetimeStatsUi() {
   if (damageEl) damageEl.textContent = String(Math.round(lifetimeStats.damage_dealt));
   if (noteEl) {
     noteEl.textContent = authSession?.user
-      ? 'Signed-in lifetime stats are saved to Supabase.'
+      ? 'Signed-in lifetime stats are saved to Firebase.'
       : 'Sign in with Google to save lifetime stats.';
   }
 }
@@ -193,13 +198,13 @@ function isZeroLifetimeDelta(delta) {
 }
 
 async function flushLifetimeStats() {
-  if (lifetimeFlushPromise || !supabase || !authSession?.user) return;
+  if (lifetimeFlushPromise || !firebaseServices?.db || !authSession?.user) return;
   if (isZeroLifetimeDelta(pendingLifetimeDelta)) return;
 
   const delta = { ...pendingLifetimeDelta };
   pendingLifetimeDelta = { ...EMPTY_LIFETIME_STATS };
 
-  lifetimeFlushPromise = incrementLifetimeStats(supabase, delta)
+  lifetimeFlushPromise = incrementLifetimeStats(firebaseServices.db, authSession.user.id, delta)
     .then((row) => {
       lifetimeStats = normalizeLifetimeStats(row);
       updateLifetimeStatsUi();
@@ -230,7 +235,7 @@ function queueLifetimeStats(delta) {
 
 async function loadLifetimeStats(session) {
   authSession = session;
-  if (!supabase || !session?.user) {
+  if (!firebaseServices?.db || !session?.user) {
     lifetimeStats = { ...EMPTY_LIFETIME_STATS };
     pendingLifetimeDelta = { ...EMPTY_LIFETIME_STATS };
     updateLifetimeStatsUi();
@@ -238,7 +243,7 @@ async function loadLifetimeStats(session) {
   }
 
   try {
-    lifetimeStats = await fetchLifetimeStats(supabase, session.user.id);
+    lifetimeStats = await fetchLifetimeStats(firebaseServices.db, session.user.id);
   } catch (error) {
     console.warn('Failed to load lifetime stats:', error);
     lifetimeStats = { ...EMPTY_LIFETIME_STATS };
@@ -287,7 +292,7 @@ function updateAuthUi(session) {
   }
 }
 
-async function setupSupabaseAuth() {
+async function setupFirebaseAuth() {
   const signInBtn = document.getElementById('auth-signin-btn');
   const signOutBtn = document.getElementById('auth-signout-btn');
   const closeBtn = document.getElementById('auth-close-btn');
@@ -295,11 +300,14 @@ async function setupSupabaseAuth() {
   const googleBtn = document.getElementById('auth-google-btn');
   const guestBtn = document.getElementById('auth-guest-btn');
 
+  // Startup should always land on the main menu. Auth stays opt-in.
+  toggleAuthModal(false);
+
   try {
-    supabase = createSupabaseClient();
+    firebaseServices = createFirebaseServices();
   } catch (error) {
-    supabase = null;
-    if (signInBtn) signInBtn.title = 'Supabase environment variables are missing';
+    firebaseServices = null;
+    if (signInBtn) signInBtn.title = 'Firebase environment variables are missing';
   }
 
   signInBtn?.addEventListener('click', (e) => {
@@ -310,8 +318,10 @@ async function setupSupabaseAuth() {
   signOutBtn?.addEventListener('click', async (e) => {
     e.stopPropagation();
     await flushLifetimeStats();
-    const { error } = await supabase.auth.signOut();
-    if (error) {
+    if (!firebaseServices) return;
+    try {
+      await signOut(firebaseServices.auth);
+    } catch (error) {
       setAuthStatus(error.message, 'error');
       toggleAuthModal(true);
     }
@@ -320,21 +330,17 @@ async function setupSupabaseAuth() {
   closeBtn?.addEventListener('click', () => toggleAuthModal(false));
   backdrop?.addEventListener('click', () => toggleAuthModal(false));
   googleBtn?.addEventListener('click', async () => {
-    if (!supabase) {
-      setAuthStatus('Supabase auth is not configured in this environment.', 'error');
+    if (!firebaseServices) {
+      setAuthStatus('Firebase auth is not configured in this environment.', 'error');
       return;
     }
+
     googleBtn.disabled = true;
-    setAuthStatus('Redirecting to Google…');
+    setAuthStatus('Opening Google sign-in...');
 
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: window.location.origin,
-        },
-      });
-      if (error) throw error;
+      await signInWithPopup(firebaseServices.auth, firebaseServices.googleProvider);
+      setAuthStatus('');
     } catch (error) {
       setAuthStatus(error.message || 'Google sign-in failed.', 'error');
       googleBtn.disabled = false;
@@ -347,21 +353,21 @@ async function setupSupabaseAuth() {
     toggleAuthModal(false);
   });
 
-  if (!supabase) {
+  if (!firebaseServices) {
+    updateAuthUi(null);
     updateLifetimeStatsUi();
     return;
   }
 
-  const { data, error } = await supabase.auth.getSession();
-  if (!error) {
-    if (data.session) setGuestMode(false);
-    updateAuthUi(data.session);
-    await loadLifetimeStats(data.session);
-  } else {
-    updateLifetimeStatsUi();
-  }
+  const initialUser = firebaseServices.auth.currentUser;
+  const initialSession = initialUser ? { user: initialUser } : null;
+  if (initialSession) setGuestMode(false);
+  updateAuthUi(initialSession);
+  await loadLifetimeStats(initialSession);
 
-  supabase.auth.onAuthStateChange(async (_event, session) => {
+  onAuthStateChanged(firebaseServices.auth, async (user) => {
+    const session = user ? { user } : null;
+    googleBtn.disabled = false;
     if (session) setGuestMode(false);
     updateAuthUi(session);
     await loadLifetimeStats(session);
@@ -525,7 +531,8 @@ function init() {
   controls = new Controls();
   ui = new UIManager();
   fireballs = new FireballManager(scene);
-  setupSupabaseAuth();
+  toggleAuthModal(false);
+  setupFirebaseAuth();
   updateLifetimeStatsUi();
 
   if (heroPreviewCanvas) {

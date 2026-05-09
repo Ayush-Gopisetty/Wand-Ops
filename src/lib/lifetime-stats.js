@@ -1,3 +1,11 @@
+import {
+  doc,
+  getDoc,
+  increment,
+  serverTimestamp,
+  setDoc,
+} from 'firebase/firestore';
+
 export const EMPTY_LIFETIME_STATS = {
   kills: 0,
   deaths: 0,
@@ -18,30 +26,24 @@ export function normalizeLifetimeStats(row) {
   };
 }
 
-export async function fetchLifetimeStats(client, userId) {
-  const { data, error } = await client
-    .from('player_lifetime_stats')
-    .select('kills, deaths, assists, damage_dealt, damage_taken, spells_cast')
-    .eq('user_id', userId)
-    .maybeSingle();
-
-  if (error) throw error;
-  return normalizeLifetimeStats(data);
+export async function fetchLifetimeStats(db, userId) {
+  const snapshot = await getDoc(doc(db, 'player_lifetime_stats', userId));
+  return snapshot.exists() ? normalizeLifetimeStats(snapshot.data()) : { ...EMPTY_LIFETIME_STATS };
 }
 
-export async function incrementLifetimeStats(client, delta) {
-  const payload = {
-    p_kills: delta.kills || 0,
-    p_deaths: delta.deaths || 0,
-    p_assists: delta.assists || 0,
-    p_damage_dealt: delta.damage_dealt || 0,
-    p_damage_taken: delta.damage_taken || 0,
-    p_spells_cast: delta.spells_cast || 0,
-  };
+export async function incrementLifetimeStats(db, userId, delta) {
+  const ref = doc(db, 'player_lifetime_stats', userId);
 
-  const { data, error } = await client.rpc('increment_player_lifetime_stats', payload);
-  if (error) throw error;
+  await setDoc(ref, {
+    kills: increment(delta.kills || 0),
+    deaths: increment(delta.deaths || 0),
+    assists: increment(delta.assists || 0),
+    damage_dealt: increment(delta.damage_dealt || 0),
+    damage_taken: increment(delta.damage_taken || 0),
+    spells_cast: increment(delta.spells_cast || 0),
+    updated_at: serverTimestamp(),
+  }, { merge: true });
 
-  if (Array.isArray(data)) return normalizeLifetimeStats(data[0]);
-  return normalizeLifetimeStats(data);
+  const snapshot = await getDoc(ref);
+  return snapshot.exists() ? normalizeLifetimeStats(snapshot.data()) : { ...EMPTY_LIFETIME_STATS };
 }
