@@ -30,6 +30,7 @@
 
     <div id="kill-feed"></div>
     <div id="damage-numbers"></div>
+    <div id="fps-counter"></div>
   </div>
 
   <div id="scoreboard">
@@ -53,14 +54,16 @@
   <div id="overlay">
     <nav class="lo-nav" onclick="event.stopPropagation()">
       <div class="lo-nav-actions">
+        <span class="lo-auth-user" id="auth-user-badge" hidden></span>
         <div class="lo-currency">
-          <span class="lo-coin">$</span><span>5990</span>
+          <span class="lo-coin">$</span><span id="coin-count">0</span>
         </div>
         <button class="lo-icon-btn" title="Shop">🛒</button>
         <button class="lo-icon-btn" title="Help">❓</button>
         <button class="lo-icon-btn" title="Settings">⚙️</button>
         <button class="lo-icon-btn" title="Chat">💬</button>
-        <button class="lo-signout-btn">Sign Out</button>
+        <button class="lo-auth-btn" id="auth-signin-btn" type="button">Sign In</button>
+        <button class="lo-signout-btn" id="auth-signout-btn" type="button" hidden>Sign Out</button>
       </div>
     </nav>
 
@@ -101,49 +104,125 @@
             </button>
           </div>
         </div>
+
+        <div class="lo-card lo-weapon-stats" onclick="event.stopPropagation()">
+          <div class="lo-card-head"><span>+</span> WEAPON STATS</div>
+          <div class="lo-weapon-name" id="weapon-stats-name">Fire Wand</div>
+          <div class="lo-stat-bars" id="weapon-stat-bars">
+            <div class="lo-stat-bar-row">
+              <div class="lo-stat-bar-label">Damage</div>
+              <div class="lo-stat-bar-track"><div class="lo-stat-bar-fill" id="stat-damage"></div></div>
+            </div>
+            <div class="lo-stat-bar-row">
+              <div class="lo-stat-bar-label">Projectile Speed</div>
+              <div class="lo-stat-bar-track"><div class="lo-stat-bar-fill" id="stat-speed"></div></div>
+            </div>
+            <div class="lo-stat-bar-row">
+              <div class="lo-stat-bar-label">Control</div>
+              <div class="lo-stat-bar-track"><div class="lo-stat-bar-fill" id="stat-control"></div></div>
+            </div>
+            <div class="lo-stat-bar-row">
+              <div class="lo-stat-bar-label">Impact</div>
+              <div class="lo-stat-bar-track"><div class="lo-stat-bar-fill" id="stat-impact"></div></div>
+            </div>
+          </div>
+        </div>
       </aside>
 
       <section class="lo-center">
+        <h1 class="lo-page-title">Wand Ops</h1>
+
         <div class="lo-avatar-wrap">
           <div class="lo-avatar-oval">
-            <svg viewBox="0 0 80 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="40" cy="34" r="17" fill="rgba(216,185,255,0.3)"/>
-              <path d="M10 94 C10 64 70 64 70 94" fill="rgba(216,185,255,0.3)"/>
-            </svg>
+            <canvas id="hero-preview-canvas" aria-label="Wizard preview"></canvas>
           </div>
           <div class="lo-status-dot"></div>
         </div>
 
         <h1 class="lo-player-name" id="lo-player-name">ARCHMAGE HEX</h1>
 
-        <div class="lo-level-row">
-          <span class="lo-chip lo-chip-level">LVL 88</span>
-          <span class="lo-chip lo-chip-rank">GRAND MASTER</span>
-        </div>
-
         <div class="lo-name-field" onclick="event.stopPropagation()">
           <span class="lo-name-field-label">Wizard Name</span>
           <input id="player-name-input" type="text" maxlength="18" placeholder="ArcaneAce" autocomplete="off" />
+        </div>
+
+        <div class="lo-skin-picker" onclick="event.stopPropagation()">
+          <span class="lo-name-field-label">Skin Select</span>
+          <div class="lo-skin-grid" id="skin-picker">
+            <button class="lo-skin-btn active" data-skin="amethyst" title="Amethyst">
+              <span class="lo-skin-swatch" style="--skin:#9b59b6; --glow:#ff7a18;"></span>
+              <span class="lo-skin-name">Amethyst</span>
+              <span class="lo-skin-price">Free</span>
+              <span class="lo-skin-action">Equipped</span>
+            </button>
+            <button class="lo-skin-btn" data-skin="ember" title="Ember">
+              <span class="lo-skin-swatch" style="--skin:#d35400; --glow:#ff6a00;"></span>
+              <span class="lo-skin-name">Ember</span>
+              <span class="lo-skin-price">12 coins</span>
+              <span class="lo-skin-action">Buy</span>
+            </button>
+            <button class="lo-skin-btn" data-skin="tide" title="Tide">
+              <span class="lo-skin-swatch" style="--skin:#2980b9; --glow:#2e8bc0;"></span>
+              <span class="lo-skin-name">Tide</span>
+              <span class="lo-skin-price">16 coins</span>
+              <span class="lo-skin-action">Buy</span>
+            </button>
+            <button class="lo-skin-btn" data-skin="verdant" title="Verdant">
+              <span class="lo-skin-swatch" style="--skin:#27ae60; --glow:#4ecb71;"></span>
+              <span class="lo-skin-name">Verdant</span>
+              <span class="lo-skin-price">20 coins</span>
+              <span class="lo-skin-action">Buy</span>
+            </button>
+            <button class="lo-skin-btn" data-skin="storm" title="Storm">
+              <span class="lo-skin-swatch" style="--skin:#5d6d7e; --glow:#7d8cff;"></span>
+              <span class="lo-skin-name">Storm</span>
+              <span class="lo-skin-price">24 coins</span>
+              <span class="lo-skin-action">Buy</span>
+            </button>
+          </div>
         </div>
 
         <p id="overlay-hint" class="lo-hint">WASD · Mouse · LMB cast · Space jump</p>
       </section>
 
       <aside class="lo-right">
+        <div class="lo-card" id="daily-quests-card">
+          <div class="lo-card-head"><span>Daily</span> DAILY QUESTS</div>
+          <div class="lo-quest-note" id="daily-quest-reset">Refreshes daily.</div>
+          <div class="lo-quest-list" id="daily-quest-list"></div>
+        </div>
+
+        <div class="lo-card" id="shop-card">
+          <div class="lo-card-head"><span>Shop</span> ARCANE SHOP</div>
+          <div class="lo-shop-summary">
+            <div>
+              <div class="lo-shop-title" id="shop-selected-skin-name">Amethyst</div>
+              <div class="lo-shop-copy" id="shop-selected-skin-copy">Default skin equipped.</div>
+            </div>
+            <button class="lo-shop-cta" id="shop-selected-skin-btn" type="button">Equipped</button>
+          </div>
+          <div class="lo-shop-note" id="shop-signedin-note">Sign in to save purchased skins to your account.</div>
+        </div>
+
         <div class="lo-card">
-          <div class="lo-card-head"><span>📊</span> SEASON STATS</div>
+          <div class="lo-card-head"><span>📊</span> LIFETIME STATS</div>
           <div class="lo-stat-row">
-            <span class="lo-stat-label">WIN RATE</span>
-            <span class="lo-stat-value lo-accent">68%</span>
+            <span class="lo-stat-label">KILLS</span>
+            <span class="lo-stat-value lo-accent" id="lifetime-kills">0</span>
+          </div>
+          <div class="lo-stat-row">
+            <span class="lo-stat-label">DEATHS</span>
+            <span class="lo-stat-value" id="lifetime-deaths">0</span>
           </div>
           <div class="lo-stat-row">
             <span class="lo-stat-label">K/D RATIO</span>
-            <span class="lo-stat-value lo-accent">2.45</span>
+            <span class="lo-stat-value" id="lifetime-kd">0.00</span>
           </div>
           <div class="lo-stat-row">
-            <span class="lo-stat-label">WANDS MASTERY</span>
-            <span class="lo-stat-value">Level 42</span>
+            <span class="lo-stat-label">DAMAGE DEALT</span>
+            <span class="lo-stat-value" id="lifetime-damage">0</span>
           </div>
+          <div class="lo-stat-note" id="lifetime-stats-note">Sign in with Google to save lifetime stats.</div>
         </div>
 
         <div class="lo-card lo-news-card" onclick="event.stopPropagation()">
@@ -180,6 +259,33 @@
         <span class="lo-footer-copy">© 2024 Blue Wizard Digital</span>
       </div>
     </footer>
+
+    <div class="lo-auth-modal-backdrop" id="auth-modal-backdrop" hidden>
+      <div class="lo-auth-modal" onclick="event.stopPropagation()">
+        <div class="lo-auth-modal-head">
+          <div>
+            <div class="lo-auth-kicker">Firebase Auth</div>
+            <h2 class="lo-auth-title">Sign In With Google</h2>
+          </div>
+          <button class="lo-auth-close" id="auth-close-btn" type="button" aria-label="Close auth dialog">×</button>
+        </div>
+
+        <div class="lo-auth-copy">
+          Use your Google account to sign into Wand Ops. Email/password auth is disabled for this build.
+        </div>
+
+        <div class="lo-auth-form">
+          <button class="lo-auth-submit lo-auth-google-btn" id="auth-google-btn" type="button">
+            <span class="lo-auth-google-mark">G</span>
+            <span>Continue With Google</span>
+          </button>
+          <button class="lo-auth-submit lo-auth-guest-btn" id="auth-guest-btn" type="button">
+            Continue As Guest
+          </button>
+          <p class="lo-auth-status" id="auth-status-text"></p>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script type="module" src="/src/main.js"></script>
