@@ -68,6 +68,103 @@ body {
 #crosshair::before { width: 18px; height: 2px; top: 8px; left: 0; }
 #crosshair::after  { width: 2px; height: 18px; top: 0; left: 8px; }
 
+#minimap-wrap {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  width: 196px;
+  padding: 10px 10px 12px;
+  border-radius: 18px;
+  background: rgba(7, 12, 20, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(10px);
+}
+
+#minimap-title {
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-family: var(--font-label);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(235, 244, 255, 0.78);
+}
+
+#minimap {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(142, 201, 255, 0.16), rgba(18, 28, 38, 0.1)),
+    rgba(12, 19, 28, 0.88);
+}
+
+#scope-overlay {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+#scope-overlay::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at center,
+      transparent 0 17.5vmin,
+      rgba(0, 0, 0, 0.12) 17.7vmin,
+      rgba(0, 0, 0, 0.86) 18.8vmin,
+      rgba(0, 0, 0, 0.96) 100%);
+}
+
+.scope-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 36.5vmin;
+  height: 36.5vmin;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 0.32vmin solid rgba(24, 28, 36, 0.95);
+  box-shadow:
+    0 0 0 0.18vmin rgba(255, 255, 255, 0.12),
+    0 0 2.8vmin rgba(0, 0, 0, 0.55);
+}
+
+.scope-crosshair {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  background: rgba(18, 22, 28, 0.88);
+  box-shadow: 0 0 0.45vmin rgba(255, 255, 255, 0.14);
+}
+
+.scope-crosshair-h {
+  width: 19vmin;
+  height: 0.18vmin;
+  transform: translate(-50%, -50%);
+}
+
+.scope-crosshair-v {
+  width: 0.18vmin;
+  height: 19vmin;
+  transform: translate(-50%, -50%);
+}
+
+.scope-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0.6vmin;
+  height: 0.6vmin;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: rgba(18, 22, 28, 0.94);
+  box-shadow: 0 0 0.6vmin rgba(255, 255, 255, 0.15);
+}
+
 /* ── Health bar ── */
 #health-wrap {
   position: absolute;

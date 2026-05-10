@@ -137,10 +137,12 @@ const _yAxis = new THREE.Vector3(0, 1, 0);
 const _forward = new THREE.Vector3();
 const _lookAt = new THREE.Vector3();
 const _knockbackVel = new THREE.Vector3();
-const _wandBasePos = new THREE.Vector3(0.46, -0.42, -0.78);
-const _wandAimPos = new THREE.Vector3(0.08, -0.22, -0.48);
+const _wandBasePos = new THREE.Vector3(0.34, -0.34, -0.6);
+const _wandAimPos = new THREE.Vector3(0.035, -0.14, -0.33);
 
 const clock = new THREE.Clock();
+let scopeOverlayEl = null;
+let crosshairEl = null;
 
 function ensureScoreEntry(actorNr) {
   if (!scores.has(actorNr)) scores.set(actorNr, { kills: 0, deaths: 0, assists: 0 });
@@ -852,6 +854,37 @@ function getSimulatedOwners() {
   return owners;
 }
 
+function getMinimapPlayers() {
+  const players = [];
+  if (localPlayer) {
+    players.push({
+      x: localPlayer.position.x,
+      z: localPlayer.position.z,
+      isLocal: true,
+    });
+  }
+
+  remotePlayers.forEach((player) => {
+    const skin = getSkinConfig(player.skinId);
+    players.push({
+      x: player.position.x,
+      z: player.position.z,
+      color: `#${skin.body.toString(16).padStart(6, '0')}`,
+    });
+  });
+
+  if (trainingBot) {
+    players.push({
+      x: trainingBot.position.x,
+      z: trainingBot.position.z,
+      color: `#${BOT_COLOR.toString(16).padStart(6, '0')}`,
+      isBot: true,
+    });
+  }
+
+  return players;
+}
+
 function handleDefeat(killerId, victimId, killerLabel, victimLabel) {
   ensureScoreEntry(killerId).kills++;
   ensureScoreEntry(victimId).deaths++;
@@ -884,6 +917,8 @@ function init() {
   const heroPreviewCanvas = document.getElementById('hero-preview-canvas');
   const playerNameInput = document.getElementById('player-name-input');
   const playCard = document.getElementById('lo-play-card');
+  crosshairEl = document.getElementById('crosshair');
+  scopeOverlayEl = document.getElementById('scope-overlay');
   const skinButtons = [...document.querySelectorAll('.lo-skin-btn')];
   ({ scene, camera, renderer, colliders } = createScene(canvas));
   scene.add(camera);
@@ -1223,13 +1258,14 @@ function loop() {
   }
   update(delta);
   updateCamera();
+  if (ui && colliders) ui.renderMinimap(getMinimapPlayers(), colliders.arenaSize, localPlayer?.rotation || 0);
   renderer.render(scene, camera);
   renderHeroPreview(delta);
 }
 
 function update(delta) {
-  if (!controls.isLocked || localActorId < 0) return;
   aimBlend = THREE.MathUtils.lerp(aimBlend, controls.isAiming ? 1 : 0, 1 - Math.exp(-delta * 14));
+  if (!controls.isLocked || localActorId < 0) return;
 
   const { dx, dy } = controls.consumeMouseDelta();
   cameraYaw -= dx * MOUSE_SENS;
@@ -1421,14 +1457,20 @@ function updateCamera() {
     firstPersonWand.position.x += Math.sin(sway * 7.5) * 0.012 * moving;
     firstPersonWand.position.y += Math.cos(sway * 15) * 0.01 * moving;
     firstPersonWand.rotation.set(
-      THREE.MathUtils.lerp(-0.22, -0.06, aimBlend) + Math.sin(sway * 8.5) * 0.015 * moving,
-      THREE.MathUtils.lerp(Math.PI + 0.2, Math.PI + 0.04, aimBlend),
-      THREE.MathUtils.lerp(-0.04, -0.015, aimBlend)
+      THREE.MathUtils.lerp(-0.22, -0.025, aimBlend) + Math.sin(sway * 8.5) * 0.015 * moving,
+      THREE.MathUtils.lerp(Math.PI + 0.2, Math.PI + 0.01, aimBlend),
+      THREE.MathUtils.lerp(-0.04, -0.006, aimBlend)
     );
   }
 
   camera.fov = THREE.MathUtils.lerp(DEFAULT_FOV, ADS_FOV, aimBlend);
   camera.updateProjectionMatrix();
+
+  if (scopeOverlayEl) {
+    const scopeStrength = THREE.MathUtils.smoothstep(aimBlend, 0.72, 0.98);
+    scopeOverlayEl.style.opacity = String(scopeStrength);
+    if (crosshairEl) crosshairEl.style.opacity = String(1 - scopeStrength);
+  }
 }
 
 function clamp(v, min, max) {
