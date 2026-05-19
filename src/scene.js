@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 
-const ARENA = 40;
+const ARENA = 55;
 
 export function createScene(canvas) {
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x8ec9ff);
-  scene.fog = new THREE.FogExp2(0xcfe7ff, 0.0045);
+  scene.background = new THREE.Color(0x87ceeb);
+  scene.fog = new THREE.FogExp2(0xb8dff5, 0.0022);
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -14,13 +14,13 @@ export function createScene(canvas) {
   const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.1, 120);
 
   // ── Lighting ───────────────────────────────────────────────────────────────
-  scene.add(new THREE.AmbientLight(0xf4ead9, 0.95));
+  scene.add(new THREE.AmbientLight(0xfff5e0, 1.1));
 
-  const sun = new THREE.DirectionalLight(0xfff2c2, 2.0);
+  const sun = new THREE.DirectionalLight(0xfffbe8, 2.8);
   sun.position.set(-24, 42, 18);
   scene.add(sun);
 
-  const skyFill = new THREE.DirectionalLight(0xbfe2ff, 0.7);
+  const skyFill = new THREE.DirectionalLight(0xc8e8ff, 0.8);
   skyFill.position.set(20, 18, -20);
   scene.add(skyFill);
 
@@ -89,7 +89,7 @@ export function createScene(canvas) {
 
     const tex = new THREE.CanvasTexture(cv);
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(14, 14);
+    tex.repeat.set(18, 18);
     return tex;
   }
 
@@ -278,23 +278,18 @@ export function createScene(canvas) {
   }
 
   const TREE_POSITIONS = [
-    [-12, -12, 0], [12, -12, 1],
-    [-12,  12, 2], [12,  12, 0],
-    [0,  -20, 1],  [0,   20, 2],
-    [-20,  0, 0],  [20,   0, 1],
+    [-18, -18, 0], [ 18, -18, 1],
+    [-18,  18, 2], [ 18,  18, 0],
+    [  0, -32, 1], [  0,  32, 2],
+    [-32,   0, 0], [ 32,   0, 1],
+    [-30,  22, 2], [ 30, -22, 0],
+    [-22,  30, 1], [ 22, -30, 2],
   ];
   TREE_POSITIONS.forEach(([x, z, vi]) => makeTree(x, z, vi));
 
 
-  // ── Elevated platforms + ramps ─────────────────────────────────────────────
-  const PLAT_H     = 3.0;
-  const RAMP_HDIST = 5.5;
-  const RAMP_SLEN  = Math.sqrt(RAMP_HDIST * RAMP_HDIST + PLAT_H * PLAT_H);
-  const RAMP_ANG   = Math.atan2(PLAT_H, RAMP_HDIST);
-  const PAR_H      = 1.2;
-  const PAR_T      = 0.45;
-  const GRND_Y_    = 0.75;
-
+  // ── Shared helpers ────────────────────────────────────────────────────────
+  const GRND_Y_ = 0.75;
   const elevPlatforms = [], elevRamps = [], elevBoxes = [];
 
   function addBox(x, y, z, w, h, d) {
@@ -304,85 +299,93 @@ export function createScene(canvas) {
     return m;
   }
 
-  // [cx, cz, axis]  axis='z' → slope along Z (N/S platforms), 'x' → slope along X (W/E)
+  // ── Outer cardinal platforms (L1, height 3.5) ────────────────────────────
+  const L1_H    = 3.5;
+  const L1_RUN  = 7.0;
+  const L1_SLEN = Math.sqrt(L1_RUN * L1_RUN + L1_H * L1_H);
+  const L1_ANG  = Math.atan2(L1_H, L1_RUN);
+
   [
-    [0,     -30.5, 'z'],
-    [0,      30.5, 'z'],
-    [-30.5,  0,    'x'],
-    [ 30.5,  0,    'x'],
-  ].forEach(([cx, cz, axis]) => {
+    { cx:  0,   cz: -40, axis: 'z', pw: 14, pd: 10 },
+    { cx:  0,   cz:  40, axis: 'z', pw: 14, pd: 10 },
+    { cx: -40,  cz:   0, axis: 'x', pw: 10, pd: 14 },
+    { cx:  40,  cz:   0, axis: 'x', pw: 10, pd: 14 },
+  ].forEach(({ cx, cz, axis, pw, pd }) => {
     const isZ  = axis === 'z';
     const sign = isZ ? Math.sign(cz) : Math.sign(cx);
-    const pw   = isZ ? 10 : 9;   // x-dimension of platform box
-    const pd   = isZ ?  9 : 10;  // z-dimension of platform box
-    const hw   = pw / 2, hd = pd / 2;
+    const hw = pw / 2, hd = pd / 2;
 
-    // Platform body
-    addBox(cx, PLAT_H / 2, cz, pw, PLAT_H, pd);
+    addBox(cx, L1_H / 2, cz, pw, L1_H, pd);
 
-    // Ramp — sloped box connecting ground to platform top
-    const edgeP = isZ ? (cz - sign * hd) : (cx - sign * hw); // platform edge facing center
-    const edgeG = edgeP - sign * RAMP_HDIST;                  // ramp's ground-level end
-    const rc    = (edgeP + edgeG) / 2;                        // ramp center on slope axis
-
-    const rampMesh = addBox(
-      isZ ? cx : rc,
-      PLAT_H / 2,
-      isZ ? rc : cz,
-      isZ ? pw : RAMP_SLEN,
-      0.5,
-      isZ ? RAMP_SLEN : pd
+    const edgeP = isZ ? (cz - sign * hd) : (cx - sign * hw);
+    const edgeG = edgeP - sign * L1_RUN;
+    const rc    = (edgeP + edgeG) / 2;
+    const ramp  = addBox(
+      isZ ? cx : rc, L1_H / 2, isZ ? rc : cz,
+      isZ ? pw : L1_SLEN, 0.5, isZ ? L1_SLEN : pd,
     );
-    if (isZ) rampMesh.rotation.x = -sign * RAMP_ANG;
-    else     rampMesh.rotation.z =  sign * RAMP_ANG;
+    if (isZ) ramp.rotation.x = -sign * L1_ANG;
+    else     ramp.rotation.z =  sign * L1_ANG;
 
-    // Parapets — 3-sided stone wall on top for cover (visual only)
-    const parY = PLAT_H + PAR_H / 2;
+    // Parapets (3-sided cover)
+    const parY = L1_H + 0.6;
     if (isZ) {
-      addBox(cx,      parY, cz + sign * hd, pw,   PAR_H, PAR_T); // back wall
-      addBox(cx - hw, parY, cz,             PAR_T, PAR_H, pd);   // left wall
-      addBox(cx + hw, parY, cz,             PAR_T, PAR_H, pd);   // right wall
+      addBox(cx,      parY, cz + sign * hd, pw,   1.2, 0.45);
+      addBox(cx - hw, parY, cz,             0.45, 1.2, pd);
+      addBox(cx + hw, parY, cz,             0.45, 1.2, pd);
     } else {
-      addBox(cx + sign * hw, parY, cz,      PAR_T, PAR_H, pd);   // back wall
-      addBox(cx, parY, cz - hd,             pw,   PAR_H, PAR_T); // left wall
-      addBox(cx, parY, cz + hd,             pw,   PAR_H, PAR_T); // right wall
+      addBox(cx + sign * hw, parY, cz, 0.45, 1.2, pd);
+      addBox(cx, parY, cz - hd,        pw,   1.2, 0.45);
+      addBox(cx, parY, cz + hd,        pw,   1.2, 0.45);
     }
 
-    // Collision data
+    elevPlatforms.push({ xMin: cx - hw, xMax: cx + hw, zMin: cz - hd, zMax: cz + hd, y: GRND_Y_ + L1_H });
+    elevBoxes.push({     xMin: cx - hw, xMax: cx + hw, zMin: cz - hd, zMax: cz + hd, maxY: GRND_Y_ + L1_H });
     if (isZ) {
-      elevPlatforms.push({ xMin: cx - hw, xMax: cx + hw, zMin: cz - hd, zMax: cz + hd, y: GRND_Y_ + PLAT_H });
-      elevBoxes.push({     xMin: cx - hw, xMax: cx + hw, zMin: cz - hd, zMax: cz + hd, maxY: GRND_Y_ + PLAT_H });
-      elevRamps.push({
-        xMin: cx - hw, xMax: cx + hw,
-        zMin: Math.min(edgeP, edgeG), zMax: Math.max(edgeP, edgeG),
-        axis: 'z', axisStart: edgeG, axisEnd: edgeP,
-        yStart: GRND_Y_, yEnd: GRND_Y_ + PLAT_H,
-      });
+      elevRamps.push({ xMin: cx - hw, xMax: cx + hw, zMin: Math.min(edgeP, edgeG), zMax: Math.max(edgeP, edgeG), axis: 'z', axisStart: edgeG, axisEnd: edgeP, yStart: GRND_Y_, yEnd: GRND_Y_ + L1_H });
     } else {
-      elevPlatforms.push({ xMin: cx - hw, xMax: cx + hw, zMin: cz - hd, zMax: cz + hd, y: GRND_Y_ + PLAT_H });
-      elevBoxes.push({     xMin: cx - hw, xMax: cx + hw, zMin: cz - hd, zMax: cz + hd, maxY: GRND_Y_ + PLAT_H });
-      elevRamps.push({
-        xMin: Math.min(edgeP, edgeG), xMax: Math.max(edgeP, edgeG),
-        zMin: cz - hd, zMax: cz + hd,
-        axis: 'x', axisStart: edgeG, axisEnd: edgeP,
-        yStart: GRND_Y_, yEnd: GRND_Y_ + PLAT_H,
-      });
+      elevRamps.push({ xMin: Math.min(edgeP, edgeG), xMax: Math.max(edgeP, edgeG), zMin: cz - hd, zMax: cz + hd, axis: 'x', axisStart: edgeG, axisEnd: edgeP, yStart: GRND_Y_, yEnd: GRND_Y_ + L1_H });
     }
   });
 
+  // ── Diagonal mid-platforms (L2, height 2.2) — placed well outside castle ──
+  const L2_H    = 2.2;
+  const L2_RUN  = 5.5;
+  const L2_SLEN = Math.sqrt(L2_RUN * L2_RUN + L2_H * L2_H);
+  const L2_ANG  = Math.atan2(L2_H, L2_RUN);
 
-  // ── Central Castle ───────────────────────────────────────────────────────────
-  const CW      = 9;      // half-size: walls sit at x=±CW, z=±CW
-  const CWAH    = 5.5;    // curtain wall height
-  const CWT     = 1.2;    // wall thickness
-  const CTR     = 2.2;    // corner tower radius
-  const CTH     = 8.0;    // corner tower height
-  const CKR     = 3.2;    // keep radius
-  const CKH     = 13.0;   // keep height
-  const CKZ     = -3.0;   // keep Z (north side of courtyard)
-  const GATE_HW = 1.6;    // gate half-width (total opening = 3.2)
-  const INNER   = (CW - CTR) * 2;            // wall span between towers = 13.6
-  const SW_W    = CW - CTR - GATE_HW;        // each south wall half-width = 5.2
+  // At ±28 the ramp ground-end lands at ±22 — clear of castle walls at ±13
+  [[-28, -28], [28, -28], [-28, 28], [28, 28]].forEach(([cx, cz]) => {
+    const signX = Math.sign(cx);
+    addBox(cx, L2_H / 2, cz, 9, L2_H, 9);
+
+    const edgeP = cx - signX * 4.5;
+    const edgeG = edgeP - signX * L2_RUN;
+    const rc    = (edgeP + edgeG) / 2;
+    const ramp  = addBox(rc, L2_H / 2, cz, L2_SLEN, 0.4, 9);
+    ramp.rotation.z = signX * L2_ANG;
+
+    const parY = L2_H + 0.55;
+    addBox(cx + signX * 4.5, parY, cz, 0.4, 1.1, 9);
+    addBox(cx, parY, cz - 4.5, 9, 1.1, 0.4);
+    addBox(cx, parY, cz + 4.5, 9, 1.1, 0.4);
+
+    elevPlatforms.push({ xMin: cx - 4.5, xMax: cx + 4.5, zMin: cz - 4.5, zMax: cz + 4.5, y: GRND_Y_ + L2_H });
+    elevBoxes.push({     xMin: cx - 4.5, xMax: cx + 4.5, zMin: cz - 4.5, zMax: cz + 4.5, maxY: GRND_Y_ + L2_H });
+    elevRamps.push({ xMin: Math.min(edgeP, edgeG), xMax: Math.max(edgeP, edgeG), zMin: cz - 4.5, zMax: cz + 4.5, axis: 'x', axisStart: edgeG, axisEnd: edgeP, yStart: GRND_Y_, yEnd: GRND_Y_ + L2_H });
+  });
+
+  // ── Central Castle ────────────────────────────────────────────────────────
+  const CW      = 13;    // half-size: walls at x=±CW, z=±CW
+  const CWAH    = 5.5;   // curtain wall height
+  const CWT     = 3.0;   // wall thickness (wide enough to walk on top)
+  const CTR     = 2.8;   // corner tower radius
+  const CTH     = 9.0;   // corner tower height
+  const GATE_HW = 1.8;   // gate half-width
+  const INNER   = (CW - CTR) * 2;       // 20.4 — wall span between towers
+  const SW_W    = CW - CTR - GATE_HW;   // 8.4  — each south wing width
+  const halfCWT = CWT / 2;
+  const WALL_Y  = GRND_Y_ + CWAH;       // 6.25 — player foot level on wall top
 
   function addMerlons(cx, cz, wallLen, isVert) {
     const count = Math.floor(wallLen / 2.4);
@@ -390,33 +393,57 @@ export function createScene(canvas) {
       if (i % 2 !== 0) continue;
       const off = ((i + 0.5) / count - 0.5) * wallLen;
       const m = new THREE.Mesh(new THREE.BoxGeometry(
-        isVert ? CWT + 0.5 : 1.5,
-        1.2,
-        isVert ? 1.5 : CWT + 0.5,
+        isVert ? CWT + 0.4 : 1.5, 1.2, isVert ? 1.5 : CWT + 0.4,
       ), stoneMat);
       m.position.set(isVert ? cx : cx + off, CWAH + 0.6, isVert ? cz + off : cz);
       scene.add(m);
     }
   }
 
-  // North wall
+  // Curtain walls
   addBox(0, CWAH / 2, -CW, INNER, CWAH, CWT);
-  addMerlons(0, -CW, INNER, false);
-
-  // South wall — left & right of gate
-  addBox(-(GATE_HW + SW_W / 2), CWAH / 2, CW, SW_W, CWAH, CWT);
-  addBox( (GATE_HW + SW_W / 2), CWAH / 2, CW, SW_W, CWAH, CWT);
-  addMerlons(-(GATE_HW + SW_W / 2), CW, SW_W, false);
-  addMerlons( (GATE_HW + SW_W / 2), CW, SW_W, false);
-
-  // Gate lintel (visual only — players walk under it)
-  addBox(0, CWAH - 0.55, CW, GATE_HW * 2, 1.0, CWT);
-
-  // East & West walls
+  addBox(-(GATE_HW + SW_W / 2), CWAH / 2,  CW, SW_W, CWAH, CWT);
+  addBox( (GATE_HW + SW_W / 2), CWAH / 2,  CW, SW_W, CWAH, CWT);
+  addBox(0, CWAH - 0.55, CW, GATE_HW * 2, 1.0, CWT);  // gate lintel
   addBox( CW, CWAH / 2, 0, CWT, CWAH, INNER);
   addBox(-CW, CWAH / 2, 0, CWT, CWAH, INNER);
+  addMerlons(0, -CW, INNER, false);
+  addMerlons(-(GATE_HW + SW_W / 2), CW, SW_W, false);
+  addMerlons( (GATE_HW + SW_W / 2), CW, SW_W, false);
   addMerlons( CW, 0, INNER, true);
   addMerlons(-CW, 0, INNER, true);
+
+  // Wall-top walkable platforms (players can stand on wall tops)
+  elevPlatforms.push({ xMin: -(CW - CTR), xMax: CW - CTR,  zMin: -CW - halfCWT, zMax: -CW + halfCWT, y: WALL_Y });
+  elevPlatforms.push({ xMin: -(CW - CTR), xMax: -GATE_HW,  zMin:  CW - halfCWT, zMax:  CW + halfCWT, y: WALL_Y });
+  elevPlatforms.push({ xMin:  GATE_HW,    xMax:  CW - CTR, zMin:  CW - halfCWT, zMax:  CW + halfCWT, y: WALL_Y });
+  elevPlatforms.push({ xMin:  CW - halfCWT, xMax:  CW + halfCWT, zMin: -(CW - CTR), zMax: CW - CTR,  y: WALL_Y });
+  elevPlatforms.push({ xMin: -CW - halfCWT, xMax: -CW + halfCWT, zMin: -(CW - CTR), zMax: CW - CTR,  y: WALL_Y });
+
+  // Ramps from courtyard up to each wall top
+  const WR_RUN  = 8.5;
+  const WR_SLEN = Math.sqrt(WR_RUN * WR_RUN + CWAH * CWAH);
+  const WR_ANG  = Math.atan2(CWAH, WR_RUN);
+
+  // North ramp  (x=3..7,  z=-3 → z=-(CW-halfCWT)=-11.5)
+  { const rz = (-3 + (-CW + halfCWT)) / 2;
+    const wr = addBox(5, CWAH / 2, rz, 4, 0.5, WR_SLEN); wr.rotation.x = +WR_ANG;
+    elevRamps.push({ xMin: 3, xMax: 7, zMin: -CW + halfCWT, zMax: -3, axis: 'z', axisStart: -3, axisEnd: -CW + halfCWT, yStart: GRND_Y_, yEnd: WALL_Y }); }
+
+  // South ramp  (x=-7..-3, z=3 → z=CW-halfCWT=11.5)
+  { const rz = (3 + CW - halfCWT) / 2;
+    const wr = addBox(-5, CWAH / 2, rz, 4, 0.5, WR_SLEN); wr.rotation.x = -WR_ANG;
+    elevRamps.push({ xMin: -7, xMax: -3, zMin: 3, zMax: CW - halfCWT, axis: 'z', axisStart: 3, axisEnd: CW - halfCWT, yStart: GRND_Y_, yEnd: WALL_Y }); }
+
+  // East ramp   (z=-7..-3, x=3 → x=CW-halfCWT=11.5)
+  { const rx = (3 + CW - halfCWT) / 2;
+    const wr = addBox(rx, CWAH / 2, -5, WR_SLEN, 0.5, 4); wr.rotation.z = +WR_ANG;
+    elevRamps.push({ xMin: 3, xMax: CW - halfCWT, zMin: -7, zMax: -3, axis: 'x', axisStart: 3, axisEnd: CW - halfCWT, yStart: GRND_Y_, yEnd: WALL_Y }); }
+
+  // West ramp   (z=3..7,   x=-3 → x=-(CW-halfCWT)=-11.5)
+  { const rx = (-3 + (-CW + halfCWT)) / 2;
+    const wr = addBox(rx, CWAH / 2, 5, WR_SLEN, 0.5, 4); wr.rotation.z = -WR_ANG;
+    elevRamps.push({ xMin: -CW + halfCWT, xMax: -3, zMin: 3, zMax: 7, axis: 'x', axisStart: -3, axisEnd: -CW + halfCWT, yStart: GRND_Y_, yEnd: WALL_Y }); }
 
   // Corner towers
   [[-CW, -CW], [CW, -CW], [CW, CW], [-CW, CW]].forEach(([tx, tz]) => {
@@ -426,167 +453,45 @@ export function createScene(canvas) {
     for (let i = 0; i < 10; i++) {
       if (i % 2 !== 0) continue;
       const a = (i / 10) * Math.PI * 2;
-      const mb = new THREE.Mesh(new THREE.BoxGeometry(0.85, 1.05, 0.85), stoneMat);
-      mb.position.set(tx + Math.cos(a) * (CTR - 0.35), CTH + 0.52, tz + Math.sin(a) * (CTR - 0.35));
+      const mb = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.1, 0.9), stoneMat);
+      mb.position.set(tx + Math.cos(a) * (CTR - 0.35), CTH + 0.55, tz + Math.sin(a) * (CTR - 0.35));
       scene.add(mb);
     }
-    const tPt = new THREE.PointLight(0xff8833, 2.2, 14);
-    tPt.position.set(tx * 0.68, 4.5, tz * 0.68);
+    const tPt = new THREE.PointLight(0xff8833, 2.5, 16);
+    tPt.position.set(tx * 0.75, 4.5, tz * 0.75);
     scene.add(tPt);
   });
 
-  // Central keep
-  const keepMesh = new THREE.Mesh(new THREE.CylinderGeometry(CKR, CKR * 1.1, CKH, 12), stoneMat);
-  keepMesh.position.set(0, CKH / 2, CKZ);
-  scene.add(keepMesh);
-  for (let i = 0; i < 12; i++) {
-    if (i % 2 !== 0) continue;
-    const a = (i / 12) * Math.PI * 2;
-    const mb = new THREE.Mesh(new THREE.BoxGeometry(1.05, 1.3, 1.05), stoneMat);
-    mb.position.set(Math.cos(a) * (CKR - 0.4), CKH + 0.65, CKZ + Math.sin(a) * (CKR - 0.4));
-    scene.add(mb);
-  }
-  // Flag on keep
-  const poleMat = new THREE.MeshStandardMaterial({ color: 0x666677, roughness: 0.6 });
-  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 3.2, 6), poleMat);
-  pole.position.set(0, CKH + 1.6, CKZ);
+  // Flag + light at castle courtyard centre
+  const poleMat = new THREE.MeshStandardMaterial({ color: 0x555566, roughness: 0.6 });
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 8.0, 6), poleMat);
+  pole.position.set(0, 4.0, 0);
   scene.add(pole);
   const flagMat2 = new THREE.MeshStandardMaterial({ color: 0xcc1111, emissive: 0x550000, emissiveIntensity: 0.5, side: THREE.DoubleSide });
-  const flagMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.9), flagMat2);
-  flagMesh.position.set(0.8, CKH + 2.5, CKZ);
+  const flagMesh = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 1.1), flagMat2);
+  flagMesh.position.set(1.0, 7.6, 0);
   scene.add(flagMesh);
-  const keepPt = new THREE.PointLight(0xff7733, 3.5, 24);
-  keepPt.position.set(0, 5.5, CKZ);
+  const keepPt = new THREE.PointLight(0xff7733, 3.0, 24);
+  keepPt.position.set(0, 3.5, 0);
   scene.add(keepPt);
 
-  // Castle colliders
+  // Castle AABB wall colliders (maxY=CWAH so players on wall tops are not blocked)
   const castleBoxes = [
-    { xMin: -(CW - CTR), xMax:  CW - CTR,  zMin: -CW - CWT/2, zMax: -CW + CWT/2, maxY: CWAH + 3 }, // north wall
-    { xMin: -(CW - CTR), xMax: -GATE_HW,   zMin:  CW - CWT/2, zMax:  CW + CWT/2, maxY: CWAH + 3 }, // south wall left
-    { xMin:  GATE_HW,    xMax:  CW - CTR,  zMin:  CW - CWT/2, zMax:  CW + CWT/2, maxY: CWAH + 3 }, // south wall right
-    { xMin:  CW - CWT/2, xMax:  CW + CWT/2, zMin: -(CW - CTR), zMax:  CW - CTR, maxY: CWAH + 3 }, // east wall
-    { xMin: -CW - CWT/2, xMax: -CW + CWT/2, zMin: -(CW - CTR), zMax:  CW - CTR, maxY: CWAH + 3 }, // west wall
+    { xMin: -(CW - CTR), xMax:  CW - CTR, zMin: -CW - halfCWT, zMax: -CW + halfCWT, maxY: CWAH },
+    { xMin: -(CW - CTR), xMax: -GATE_HW,  zMin:  CW - halfCWT, zMax:  CW + halfCWT, maxY: CWAH },
+    { xMin:  GATE_HW,    xMax:  CW - CTR, zMin:  CW - halfCWT, zMax:  CW + halfCWT, maxY: CWAH },
+    { xMin:  CW - halfCWT, xMax:  CW + halfCWT, zMin: -(CW - CTR), zMax: CW - CTR,  maxY: CWAH },
+    { xMin: -CW - halfCWT, xMax: -CW + halfCWT, zMin: -(CW - CTR), zMax: CW - CTR,  maxY: CWAH },
   ];
   const castleTowers = [
     { x: -CW, z: -CW, radius: CTR },
     { x:  CW, z: -CW, radius: CTR },
     { x:  CW, z:  CW, radius: CTR },
     { x: -CW, z:  CW, radius: CTR },
-    { x:   0, z: CKZ, radius: CKR },
   ];
 
-  // ── Stars in the sky ──────────────────────────────────────────────────────
-  const starGeo = new THREE.BufferGeometry();
-  const starPositions = [];
-  for (let i = 0; i < 400; i++) {
-    const theta = Math.random() * Math.PI * 2;
-    const phi   = Math.acos(Math.random());          // upper hemisphere
-    const r     = 90 + Math.random() * 20;
-    starPositions.push(
-      r * Math.sin(phi) * Math.cos(theta),
-      r * Math.cos(phi),
-      r * Math.sin(phi) * Math.sin(theta)
-    );
-  }
-  starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPositions, 3));
-  const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.35, sizeAttenuation: true });
-  scene.add(new THREE.Points(starGeo, starMat));
 
   // ── Resize handler ────────────────────────────────────────────────────────
-  const MID_H = 2.2;
-  const MID_SIZE = 12;
-  const MID_HALF = MID_SIZE / 2;
-  const MID_RAMP_RUN = 4.5;
-  const MID_RAMP_LEN = Math.sqrt(MID_RAMP_RUN * MID_RAMP_RUN + MID_H * MID_H);
-  const MID_RAMP_ANG = Math.atan2(MID_H, MID_RAMP_RUN);
-
-  addBox(0, MID_H / 2, 0, MID_SIZE, MID_H, MID_SIZE);
-
-  const centerCap = new THREE.Mesh(
-    new THREE.CylinderGeometry(5.6, 6.9, 1.5, 8),
-    stoneMat,
-  );
-  centerCap.position.set(0, MID_H + 0.55, 0);
-  centerCap.rotation.y = Math.PI / 8;
-  scene.add(centerCap);
-
-  [
-    { axis: 'z', sign: -1 },
-    { axis: 'z', sign:  1 },
-    { axis: 'x', sign: -1 },
-    { axis: 'x', sign:  1 },
-  ].forEach(({ axis, sign }) => {
-    const cx = axis === 'x' ? sign * (MID_HALF + MID_RAMP_RUN / 2) : 0;
-    const cz = axis === 'z' ? sign * (MID_HALF + MID_RAMP_RUN / 2) : 0;
-    const ramp = addBox(
-      cx,
-      MID_H / 2,
-      cz,
-      axis === 'z' ? 5.6 : MID_RAMP_LEN,
-      0.45,
-      axis === 'z' ? MID_RAMP_LEN : 5.6,
-    );
-    if (axis === 'z') ramp.rotation.x = -sign * MID_RAMP_ANG;
-    else ramp.rotation.z = sign * MID_RAMP_ANG;
-
-    if (axis === 'z') {
-      elevRamps.push({
-        xMin: -2.8, xMax: 2.8,
-        zMin: Math.min(sign * MID_HALF, sign * (MID_HALF + MID_RAMP_RUN)),
-        zMax: Math.max(sign * MID_HALF, sign * (MID_HALF + MID_RAMP_RUN)),
-        axis: 'z',
-        axisStart: sign * (MID_HALF + MID_RAMP_RUN),
-        axisEnd: sign * MID_HALF,
-        yStart: GRND_Y_,
-        yEnd: GRND_Y_ + MID_H,
-      });
-    } else {
-      elevRamps.push({
-        xMin: Math.min(sign * MID_HALF, sign * (MID_HALF + MID_RAMP_RUN)),
-        xMax: Math.max(sign * MID_HALF, sign * (MID_HALF + MID_RAMP_RUN)),
-        zMin: -2.8, zMax: 2.8,
-        axis: 'x',
-        axisStart: sign * (MID_HALF + MID_RAMP_RUN),
-        axisEnd: sign * MID_HALF,
-        yStart: GRND_Y_,
-        yEnd: GRND_Y_ + MID_H,
-      });
-    }
-  });
-
-  elevPlatforms.push({
-    xMin: -MID_HALF,
-    xMax: MID_HALF,
-    zMin: -MID_HALF,
-    zMax: MID_HALF,
-    y: GRND_Y_ + MID_H,
-  });
-  elevBoxes.push({
-    xMin: -MID_HALF,
-    xMax: MID_HALF,
-    zMin: -MID_HALF,
-    zMax: MID_HALF,
-    maxY: GRND_Y_ + MID_H,
-  });
-
-  [
-    [-3.6, MID_H + 0.85, -2.6, 1.7, 1.6, 1.5, -0.25],
-    [3.2,  MID_H + 0.7,  2.4, 1.9, 1.4, 1.6,  0.18],
-    [-0.8, MID_H + 0.6,  3.3, 1.4, 1.2, 1.3,  0.35],
-  ].forEach(([x, y, z, w, h, d, rot]) => {
-    const rock = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), stoneMat);
-    rock.position.set(x, y, z);
-    rock.rotation.set(rot * 0.3, rot, rot * 0.2);
-    scene.add(rock);
-    elevBoxes.push({
-      xMin: x - w / 2,
-      xMax: x + w / 2,
-      zMin: z - d / 2,
-      zMax: z + d / 2,
-      maxY: y + h / 2,
-    });
-  });
-
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
