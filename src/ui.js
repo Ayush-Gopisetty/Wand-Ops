@@ -22,7 +22,7 @@ export class UIManager {
   setHealth(hp) {
     const pct = Math.max(0, Math.min(100, hp));
     this._bar.style.width = pct + '%';
-    this._healthText.textContent = hp + ' HP';
+    this._healthText.textContent = Math.ceil(hp) + ' HP';
 
     if (pct > 60) this._bar.style.backgroundColor = '#2ecc71';
     else if (pct > 30) this._bar.style.backgroundColor = '#f39c12';

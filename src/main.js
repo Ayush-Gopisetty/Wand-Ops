@@ -486,7 +486,7 @@ function spawnTrainingBot() {
   const bot = new Player(scene, true, BOT_COLOR);
   bot.id = BOT_ID;
   bot.setName('Training Bot');
-  bot.position.set(10, GROUND_Y, 8);
+  bot.position.set(0, GROUND_Y, 20);
   bot.group.position.copy(bot.position);
   trainingBot = bot;
   trainingBotAI = new SimpleBotController(bot, colliders);

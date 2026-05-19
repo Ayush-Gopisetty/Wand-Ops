@@ -106,12 +106,16 @@ body {
 #fps-counter {
   position: absolute;
   top: 14px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 11px;
+  left: 14px;
+  font-size: 13px;
   font-family: var(--font-label);
+  font-weight: 700;
   letter-spacing: 0.06em;
-  color: rgba(255,255,255,0.45);
+  color: #c2d000;
+  background: rgba(0,0,0,0.55);
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(194,208,0,0.3);
   pointer-events: none;
 }
 
@@ -1252,6 +1256,9 @@ body {
   backdrop-filter: blur(8px);
   z-index: 80;
   cursor: default;
+}
+.lo-auth-modal-backdrop[hidden] {
+  display: none;
 }
 
 .lo-auth-modal {

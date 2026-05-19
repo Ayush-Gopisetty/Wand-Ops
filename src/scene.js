@@ -371,6 +371,110 @@ export function createScene(canvas) {
   });
 
 
+  // ── Central Castle ───────────────────────────────────────────────────────────
+  const CW      = 9;      // half-size: walls sit at x=±CW, z=±CW
+  const CWAH    = 5.5;    // curtain wall height
+  const CWT     = 1.2;    // wall thickness
+  const CTR     = 2.2;    // corner tower radius
+  const CTH     = 8.0;    // corner tower height
+  const CKR     = 3.2;    // keep radius
+  const CKH     = 13.0;   // keep height
+  const CKZ     = -3.0;   // keep Z (north side of courtyard)
+  const GATE_HW = 1.6;    // gate half-width (total opening = 3.2)
+  const INNER   = (CW - CTR) * 2;            // wall span between towers = 13.6
+  const SW_W    = CW - CTR - GATE_HW;        // each south wall half-width = 5.2
+
+  function addMerlons(cx, cz, wallLen, isVert) {
+    const count = Math.floor(wallLen / 2.4);
+    for (let i = 0; i < count; i++) {
+      if (i % 2 !== 0) continue;
+      const off = ((i + 0.5) / count - 0.5) * wallLen;
+      const m = new THREE.Mesh(new THREE.BoxGeometry(
+        isVert ? CWT + 0.5 : 1.5,
+        1.2,
+        isVert ? 1.5 : CWT + 0.5,
+      ), stoneMat);
+      m.position.set(isVert ? cx : cx + off, CWAH + 0.6, isVert ? cz + off : cz);
+      scene.add(m);
+    }
+  }
+
+  // North wall
+  addBox(0, CWAH / 2, -CW, INNER, CWAH, CWT);
+  addMerlons(0, -CW, INNER, false);
+
+  // South wall — left & right of gate
+  addBox(-(GATE_HW + SW_W / 2), CWAH / 2, CW, SW_W, CWAH, CWT);
+  addBox( (GATE_HW + SW_W / 2), CWAH / 2, CW, SW_W, CWAH, CWT);
+  addMerlons(-(GATE_HW + SW_W / 2), CW, SW_W, false);
+  addMerlons( (GATE_HW + SW_W / 2), CW, SW_W, false);
+
+  // Gate lintel (visual only — players walk under it)
+  addBox(0, CWAH - 0.55, CW, GATE_HW * 2, 1.0, CWT);
+
+  // East & West walls
+  addBox( CW, CWAH / 2, 0, CWT, CWAH, INNER);
+  addBox(-CW, CWAH / 2, 0, CWT, CWAH, INNER);
+  addMerlons( CW, 0, INNER, true);
+  addMerlons(-CW, 0, INNER, true);
+
+  // Corner towers
+  [[-CW, -CW], [CW, -CW], [CW, CW], [-CW, CW]].forEach(([tx, tz]) => {
+    const tower = new THREE.Mesh(new THREE.CylinderGeometry(CTR, CTR * 1.1, CTH, 10), stoneMat);
+    tower.position.set(tx, CTH / 2, tz);
+    scene.add(tower);
+    for (let i = 0; i < 10; i++) {
+      if (i % 2 !== 0) continue;
+      const a = (i / 10) * Math.PI * 2;
+      const mb = new THREE.Mesh(new THREE.BoxGeometry(0.85, 1.05, 0.85), stoneMat);
+      mb.position.set(tx + Math.cos(a) * (CTR - 0.35), CTH + 0.52, tz + Math.sin(a) * (CTR - 0.35));
+      scene.add(mb);
+    }
+    const tPt = new THREE.PointLight(0xff8833, 2.2, 14);
+    tPt.position.set(tx * 0.68, 4.5, tz * 0.68);
+    scene.add(tPt);
+  });
+
+  // Central keep
+  const keepMesh = new THREE.Mesh(new THREE.CylinderGeometry(CKR, CKR * 1.1, CKH, 12), stoneMat);
+  keepMesh.position.set(0, CKH / 2, CKZ);
+  scene.add(keepMesh);
+  for (let i = 0; i < 12; i++) {
+    if (i % 2 !== 0) continue;
+    const a = (i / 12) * Math.PI * 2;
+    const mb = new THREE.Mesh(new THREE.BoxGeometry(1.05, 1.3, 1.05), stoneMat);
+    mb.position.set(Math.cos(a) * (CKR - 0.4), CKH + 0.65, CKZ + Math.sin(a) * (CKR - 0.4));
+    scene.add(mb);
+  }
+  // Flag on keep
+  const poleMat = new THREE.MeshStandardMaterial({ color: 0x666677, roughness: 0.6 });
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 3.2, 6), poleMat);
+  pole.position.set(0, CKH + 1.6, CKZ);
+  scene.add(pole);
+  const flagMat2 = new THREE.MeshStandardMaterial({ color: 0xcc1111, emissive: 0x550000, emissiveIntensity: 0.5, side: THREE.DoubleSide });
+  const flagMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.9), flagMat2);
+  flagMesh.position.set(0.8, CKH + 2.5, CKZ);
+  scene.add(flagMesh);
+  const keepPt = new THREE.PointLight(0xff7733, 3.5, 24);
+  keepPt.position.set(0, 5.5, CKZ);
+  scene.add(keepPt);
+
+  // Castle colliders
+  const castleBoxes = [
+    { xMin: -(CW - CTR), xMax:  CW - CTR,  zMin: -CW - CWT/2, zMax: -CW + CWT/2, maxY: CWAH + 3 }, // north wall
+    { xMin: -(CW - CTR), xMax: -GATE_HW,   zMin:  CW - CWT/2, zMax:  CW + CWT/2, maxY: CWAH + 3 }, // south wall left
+    { xMin:  GATE_HW,    xMax:  CW - CTR,  zMin:  CW - CWT/2, zMax:  CW + CWT/2, maxY: CWAH + 3 }, // south wall right
+    { xMin:  CW - CWT/2, xMax:  CW + CWT/2, zMin: -(CW - CTR), zMax:  CW - CTR, maxY: CWAH + 3 }, // east wall
+    { xMin: -CW - CWT/2, xMax: -CW + CWT/2, zMin: -(CW - CTR), zMax:  CW - CTR, maxY: CWAH + 3 }, // west wall
+  ];
+  const castleTowers = [
+    { x: -CW, z: -CW, radius: CTR },
+    { x:  CW, z: -CW, radius: CTR },
+    { x:  CW, z:  CW, radius: CTR },
+    { x: -CW, z:  CW, radius: CTR },
+    { x:   0, z: CKZ, radius: CKR },
+  ];
+
   // ── Stars in the sky ──────────────────────────────────────────────────────
   const starGeo = new THREE.BufferGeometry();
   const starPositions = [];
@@ -397,10 +501,10 @@ export function createScene(canvas) {
 
   const colliders = {
     arenaSize: ARENA,
-    trees: TREE_POSITIONS.map(([x, z]) => ({ x, z, radius: 0.7 })),
+    trees: [...TREE_POSITIONS.map(([x, z]) => ({ x, z, radius: 0.7 })), ...castleTowers],
     platforms: elevPlatforms,
     ramps:     elevRamps,
-    boxes:     elevBoxes,
+    boxes:     [...elevBoxes, ...castleBoxes],
   };
 
   return { scene, camera, renderer, colliders };
