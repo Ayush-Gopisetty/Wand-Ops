@@ -14,6 +14,16 @@
 
   <div id="ui">
     <div id="crosshair"></div>
+    <div id="scope-overlay" aria-hidden="true">
+      <div class="scope-ring"></div>
+      <div class="scope-crosshair scope-crosshair-h"></div>
+      <div class="scope-crosshair scope-crosshair-v"></div>
+      <div class="scope-dot"></div>
+    </div>
+    <div id="minimap-wrap" aria-label="Minimap">
+      <div id="minimap-title">Arena Map</div>
+      <canvas id="minimap" width="180" height="180"></canvas>
+    </div>
 
     <div id="health-wrap">
       <div id="health-track">
@@ -152,22 +162,32 @@
             <button class="lo-skin-btn active" data-skin="amethyst" title="Amethyst">
               <span class="lo-skin-swatch" style="--skin:#9b59b6; --glow:#ff7a18;"></span>
               <span class="lo-skin-name">Amethyst</span>
+              <span class="lo-skin-price">Free</span>
+              <span class="lo-skin-action">Equipped</span>
             </button>
             <button class="lo-skin-btn" data-skin="ember" title="Ember">
               <span class="lo-skin-swatch" style="--skin:#d35400; --glow:#ff6a00;"></span>
               <span class="lo-skin-name">Ember</span>
+              <span class="lo-skin-price">12 coins</span>
+              <span class="lo-skin-action">Buy</span>
             </button>
             <button class="lo-skin-btn" data-skin="tide" title="Tide">
               <span class="lo-skin-swatch" style="--skin:#2980b9; --glow:#2e8bc0;"></span>
               <span class="lo-skin-name">Tide</span>
+              <span class="lo-skin-price">16 coins</span>
+              <span class="lo-skin-action">Buy</span>
             </button>
             <button class="lo-skin-btn" data-skin="verdant" title="Verdant">
               <span class="lo-skin-swatch" style="--skin:#27ae60; --glow:#4ecb71;"></span>
               <span class="lo-skin-name">Verdant</span>
+              <span class="lo-skin-price">20 coins</span>
+              <span class="lo-skin-action">Buy</span>
             </button>
             <button class="lo-skin-btn" data-skin="storm" title="Storm">
               <span class="lo-skin-swatch" style="--skin:#5d6d7e; --glow:#7d8cff;"></span>
               <span class="lo-skin-name">Storm</span>
+              <span class="lo-skin-price">24 coins</span>
+              <span class="lo-skin-action">Buy</span>
             </button>
           </div>
         </div>
@@ -176,6 +196,24 @@
       </section>
 
       <aside class="lo-right">
+        <div class="lo-card" id="daily-quests-card">
+          <div class="lo-card-head"><span>Daily</span> DAILY QUESTS</div>
+          <div class="lo-quest-note" id="daily-quest-reset">Refreshes daily.</div>
+          <div class="lo-quest-list" id="daily-quest-list"></div>
+        </div>
+
+        <div class="lo-card" id="shop-card">
+          <div class="lo-card-head"><span>Shop</span> ARCANE SHOP</div>
+          <div class="lo-shop-summary">
+            <div>
+              <div class="lo-shop-title" id="shop-selected-skin-name">Amethyst</div>
+              <div class="lo-shop-copy" id="shop-selected-skin-copy">Default skin equipped.</div>
+            </div>
+            <button class="lo-shop-cta" id="shop-selected-skin-btn" type="button">Equipped</button>
+          </div>
+          <div class="lo-shop-note" id="shop-signedin-note">Sign in to save purchased skins to your account.</div>
+        </div>
+
         <div class="lo-card">
           <div class="lo-card-head"><span>📊</span> LIFETIME STATS</div>
           <div class="lo-stat-row">

@@ -4,8 +4,8 @@ const ARENA = 40;
 
 export function createScene(canvas) {
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x120822);
-  scene.fog = new THREE.FogExp2(0x1e0d38, 0.010);
+  scene.background = new THREE.Color(0x8ec9ff);
+  scene.fog = new THREE.FogExp2(0xcfe7ff, 0.0045);
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -14,15 +14,15 @@ export function createScene(canvas) {
   const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.1, 120);
 
   // ── Lighting ───────────────────────────────────────────────────────────────
-  scene.add(new THREE.AmbientLight(0x88779a, 0.6));
+  scene.add(new THREE.AmbientLight(0xf4ead9, 0.95));
 
-  const moon = new THREE.DirectionalLight(0xc8d8ff, 1.2);
-  moon.position.set(-20, 50, 10);
-  scene.add(moon);
+  const sun = new THREE.DirectionalLight(0xfff2c2, 2.0);
+  sun.position.set(-24, 42, 18);
+  scene.add(sun);
 
-  const warmFill = new THREE.DirectionalLight(0xff9944, 0.35);
-  warmFill.position.set(20, 10, -20);
-  scene.add(warmFill);
+  const skyFill = new THREE.DirectionalLight(0xbfe2ff, 0.7);
+  skyFill.position.set(20, 18, -20);
+  scene.add(skyFill);
 
   // ── Ground (dark grey flagstone) ──────────────────────────────────────────
   function makeFlagstoneTexture() {
@@ -177,7 +177,7 @@ export function createScene(canvas) {
   buildWall( ARENA,  0,     true);
 
   // Corner towers + torchlight
-  const torchMat = new THREE.MeshStandardMaterial({ color: 0xff6600, emissive: 0xff4400, emissiveIntensity: 1.2, roughness: 0.5 });
+  const torchMat = new THREE.MeshStandardMaterial({ color: 0xff8a3d, emissive: 0xff6a1a, emissiveIntensity: 0.5, roughness: 0.5 });
   [-ARENA, ARENA].forEach(tx => [-ARENA, ARENA].forEach(tz => {
     const tower = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.6, 6.8, 8), stoneMat);
     tower.position.set(tx, 3.4, tz);
@@ -197,7 +197,7 @@ export function createScene(canvas) {
     flame.position.set(tx + inset * 0.5, 5.2, tz + insetZ * 0.5);
     scene.add(flame);
 
-    const pt = new THREE.PointLight(0xff8833, 3.5, 22);
+    const pt = new THREE.PointLight(0xffa04d, 1.1, 14);
     pt.position.set(tx + inset * 0.5, 5.2, tz + insetZ * 0.5);
     scene.add(pt);
   }));
@@ -211,7 +211,7 @@ export function createScene(canvas) {
 
   const trunkMats  = TREE_VARIANTS.map(v => new THREE.MeshStandardMaterial({ color: v.trunk, roughness: 0.95 }));
   const foliageMats = TREE_VARIANTS.map(v => new THREE.MeshStandardMaterial({
-    color: v.foliage, roughness: 0.8, emissive: v.glow, emissiveIntensity: 0.6,
+    color: v.foliage, roughness: 0.8, emissive: v.glow, emissiveIntensity: 0.2,
   }));
 
   function makeTree(x, z, vi) {
@@ -493,6 +493,100 @@ export function createScene(canvas) {
   scene.add(new THREE.Points(starGeo, starMat));
 
   // ── Resize handler ────────────────────────────────────────────────────────
+  const MID_H = 2.2;
+  const MID_SIZE = 12;
+  const MID_HALF = MID_SIZE / 2;
+  const MID_RAMP_RUN = 4.5;
+  const MID_RAMP_LEN = Math.sqrt(MID_RAMP_RUN * MID_RAMP_RUN + MID_H * MID_H);
+  const MID_RAMP_ANG = Math.atan2(MID_H, MID_RAMP_RUN);
+
+  addBox(0, MID_H / 2, 0, MID_SIZE, MID_H, MID_SIZE);
+
+  const centerCap = new THREE.Mesh(
+    new THREE.CylinderGeometry(5.6, 6.9, 1.5, 8),
+    stoneMat,
+  );
+  centerCap.position.set(0, MID_H + 0.55, 0);
+  centerCap.rotation.y = Math.PI / 8;
+  scene.add(centerCap);
+
+  [
+    { axis: 'z', sign: -1 },
+    { axis: 'z', sign:  1 },
+    { axis: 'x', sign: -1 },
+    { axis: 'x', sign:  1 },
+  ].forEach(({ axis, sign }) => {
+    const cx = axis === 'x' ? sign * (MID_HALF + MID_RAMP_RUN / 2) : 0;
+    const cz = axis === 'z' ? sign * (MID_HALF + MID_RAMP_RUN / 2) : 0;
+    const ramp = addBox(
+      cx,
+      MID_H / 2,
+      cz,
+      axis === 'z' ? 5.6 : MID_RAMP_LEN,
+      0.45,
+      axis === 'z' ? MID_RAMP_LEN : 5.6,
+    );
+    if (axis === 'z') ramp.rotation.x = -sign * MID_RAMP_ANG;
+    else ramp.rotation.z = sign * MID_RAMP_ANG;
+
+    if (axis === 'z') {
+      elevRamps.push({
+        xMin: -2.8, xMax: 2.8,
+        zMin: Math.min(sign * MID_HALF, sign * (MID_HALF + MID_RAMP_RUN)),
+        zMax: Math.max(sign * MID_HALF, sign * (MID_HALF + MID_RAMP_RUN)),
+        axis: 'z',
+        axisStart: sign * (MID_HALF + MID_RAMP_RUN),
+        axisEnd: sign * MID_HALF,
+        yStart: GRND_Y_,
+        yEnd: GRND_Y_ + MID_H,
+      });
+    } else {
+      elevRamps.push({
+        xMin: Math.min(sign * MID_HALF, sign * (MID_HALF + MID_RAMP_RUN)),
+        xMax: Math.max(sign * MID_HALF, sign * (MID_HALF + MID_RAMP_RUN)),
+        zMin: -2.8, zMax: 2.8,
+        axis: 'x',
+        axisStart: sign * (MID_HALF + MID_RAMP_RUN),
+        axisEnd: sign * MID_HALF,
+        yStart: GRND_Y_,
+        yEnd: GRND_Y_ + MID_H,
+      });
+    }
+  });
+
+  elevPlatforms.push({
+    xMin: -MID_HALF,
+    xMax: MID_HALF,
+    zMin: -MID_HALF,
+    zMax: MID_HALF,
+    y: GRND_Y_ + MID_H,
+  });
+  elevBoxes.push({
+    xMin: -MID_HALF,
+    xMax: MID_HALF,
+    zMin: -MID_HALF,
+    zMax: MID_HALF,
+    maxY: GRND_Y_ + MID_H,
+  });
+
+  [
+    [-3.6, MID_H + 0.85, -2.6, 1.7, 1.6, 1.5, -0.25],
+    [3.2,  MID_H + 0.7,  2.4, 1.9, 1.4, 1.6,  0.18],
+    [-0.8, MID_H + 0.6,  3.3, 1.4, 1.2, 1.3,  0.35],
+  ].forEach(([x, y, z, w, h, d, rot]) => {
+    const rock = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), stoneMat);
+    rock.position.set(x, y, z);
+    rock.rotation.set(rot * 0.3, rot, rot * 0.2);
+    scene.add(rock);
+    elevBoxes.push({
+      xMin: x - w / 2,
+      xMax: x + w / 2,
+      zMin: z - d / 2,
+      zMax: z + d / 2,
+      maxY: y + h / 2,
+    });
+  });
+
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();

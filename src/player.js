@@ -6,14 +6,17 @@ const LERP_SPEED = 0.18;
 const PLAYER_COLORS = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf39c12, 0x1abc9c, 0xe91e63, 0xff6b35];
 
 export const PLAYER_SKINS = {
-  amethyst: { name: 'Amethyst', body: 0x9b59b6, accent: 0xffb347, glow: 0xff7a18 },
-  ember:    { name: 'Ember',    body: 0xd35400, accent: 0xffc36b, glow: 0xff6a00 },
-  tide:     { name: 'Tide',     body: 0x2980b9, accent: 0x8edcff, glow: 0x2e8bc0 },
-  verdant:  { name: 'Verdant',  body: 0x27ae60, accent: 0xb6ff8d, glow: 0x4ecb71 },
-  storm:    { name: 'Storm',    body: 0x5d6d7e, accent: 0xd6dbff, glow: 0x7d8cff },
+  amethyst: { name: 'Amethyst', body: 0x9b59b6, accent: 0xffb347, glow: 0xff7a18, price: 0, unlockByDefault: true },
+  ember:    { name: 'Ember',    body: 0xd35400, accent: 0xffc36b, glow: 0xff6a00, price: 12, unlockByDefault: false },
+  tide:     { name: 'Tide',     body: 0x2980b9, accent: 0x8edcff, glow: 0x2e8bc0, price: 16, unlockByDefault: false },
+  verdant:  { name: 'Verdant',  body: 0x27ae60, accent: 0xb6ff8d, glow: 0x4ecb71, price: 20, unlockByDefault: false },
+  storm:    { name: 'Storm',    body: 0x5d6d7e, accent: 0xd6dbff, glow: 0x7d8cff, price: 24, unlockByDefault: false },
 };
 
 export const DEFAULT_SKIN_ID = 'amethyst';
+export const DEFAULT_UNLOCKED_SKIN_IDS = Object.entries(PLAYER_SKINS)
+  .filter(([, skin]) => skin.unlockByDefault)
+  .map(([skinId]) => skinId);
 
 export function remoteColor(actorNr) {
   return PLAYER_COLORS[actorNr % PLAYER_COLORS.length];
@@ -25,6 +28,7 @@ export function getSkinConfig(skinId = DEFAULT_SKIN_ID) {
 
 export function createFirstPersonWand() {
   const group = new THREE.Group();
+  group.scale.setScalar(1.12);
 
   const wandGeo = new THREE.CylinderGeometry(0.045, 0.055, 0.82, 8);
   const wandMat = new THREE.MeshStandardMaterial({ color: 0x5b341c, roughness: 0.72 });
@@ -69,39 +73,63 @@ export function createFirstPersonWand() {
     opacity: 0.72,
   });
 
-  const scopeMountGeo = new THREE.BoxGeometry(0.06, 0.15, 0.12);
+  const scopeMountGeo = new THREE.BoxGeometry(0.08, 0.19, 0.14);
   const scopeMount = new THREE.Mesh(scopeMountGeo, scopeMat);
-  scopeMount.position.copy(wand.position).add(new THREE.Vector3(-0.02, 0.12, 0.02));
+  scopeMount.position.copy(wand.position).add(new THREE.Vector3(-0.03, 0.16, 0.03));
   scopeMount.rotation.z = wand.rotation.z;
   scopeMount.rotation.x = wand.rotation.x;
   group.add(scopeMount);
 
-  const scopeTubeGeo = new THREE.CylinderGeometry(0.07, 0.07, 0.34, 12);
+  const scopeTubeGeo = new THREE.CylinderGeometry(0.085, 0.095, 0.5, 16);
   const scopeTube = new THREE.Mesh(scopeTubeGeo, scopeMat);
-  scopeTube.position.copy(wand.position).add(new THREE.Vector3(0.02, 0.2, -0.02));
+  scopeTube.position.copy(wand.position).add(new THREE.Vector3(0.05, 0.25, -0.03));
   scopeTube.rotation.z = wand.rotation.z;
   scopeTube.rotation.x = wand.rotation.x;
   group.add(scopeTube);
 
-  const scopeRingGeo = new THREE.TorusGeometry(0.052, 0.012, 8, 18);
+  const scopeRingGeo = new THREE.TorusGeometry(0.07, 0.016, 10, 24);
   const frontRing = new THREE.Mesh(scopeRingGeo, scopeMat);
-  frontRing.position.copy(scopeTube.position).add(new THREE.Vector3(0.12, 0.14, -0.02));
+  frontRing.position.copy(scopeTube.position).add(new THREE.Vector3(0.18, 0.2, -0.03));
   frontRing.rotation.y = Math.PI / 2;
   frontRing.rotation.z = wand.rotation.z;
   frontRing.rotation.x = wand.rotation.x;
   group.add(frontRing);
 
   const rearRing = frontRing.clone();
-  rearRing.position.copy(scopeTube.position).add(new THREE.Vector3(-0.12, -0.14, 0.02));
+  rearRing.position.copy(scopeTube.position).add(new THREE.Vector3(-0.18, -0.2, 0.03));
   group.add(rearRing);
 
-  const lensGeo = new THREE.CircleGeometry(0.047, 20);
+  const lensGeo = new THREE.CircleGeometry(0.064, 24);
   const frontLens = new THREE.Mesh(lensGeo, glassMat);
-  frontLens.position.copy(scopeTube.position).add(new THREE.Vector3(0.118, 0.135, -0.018));
+  frontLens.position.copy(scopeTube.position).add(new THREE.Vector3(0.176, 0.195, -0.028));
   frontLens.rotation.y = -Math.PI / 2;
   frontLens.rotation.z = wand.rotation.z;
   frontLens.rotation.x = wand.rotation.x;
   group.add(frontLens);
+
+  const rearLens = new THREE.Mesh(lensGeo, glassMat.clone());
+  rearLens.position.copy(scopeTube.position).add(new THREE.Vector3(-0.176, -0.195, 0.028));
+  rearLens.rotation.y = -Math.PI / 2;
+  rearLens.rotation.z = wand.rotation.z;
+  rearLens.rotation.x = wand.rotation.x;
+  rearLens.material.opacity = 0.5;
+  group.add(rearLens);
+
+  const eyepieceGeo = new THREE.CylinderGeometry(0.11, 0.085, 0.12, 16);
+  const eyepiece = new THREE.Mesh(eyepieceGeo, scopeMat);
+  eyepiece.position.copy(scopeTube.position).add(new THREE.Vector3(-0.21, -0.235, 0.035));
+  eyepiece.rotation.z = wand.rotation.z;
+  eyepiece.rotation.x = wand.rotation.x;
+  group.add(eyepiece);
+
+  group.traverse((node) => {
+    if (!node.isMesh) return;
+    node.renderOrder = 50;
+    if (node.material) {
+      node.material.depthTest = false;
+      node.material.depthWrite = false;
+    }
+  });
 
   group.userData = { crystal, frontLens };
   applyFirstPersonWandSkin(group, DEFAULT_SKIN_ID);
@@ -162,6 +190,17 @@ export function createWizardModel(color = getSkinConfig(DEFAULT_SKIN_ID).body, o
   wandMesh.rotation.z = Math.PI / 6;
   wandMesh.position.set(0.56, 0.1, 0.0);
   group.add(wandMesh);
+
+  const wandScopeMat = new THREE.MeshStandardMaterial({ color: 0x2b2f39, roughness: 0.42, metalness: 0.58 });
+  const wandScopeMount = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.09, 0.08), wandScopeMat);
+  wandScopeMount.position.set(0.5, 0.24, 0.0);
+  wandScopeMount.rotation.z = wandMesh.rotation.z;
+  group.add(wandScopeMount);
+
+  const wandScopeTube = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.26, 12), wandScopeMat);
+  wandScopeTube.position.set(0.57, 0.31, 0.0);
+  wandScopeTube.rotation.z = wandMesh.rotation.z;
+  group.add(wandScopeTube);
 
   let nameTag = null;
   if (includeNameTag) {
@@ -290,7 +329,6 @@ export class Player {
     if (this.hitFlashTimer > 0) {
       this.hitFlashTimer -= delta;
       this._bodyMat.color.setHex(this.hitFlashTimer > 0 ? 0xff2222 : this._bodyColor);
-      if (this.hitFlashTimer <= 0) this._bodyMat.color.setHex(this._bodyColor);
     }
   }
 
@@ -301,7 +339,7 @@ export class Player {
     } else if (spell === 'ice') {
       this.slowTimer = 3;
     } else if (spell === 'lightning') {
-      this.silenceTimer = 1;
+      this.silenceTimer = 2;
     } else if (spell === 'earth') {
       this.groundedTimer = 3;
     }
