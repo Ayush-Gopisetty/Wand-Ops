@@ -1236,7 +1236,9 @@ function getGroundY(x, z) {
   for (const r of colliders.ramps || []) {
     if (x >= r.xMin && x <= r.xMax && z >= r.zMin && z <= r.zMax) {
       const a = r.axis === 'z' ? z : x;
-      const t = (a - r.axisStart) / (r.axisEnd - r.axisStart);
+      let t = (a - r.axisStart) / (r.axisEnd - r.axisStart);
+      // Snap to the top of the physical step underfoot so players can't sink into the stone
+      if (r.steps) t = Math.ceil(clamp(t, 0, 1) * r.steps) / r.steps;
       y = Math.max(y, r.yStart + t * (r.yEnd - r.yStart));
     }
   }

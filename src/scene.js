@@ -202,92 +202,6 @@ export function createScene(canvas) {
     scene.add(pt);
   }));
 
-  // ── Fantasy Trees ──────────────────────────────────────────────────────────
-  const TREE_VARIANTS = [
-    { trunk: 0x3d1a08, foliage: 0x0d3d1a, glow: 0x04200e, mushColor: 0xcc44ff, height: 4.0 },
-    { trunk: 0x2a1505, foliage: 0x2d1669, glow: 0x150832, mushColor: 0x44aaff, height: 5.2 },
-    { trunk: 0x4a2010, foliage: 0x0d4d42, glow: 0x04261e, mushColor: 0x44ffaa, height: 4.6 },
-  ];
-
-  const trunkMats  = TREE_VARIANTS.map(v => new THREE.MeshStandardMaterial({ color: v.trunk, roughness: 0.95 }));
-  const foliageMats = TREE_VARIANTS.map(v => new THREE.MeshStandardMaterial({
-    color: v.foliage, roughness: 0.8, emissive: v.glow, emissiveIntensity: 0.2,
-  }));
-
-  function makeTree(x, z, vi) {
-    const v = TREE_VARIANTS[vi];
-    const group = new THREE.Group();
-
-    // Trunk — slightly tapered cylinder
-    const trunk = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.22, 0.44, v.height, 7),
-      trunkMats[vi]
-    );
-    trunk.position.y = v.height / 2;
-    group.add(trunk);
-
-    // Knot / root buttresses
-    for (let r = 0; r < 4; r++) {
-      const angle = (r / 4) * Math.PI * 2;
-      const root = new THREE.Mesh(
-        new THREE.BoxGeometry(0.18, 0.7, 0.5),
-        trunkMats[vi]
-      );
-      root.position.set(Math.cos(angle) * 0.38, 0.35, Math.sin(angle) * 0.38);
-      root.rotation.y = angle;
-      root.rotation.z = Math.cos(angle) * 0.35;
-      group.add(root);
-    }
-
-    // Canopy — stacked spheres for fluffy look
-    [
-      [0,    0,    0,    2.3],
-      [0.5,  0,    0.3,  1.9],
-      [-0.4, 0,   -0.2,  1.8],
-      [0,    1.4,  0,    1.6],
-      [0,    2.7,  0,    1.1],
-    ].forEach(([cx, cy, cz, r]) => {
-      const leaf = new THREE.Mesh(new THREE.SphereGeometry(r, 9, 7), foliageMats[vi]);
-      leaf.position.set(cx, v.height + 0.6 + cy, cz);
-      group.add(leaf);
-    });
-
-    // Glowing mushrooms at base
-    const mushMat = new THREE.MeshStandardMaterial({
-      color: v.mushColor, emissive: v.mushColor, emissiveIntensity: 1.0, roughness: 0.4,
-    });
-    const stemMat = new THREE.MeshStandardMaterial({ color: 0xddddc8, roughness: 0.9 });
-
-    for (let m = 0; m < 4; m++) {
-      const angle = (m / 4) * Math.PI * 2 + vi * 0.9;
-      const dist  = 0.75 + (m % 2) * 0.3;
-      const mush  = new THREE.Group();
-      const stem  = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, 0.32, 5), stemMat);
-      stem.position.y = 0.16;
-      mush.add(stem);
-      const cap = new THREE.Mesh(new THREE.SphereGeometry(0.18, 7, 5), mushMat);
-      cap.scale.y = 0.55;
-      cap.position.y = 0.34;
-      mush.add(cap);
-      mush.position.set(Math.cos(angle) * dist, 0, Math.sin(angle) * dist);
-      group.add(mush);
-    }
-
-    group.position.set(x, 0, z);
-    scene.add(group);
-  }
-
-  const TREE_POSITIONS = [
-    [-18, -18, 0], [ 18, -18, 1],
-    [-18,  18, 2], [ 18,  18, 0],
-    [  0, -32, 1], [  0,  32, 2],
-    [-32,   0, 0], [ 32,   0, 1],
-    [-30,  22, 2], [ 30, -22, 0],
-    [-22,  30, 1], [ 22, -30, 2],
-  ];
-  TREE_POSITIONS.forEach(([x, z, vi]) => makeTree(x, z, vi));
-
-
   // ── Shared helpers ────────────────────────────────────────────────────────
   const GRND_Y_ = 0.75;
   const elevPlatforms = [], elevRamps = [], elevBoxes = [];
@@ -299,11 +213,26 @@ export function createScene(canvas) {
     return m;
   }
 
+  // Stepped staircase visual (replaces a single sloped ramp box with stacked
+  // steps, like the reference image). Collision still uses a smooth ramp.
+  function addStaircase(axis, otherCenter, otherLen, lowCoord, highCoord, height, steps = 6) {
+    for (let i = 0; i < steps; i++) {
+      const t0 = i / steps, t1 = (i + 1) / steps;
+      const a0 = lowCoord + (highCoord - lowCoord) * t0;
+      const a1 = lowCoord + (highCoord - lowCoord) * t1;
+      const aCenter = (a0 + a1) / 2;
+      const aLen    = Math.abs(a1 - a0) + 0.08;
+      const stepTop = height * t1;
+      addBox(
+        axis === 'z' ? otherCenter : aCenter, stepTop / 2, axis === 'z' ? aCenter : otherCenter,
+        axis === 'z' ? otherLen : aLen, stepTop, axis === 'z' ? aLen : otherLen,
+      );
+    }
+  }
+
   // ── Outer cardinal platforms (L1, height 3.5) ────────────────────────────
   const L1_H    = 3.5;
   const L1_RUN  = 7.0;
-  const L1_SLEN = Math.sqrt(L1_RUN * L1_RUN + L1_H * L1_H);
-  const L1_ANG  = Math.atan2(L1_H, L1_RUN);
 
   [
     { cx:  0,   cz: -40, axis: 'z', pw: 14, pd: 10 },
@@ -319,13 +248,7 @@ export function createScene(canvas) {
 
     const edgeP = isZ ? (cz - sign * hd) : (cx - sign * hw);
     const edgeG = edgeP - sign * L1_RUN;
-    const rc    = (edgeP + edgeG) / 2;
-    const ramp  = addBox(
-      isZ ? cx : rc, L1_H / 2, isZ ? rc : cz,
-      isZ ? pw : L1_SLEN, 0.5, isZ ? L1_SLEN : pd,
-    );
-    if (isZ) ramp.rotation.x = -sign * L1_ANG;
-    else     ramp.rotation.z =  sign * L1_ANG;
+    addStaircase(axis, isZ ? cx : cz, isZ ? pw : pd, edgeG, edgeP, L1_H);
 
     // Parapets (3-sided cover)
     const parY = L1_H + 0.6;
@@ -342,17 +265,15 @@ export function createScene(canvas) {
     elevPlatforms.push({ xMin: cx - hw, xMax: cx + hw, zMin: cz - hd, zMax: cz + hd, y: GRND_Y_ + L1_H });
     elevBoxes.push({     xMin: cx - hw, xMax: cx + hw, zMin: cz - hd, zMax: cz + hd, maxY: GRND_Y_ + L1_H });
     if (isZ) {
-      elevRamps.push({ xMin: cx - hw, xMax: cx + hw, zMin: Math.min(edgeP, edgeG), zMax: Math.max(edgeP, edgeG), axis: 'z', axisStart: edgeG, axisEnd: edgeP, yStart: GRND_Y_, yEnd: GRND_Y_ + L1_H });
+      elevRamps.push({ xMin: cx - hw, xMax: cx + hw, zMin: Math.min(edgeP, edgeG), zMax: Math.max(edgeP, edgeG), axis: 'z', axisStart: edgeG, axisEnd: edgeP, yStart: GRND_Y_, yEnd: GRND_Y_ + L1_H, steps: 6 });
     } else {
-      elevRamps.push({ xMin: Math.min(edgeP, edgeG), xMax: Math.max(edgeP, edgeG), zMin: cz - hd, zMax: cz + hd, axis: 'x', axisStart: edgeG, axisEnd: edgeP, yStart: GRND_Y_, yEnd: GRND_Y_ + L1_H });
+      elevRamps.push({ xMin: Math.min(edgeP, edgeG), xMax: Math.max(edgeP, edgeG), zMin: cz - hd, zMax: cz + hd, axis: 'x', axisStart: edgeG, axisEnd: edgeP, yStart: GRND_Y_, yEnd: GRND_Y_ + L1_H, steps: 6 });
     }
   });
 
   // ── Diagonal mid-platforms (L2, height 2.2) — placed well outside castle ──
   const L2_H    = 2.2;
   const L2_RUN  = 5.5;
-  const L2_SLEN = Math.sqrt(L2_RUN * L2_RUN + L2_H * L2_H);
-  const L2_ANG  = Math.atan2(L2_H, L2_RUN);
 
   // At ±28 the ramp ground-end lands at ±22 — clear of castle walls at ±13
   [[-28, -28], [28, -28], [-28, 28], [28, 28]].forEach(([cx, cz]) => {
@@ -361,9 +282,7 @@ export function createScene(canvas) {
 
     const edgeP = cx - signX * 4.5;
     const edgeG = edgeP - signX * L2_RUN;
-    const rc    = (edgeP + edgeG) / 2;
-    const ramp  = addBox(rc, L2_H / 2, cz, L2_SLEN, 0.4, 9);
-    ramp.rotation.z = signX * L2_ANG;
+    addStaircase('x', cz, 9, edgeG, edgeP, L2_H);
 
     const parY = L2_H + 0.55;
     addBox(cx + signX * 4.5, parY, cz, 0.4, 1.1, 9);
@@ -372,7 +291,7 @@ export function createScene(canvas) {
 
     elevPlatforms.push({ xMin: cx - 4.5, xMax: cx + 4.5, zMin: cz - 4.5, zMax: cz + 4.5, y: GRND_Y_ + L2_H });
     elevBoxes.push({     xMin: cx - 4.5, xMax: cx + 4.5, zMin: cz - 4.5, zMax: cz + 4.5, maxY: GRND_Y_ + L2_H });
-    elevRamps.push({ xMin: Math.min(edgeP, edgeG), xMax: Math.max(edgeP, edgeG), zMin: cz - 4.5, zMax: cz + 4.5, axis: 'x', axisStart: edgeG, axisEnd: edgeP, yStart: GRND_Y_, yEnd: GRND_Y_ + L2_H });
+    elevRamps.push({ xMin: Math.min(edgeP, edgeG), xMax: Math.max(edgeP, edgeG), zMin: cz - 4.5, zMax: cz + 4.5, axis: 'x', axisStart: edgeG, axisEnd: edgeP, yStart: GRND_Y_, yEnd: GRND_Y_ + L2_H, steps: 6 });
   });
 
   // ── Central Castle ────────────────────────────────────────────────────────
@@ -420,30 +339,22 @@ export function createScene(canvas) {
   elevPlatforms.push({ xMin:  CW - halfCWT, xMax:  CW + halfCWT, zMin: -(CW - CTR), zMax: CW - CTR,  y: WALL_Y });
   elevPlatforms.push({ xMin: -CW - halfCWT, xMax: -CW + halfCWT, zMin: -(CW - CTR), zMax: CW - CTR,  y: WALL_Y });
 
-  // Ramps from courtyard up to each wall top
-  const WR_RUN  = 8.5;
-  const WR_SLEN = Math.sqrt(WR_RUN * WR_RUN + CWAH * CWAH);
-  const WR_ANG  = Math.atan2(CWAH, WR_RUN);
+  // Stairs from courtyard up to each wall top
+  // North stairs (x=3..7,  z=-3 → z=-(CW-halfCWT)=-11.5)
+  { addStaircase('z', 5, 4, -3, -CW + halfCWT, CWAH);
+    elevRamps.push({ xMin: 3, xMax: 7, zMin: -CW + halfCWT, zMax: -3, axis: 'z', axisStart: -3, axisEnd: -CW + halfCWT, yStart: GRND_Y_, yEnd: WALL_Y, steps: 6 }); }
 
-  // North ramp  (x=3..7,  z=-3 → z=-(CW-halfCWT)=-11.5)
-  { const rz = (-3 + (-CW + halfCWT)) / 2;
-    const wr = addBox(5, CWAH / 2, rz, 4, 0.5, WR_SLEN); wr.rotation.x = +WR_ANG;
-    elevRamps.push({ xMin: 3, xMax: 7, zMin: -CW + halfCWT, zMax: -3, axis: 'z', axisStart: -3, axisEnd: -CW + halfCWT, yStart: GRND_Y_, yEnd: WALL_Y }); }
+  // South stairs (x=-7..-3, z=3 → z=CW-halfCWT=11.5)
+  { addStaircase('z', -5, 4, 3, CW - halfCWT, CWAH);
+    elevRamps.push({ xMin: -7, xMax: -3, zMin: 3, zMax: CW - halfCWT, axis: 'z', axisStart: 3, axisEnd: CW - halfCWT, yStart: GRND_Y_, yEnd: WALL_Y, steps: 6 }); }
 
-  // South ramp  (x=-7..-3, z=3 → z=CW-halfCWT=11.5)
-  { const rz = (3 + CW - halfCWT) / 2;
-    const wr = addBox(-5, CWAH / 2, rz, 4, 0.5, WR_SLEN); wr.rotation.x = -WR_ANG;
-    elevRamps.push({ xMin: -7, xMax: -3, zMin: 3, zMax: CW - halfCWT, axis: 'z', axisStart: 3, axisEnd: CW - halfCWT, yStart: GRND_Y_, yEnd: WALL_Y }); }
+  // East stairs  (z=3..7,   x=3 → x=CW-halfCWT=11.5) — SE corner, clear of North's NE corner
+  { addStaircase('x', 5, 4, 3, CW - halfCWT, CWAH);
+    elevRamps.push({ xMin: 3, xMax: CW - halfCWT, zMin: 3, zMax: 7, axis: 'x', axisStart: 3, axisEnd: CW - halfCWT, yStart: GRND_Y_, yEnd: WALL_Y, steps: 6 }); }
 
-  // East ramp   (z=-7..-3, x=3 → x=CW-halfCWT=11.5)
-  { const rx = (3 + CW - halfCWT) / 2;
-    const wr = addBox(rx, CWAH / 2, -5, WR_SLEN, 0.5, 4); wr.rotation.z = +WR_ANG;
-    elevRamps.push({ xMin: 3, xMax: CW - halfCWT, zMin: -7, zMax: -3, axis: 'x', axisStart: 3, axisEnd: CW - halfCWT, yStart: GRND_Y_, yEnd: WALL_Y }); }
-
-  // West ramp   (z=3..7,   x=-3 → x=-(CW-halfCWT)=-11.5)
-  { const rx = (-3 + (-CW + halfCWT)) / 2;
-    const wr = addBox(rx, CWAH / 2, 5, WR_SLEN, 0.5, 4); wr.rotation.z = -WR_ANG;
-    elevRamps.push({ xMin: -CW + halfCWT, xMax: -3, zMin: 3, zMax: 7, axis: 'x', axisStart: -3, axisEnd: -CW + halfCWT, yStart: GRND_Y_, yEnd: WALL_Y }); }
+  // West stairs  (z=-7..-3, x=-3 → x=-(CW-halfCWT)=-11.5) — NW corner, clear of South's SW corner
+  { addStaircase('x', -5, 4, -3, -CW + halfCWT, CWAH);
+    elevRamps.push({ xMin: -CW + halfCWT, xMax: -3, zMin: -7, zMax: -3, axis: 'x', axisStart: -3, axisEnd: -CW + halfCWT, yStart: GRND_Y_, yEnd: WALL_Y, steps: 6 }); }
 
   // Corner towers
   [[-CW, -CW], [CW, -CW], [CW, CW], [-CW, CW]].forEach(([tx, tz]) => {
@@ -462,17 +373,53 @@ export function createScene(canvas) {
     scene.add(tPt);
   });
 
-  // Flag + light at castle courtyard centre
+  // Banners on the curtain walls (red/blue, like the reference image)
+  function addBanner(x, z, faceX, hex) {
+    const flag = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.8, 2.8),
+      new THREE.MeshStandardMaterial({ color: hex, roughness: 0.85, side: THREE.DoubleSide }),
+    );
+    flag.position.set(x, CWAH - 1.0, z);
+    flag.rotation.y = faceX ? Math.PI / 2 : 0;
+    scene.add(flag);
+  }
+  addBanner(CW - 0.2, -6,  true,  0xcc2222);
+  addBanner(CW - 0.2,  6,  true,  0x2244cc);
+  addBanner(-CW + 0.2, -6, true,  0x2244cc);
+  addBanner(-CW + 0.2,  6, true,  0xcc2222);
+
+  // ── Central Keep — rises above the curtain walls, the map's high ground ──
+  const KEEP_HW   = 2.5;                 // half-size: keep walls at x=±KEEP_HW, z=±KEEP_HW
+  const KEEP_H    = 7.0;                 // height above ground (taller than CWAH=5.5)
+  const KEEP_TOPY = GRND_Y_ + KEEP_H;    // 7.75 — clears the curtain wall top (6.25)
+
+  addBox(0, KEEP_H / 2, 0, KEEP_HW * 2, KEEP_H, KEEP_HW * 2);
+  [[-KEEP_HW, -KEEP_HW], [KEEP_HW, -KEEP_HW], [KEEP_HW, KEEP_HW], [-KEEP_HW, KEEP_HW]].forEach(([mx, mz]) => {
+    addBox(mx, KEEP_H + 0.6, mz, 0.9, 1.2, 0.9);
+  });
+
+  // North keep stairs: ground at z=-11.5 (low) up to the keep's north face at z=-2.5 (high)
+  { addStaircase('z', 0, 3, -(CW - halfCWT), -KEEP_HW, KEEP_H);
+    elevRamps.push({ xMin: -1.5, xMax: 1.5, zMin: -(CW - halfCWT), zMax: -KEEP_HW, axis: 'z', axisStart: -(CW - halfCWT), axisEnd: -KEEP_HW, yStart: GRND_Y_, yEnd: KEEP_TOPY, steps: 6 }); }
+
+  // South keep stairs: ground at z=11.5 (low) up to the keep's south face at z=2.5 (high)
+  { addStaircase('z', 0, 3, CW - halfCWT, KEEP_HW, KEEP_H);
+    elevRamps.push({ xMin: -1.5, xMax: 1.5, zMin: KEEP_HW, zMax: CW - halfCWT, axis: 'z', axisStart: CW - halfCWT, axisEnd: KEEP_HW, yStart: GRND_Y_, yEnd: KEEP_TOPY, steps: 6 }); }
+
+  elevPlatforms.push({ xMin: -KEEP_HW, xMax: KEEP_HW, zMin: -KEEP_HW, zMax: KEEP_HW, y: KEEP_TOPY });
+  elevBoxes.push({     xMin: -KEEP_HW, xMax: KEEP_HW, zMin: -KEEP_HW, zMax: KEEP_HW, maxY: KEEP_TOPY });
+
+  // Flag + light atop the keep
   const poleMat = new THREE.MeshStandardMaterial({ color: 0x555566, roughness: 0.6 });
-  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 8.0, 6), poleMat);
-  pole.position.set(0, 4.0, 0);
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 4.0, 6), poleMat);
+  pole.position.set(0, KEEP_TOPY + 2.0, 0);
   scene.add(pole);
   const flagMat2 = new THREE.MeshStandardMaterial({ color: 0xcc1111, emissive: 0x550000, emissiveIntensity: 0.5, side: THREE.DoubleSide });
   const flagMesh = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 1.1), flagMat2);
-  flagMesh.position.set(1.0, 7.6, 0);
+  flagMesh.position.set(1.0, KEEP_TOPY + 3.3, 0);
   scene.add(flagMesh);
   const keepPt = new THREE.PointLight(0xff7733, 3.0, 24);
-  keepPt.position.set(0, 3.5, 0);
+  keepPt.position.set(0, KEEP_TOPY + 1.0, 0);
   scene.add(keepPt);
 
   // Castle AABB wall colliders (maxY=CWAH so players on wall tops are not blocked)
@@ -490,6 +437,42 @@ export function createScene(canvas) {
     { x: -CW, z:  CW, radius: CTR },
   ];
 
+  // ── Decor: trees, bushes, puddles in the open courtyard ground ───────────
+  const leafMat   = new THREE.MeshStandardMaterial({ color: 0x2d5a27, roughness: 0.9 });
+  const trunkMat  = new THREE.MeshStandardMaterial({ color: 0x4a3220, roughness: 0.95 });
+  const puddleMat = new THREE.MeshStandardMaterial({ color: 0x1c2b33, roughness: 0.15, metalness: 0.3 });
+
+  function addTree(x, z) {
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.28, 2.2, 6), trunkMat);
+    trunk.position.set(x, 1.1, z);
+    scene.add(trunk);
+    const leaves = new THREE.Mesh(new THREE.SphereGeometry(1.3, 8, 6), leafMat);
+    leaves.position.set(x, 2.6, z);
+    scene.add(leaves);
+  }
+
+  function addBush(x, z) {
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2;
+      const b = new THREE.Mesh(new THREE.SphereGeometry(0.45, 7, 5), leafMat);
+      b.position.set(x + Math.cos(a) * 0.35, 0.35, z + Math.sin(a) * 0.35);
+      scene.add(b);
+    }
+  }
+
+  function addPuddle(x, z, r) {
+    const p = new THREE.Mesh(new THREE.CircleGeometry(r, 16), puddleMat);
+    p.rotation.x = -Math.PI / 2;
+    p.position.set(x, 0.03, z);
+    scene.add(p);
+  }
+
+  const TREE_SPOTS = [[16, 16], [-16, 16], [16, -16], [-16, -16], [50, 0], [-50, 0]];
+  TREE_SPOTS.forEach(([x, z]) => addTree(x, z));
+  [[20, 0], [-20, 0], [0, 20], [0, -20], [0, -50]].forEach(([x, z]) => addBush(x, z));
+  [[8, 8], [-8, 8], [8, -8], [-8, -8]].forEach(([x, z]) => addPuddle(x, z, 1.4));
+
+  const decorTrees = TREE_SPOTS.map(([x, z]) => ({ x, z, radius: 0.4 }));
 
   // ── Resize handler ────────────────────────────────────────────────────────
   window.addEventListener('resize', () => {
@@ -500,7 +483,7 @@ export function createScene(canvas) {
 
   const colliders = {
     arenaSize: ARENA,
-    trees: [...TREE_POSITIONS.map(([x, z]) => ({ x, z, radius: 0.7 })), ...castleTowers],
+    trees: [...castleTowers, ...decorTrees],
     platforms: elevPlatforms,
     ramps:     elevRamps,
     boxes:     [...elevBoxes, ...castleBoxes],
