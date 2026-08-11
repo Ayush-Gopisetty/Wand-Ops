@@ -294,148 +294,136 @@ export function createScene(canvas) {
     elevRamps.push({ xMin: Math.min(edgeP, edgeG), xMax: Math.max(edgeP, edgeG), zMin: cz - 4.5, zMax: cz + 4.5, axis: 'x', axisStart: edgeG, axisEnd: edgeP, yStart: GRND_Y_, yEnd: GRND_Y_ + L2_H, steps: 6 });
   });
 
-  // ── Central Castle ────────────────────────────────────────────────────────
-  const CW      = 13;    // half-size: walls at x=±CW, z=±CW
-  const CWAH    = 5.5;   // curtain wall height
-  const CWT     = 3.0;   // wall thickness (wide enough to walk on top)
-  const CTR     = 2.8;   // corner tower radius
-  const CTH     = 9.0;   // corner tower height
-  const GATE_HW = 1.8;   // gate half-width
-  const INNER   = (CW - CTR) * 2;       // 20.4 — wall span between towers
-  const SW_W    = CW - CTR - GATE_HW;   // 8.4  — each south wing width
-  const halfCWT = CWT / 2;
-  const WALL_Y  = GRND_Y_ + CWAH;       // 6.25 — player foot level on wall top
+  // ── Central fortress compound — open courtyard framed by a gated ring wall ──
+  const COURT_HW = 10;   // open courtyard half-size — keeps the map's true center clear
+  const RING_HW  = 18;   // ring wall half-size: walls at x=±RING_HW, z=±RING_HW
+  const RING_H   = 5.5;  // wall height
+  const RING_T   = 3.0;  // wall thickness (wide enough to walk on top)
+  const RING_CTR = 3.0;  // corner tower radius
+  const RING_CTH = 9.5;  // corner tower height
+  const RING_GHW = 2.2;  // gate half-width
+  const halfRT   = RING_T / 2;
+  const RING_WY  = GRND_Y_ + RING_H; // player foot level on wall top
 
-  function addMerlons(cx, cz, wallLen, isVert) {
+  function addRingMerlons(cx, cz, wallLen, isVert) {
     const count = Math.floor(wallLen / 2.4);
     for (let i = 0; i < count; i++) {
       if (i % 2 !== 0) continue;
       const off = ((i + 0.5) / count - 0.5) * wallLen;
       const m = new THREE.Mesh(new THREE.BoxGeometry(
-        isVert ? CWT + 0.4 : 1.5, 1.2, isVert ? 1.5 : CWT + 0.4,
+        isVert ? RING_T + 0.4 : 1.5, 1.2, isVert ? 1.5 : RING_T + 0.4,
       ), stoneMat);
-      m.position.set(isVert ? cx : cx + off, CWAH + 0.6, isVert ? cz + off : cz);
+      m.position.set(isVert ? cx : cx + off, RING_H + 0.6, isVert ? cz + off : cz);
       scene.add(m);
     }
   }
 
-  // Curtain walls
-  addBox(0, CWAH / 2, -CW, INNER, CWAH, CWT);
-  addBox(-(GATE_HW + SW_W / 2), CWAH / 2,  CW, SW_W, CWAH, CWT);
-  addBox( (GATE_HW + SW_W / 2), CWAH / 2,  CW, SW_W, CWAH, CWT);
-  addBox(0, CWAH - 0.55, CW, GATE_HW * 2, 1.0, CWT);  // gate lintel
-  addBox( CW, CWAH / 2, 0, CWT, CWAH, INNER);
-  addBox(-CW, CWAH / 2, 0, CWT, CWAH, INNER);
-  addMerlons(0, -CW, INNER, false);
-  addMerlons(-(GATE_HW + SW_W / 2), CW, SW_W, false);
-  addMerlons( (GATE_HW + SW_W / 2), CW, SW_W, false);
-  addMerlons( CW, 0, INNER, true);
-  addMerlons(-CW, 0, INNER, true);
+  // Ladders: visual rungs only — they share a ramp collider with staircases,
+  // so walking into the base auto-raises the player just like stairs do.
+  // Uses a plain wood rail material (not stoneMat) since its brick texture
+  // stretches badly on a thin rail box.
+  const ladderRailMat = new THREE.MeshStandardMaterial({ color: 0x5a3f26, roughness: 0.8 });
+  const ladderRungMat = new THREE.MeshStandardMaterial({ color: 0x3a2a18, roughness: 0.85 });
+  function addLadder(x, z, alongX, height) {
+    const rail = new THREE.Mesh(
+      new THREE.BoxGeometry(alongX ? 1.0 : 0.15, height, alongX ? 0.15 : 1.0),
+      ladderRailMat,
+    );
+    rail.position.set(x, height / 2, z);
+    scene.add(rail);
+    const rungCount = Math.round(height / 0.5);
+    for (let i = 0; i < rungCount; i++) {
+      const rung = new THREE.Mesh(
+        new THREE.BoxGeometry(alongX ? 0.7 : 0.16, 0.1, alongX ? 0.16 : 0.7),
+        ladderRungMat,
+      );
+      rung.position.set(x, 0.3 + i * 0.5, z);
+      scene.add(rung);
+    }
+  }
 
-  // Wall-top walkable platforms (players can stand on wall tops)
-  elevPlatforms.push({ xMin: -(CW - CTR), xMax: CW - CTR,  zMin: -CW - halfCWT, zMax: -CW + halfCWT, y: WALL_Y });
-  elevPlatforms.push({ xMin: -(CW - CTR), xMax: -GATE_HW,  zMin:  CW - halfCWT, zMax:  CW + halfCWT, y: WALL_Y });
-  elevPlatforms.push({ xMin:  GATE_HW,    xMax:  CW - CTR, zMin:  CW - halfCWT, zMax:  CW + halfCWT, y: WALL_Y });
-  elevPlatforms.push({ xMin:  CW - halfCWT, xMax:  CW + halfCWT, zMin: -(CW - CTR), zMax: CW - CTR,  y: WALL_Y });
-  elevPlatforms.push({ xMin: -CW - halfCWT, xMax: -CW + halfCWT, zMin: -(CW - CTR), zMax: CW - CTR,  y: WALL_Y });
+  const ringWallBoxes = [];
+  const ringTowers = [];
+  const RING_WING_W = RING_HW - RING_CTR - RING_GHW;
+  const wingOffset  = RING_GHW + RING_WING_W / 2;
 
-  // Stairs from courtyard up to each wall top
-  // North stairs (x=3..7,  z=-3 → z=-(CW-halfCWT)=-11.5)
-  { addStaircase('z', 5, 4, -3, -CW + halfCWT, CWAH);
-    elevRamps.push({ xMin: 3, xMax: 7, zMin: -CW + halfCWT, zMax: -3, axis: 'z', axisStart: -3, axisEnd: -CW + halfCWT, yStart: GRND_Y_, yEnd: WALL_Y, steps: 6 }); }
+  // 4 gated sides — north/south walls run along x (constAxis 'z'); east/west
+  // run along z (constAxis 'x'). East gets ladders instead of stairs.
+  [
+    { constAxis: 'z', sign: -1 }, // north
+    { constAxis: 'z', sign:  1 }, // south
+    { constAxis: 'x', sign: -1 }, // west
+    { constAxis: 'x', sign:  1 }, // east
+  ].forEach(({ constAxis, sign }) => {
+    const isX = constAxis === 'x';
+    const constCoord = sign * RING_HW;
 
-  // South stairs (x=-7..-3, z=3 → z=CW-halfCWT=11.5)
-  { addStaircase('z', -5, 4, 3, CW - halfCWT, CWAH);
-    elevRamps.push({ xMin: -7, xMax: -3, zMin: 3, zMax: CW - halfCWT, axis: 'z', axisStart: 3, axisEnd: CW - halfCWT, yStart: GRND_Y_, yEnd: WALL_Y, steps: 6 }); }
+    [-1, 1].forEach(wingSign => {
+      const alongCoord = wingSign * wingOffset;
+      const wingX = isX ? constCoord  : alongCoord;
+      const wingZ = isX ? alongCoord  : constCoord;
+      const boxW  = isX ? RING_T      : RING_WING_W;
+      const boxD  = isX ? RING_WING_W : RING_T;
+      addBox(wingX, RING_H / 2, wingZ, boxW, RING_H, boxD);
+      addRingMerlons(wingX, wingZ, RING_WING_W, isX);
 
-  // East stairs  (z=3..7,   x=3 → x=CW-halfCWT=11.5) — SE corner, clear of North's NE corner
-  { addStaircase('x', 5, 4, 3, CW - halfCWT, CWAH);
-    elevRamps.push({ xMin: 3, xMax: CW - halfCWT, zMin: 3, zMax: 7, axis: 'x', axisStart: 3, axisEnd: CW - halfCWT, yStart: GRND_Y_, yEnd: WALL_Y, steps: 6 }); }
+      const xMin = wingX - boxW / 2, xMax = wingX + boxW / 2;
+      const zMin = wingZ - boxD / 2, zMax = wingZ + boxD / 2;
+      ringWallBoxes.push({ xMin, xMax, zMin, zMax, maxY: RING_H });
+      elevPlatforms.push({ xMin, xMax, zMin, zMax, y: RING_WY });
 
-  // West stairs  (z=-7..-3, x=-3 → x=-(CW-halfCWT)=-11.5) — NW corner, clear of South's SW corner
-  { addStaircase('x', -5, 4, -3, -CW + halfCWT, CWAH);
-    elevRamps.push({ xMin: -CW + halfCWT, xMax: -3, zMin: -7, zMax: -3, axis: 'x', axisStart: -3, axisEnd: -CW + halfCWT, yStart: GRND_Y_, yEnd: WALL_Y, steps: 6 }); }
+      const stairLow  = sign * COURT_HW;
+      const stairHigh = constCoord - sign * halfRT;
+      if (isX && sign === 1) {
+        addLadder(stairHigh, alongCoord, false, RING_H);
+      } else {
+        addStaircase(constAxis, alongCoord, 4, stairLow, stairHigh, RING_H);
+      }
+      const rXMin = isX ? Math.min(stairLow, stairHigh) : alongCoord - 2;
+      const rXMax = isX ? Math.max(stairLow, stairHigh) : alongCoord + 2;
+      const rZMin = isX ? alongCoord - 2 : Math.min(stairLow, stairHigh);
+      const rZMax = isX ? alongCoord + 2 : Math.max(stairLow, stairHigh);
+      elevRamps.push({ xMin: rXMin, xMax: rXMax, zMin: rZMin, zMax: rZMax, axis: constAxis, axisStart: stairLow, axisEnd: stairHigh, yStart: GRND_Y_, yEnd: RING_WY, steps: 6 });
+    });
+
+    // Gate lintel
+    const lx = isX ? constCoord : 0;
+    const lz = isX ? 0 : constCoord;
+    addBox(lx, RING_H - 0.55, lz, isX ? RING_T : RING_GHW * 2, 1.0, isX ? RING_GHW * 2 : RING_T);
+  });
 
   // Corner towers
-  [[-CW, -CW], [CW, -CW], [CW, CW], [-CW, CW]].forEach(([tx, tz]) => {
-    const tower = new THREE.Mesh(new THREE.CylinderGeometry(CTR, CTR * 1.1, CTH, 10), stoneMat);
-    tower.position.set(tx, CTH / 2, tz);
+  [[-RING_HW, -RING_HW], [RING_HW, -RING_HW], [RING_HW, RING_HW], [-RING_HW, RING_HW]].forEach(([tx, tz]) => {
+    const tower = new THREE.Mesh(new THREE.CylinderGeometry(RING_CTR, RING_CTR * 1.1, RING_CTH, 10), stoneMat);
+    tower.position.set(tx, RING_CTH / 2, tz);
     scene.add(tower);
     for (let i = 0; i < 10; i++) {
       if (i % 2 !== 0) continue;
       const a = (i / 10) * Math.PI * 2;
       const mb = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.1, 0.9), stoneMat);
-      mb.position.set(tx + Math.cos(a) * (CTR - 0.35), CTH + 0.55, tz + Math.sin(a) * (CTR - 0.35));
+      mb.position.set(tx + Math.cos(a) * (RING_CTR - 0.35), RING_CTH + 0.55, tz + Math.sin(a) * (RING_CTR - 0.35));
       scene.add(mb);
     }
-    const tPt = new THREE.PointLight(0xff8833, 2.5, 16);
-    tPt.position.set(tx * 0.75, 4.5, tz * 0.75);
+    const tPt = new THREE.PointLight(0xff8833, 2.2, 15);
+    tPt.position.set(tx * 0.85, 4.5, tz * 0.85);
     scene.add(tPt);
+    ringTowers.push({ x: tx, z: tz, radius: RING_CTR });
   });
 
-  // Banners on the curtain walls (red/blue, like the reference image)
+  // Team-colored banners on the ring wall (blue west, red east)
   function addBanner(x, z, faceX, hex) {
     const flag = new THREE.Mesh(
       new THREE.PlaneGeometry(1.8, 2.8),
       new THREE.MeshStandardMaterial({ color: hex, roughness: 0.85, side: THREE.DoubleSide }),
     );
-    flag.position.set(x, CWAH - 1.0, z);
+    flag.position.set(x, RING_H - 1.0, z);
     flag.rotation.y = faceX ? Math.PI / 2 : 0;
     scene.add(flag);
   }
-  addBanner(CW - 0.2, -6,  true,  0xcc2222);
-  addBanner(CW - 0.2,  6,  true,  0x2244cc);
-  addBanner(-CW + 0.2, -6, true,  0x2244cc);
-  addBanner(-CW + 0.2,  6, true,  0xcc2222);
-
-  // ── Central Keep — rises above the curtain walls, the map's high ground ──
-  const KEEP_HW   = 2.5;                 // half-size: keep walls at x=±KEEP_HW, z=±KEEP_HW
-  const KEEP_H    = 7.0;                 // height above ground (taller than CWAH=5.5)
-  const KEEP_TOPY = GRND_Y_ + KEEP_H;    // 7.75 — clears the curtain wall top (6.25)
-
-  addBox(0, KEEP_H / 2, 0, KEEP_HW * 2, KEEP_H, KEEP_HW * 2);
-  [[-KEEP_HW, -KEEP_HW], [KEEP_HW, -KEEP_HW], [KEEP_HW, KEEP_HW], [-KEEP_HW, KEEP_HW]].forEach(([mx, mz]) => {
-    addBox(mx, KEEP_H + 0.6, mz, 0.9, 1.2, 0.9);
-  });
-
-  // North keep stairs: ground at z=-11.5 (low) up to the keep's north face at z=-2.5 (high)
-  { addStaircase('z', 0, 3, -(CW - halfCWT), -KEEP_HW, KEEP_H);
-    elevRamps.push({ xMin: -1.5, xMax: 1.5, zMin: -(CW - halfCWT), zMax: -KEEP_HW, axis: 'z', axisStart: -(CW - halfCWT), axisEnd: -KEEP_HW, yStart: GRND_Y_, yEnd: KEEP_TOPY, steps: 6 }); }
-
-  // South keep stairs: ground at z=11.5 (low) up to the keep's south face at z=2.5 (high)
-  { addStaircase('z', 0, 3, CW - halfCWT, KEEP_HW, KEEP_H);
-    elevRamps.push({ xMin: -1.5, xMax: 1.5, zMin: KEEP_HW, zMax: CW - halfCWT, axis: 'z', axisStart: CW - halfCWT, axisEnd: KEEP_HW, yStart: GRND_Y_, yEnd: KEEP_TOPY, steps: 6 }); }
-
-  elevPlatforms.push({ xMin: -KEEP_HW, xMax: KEEP_HW, zMin: -KEEP_HW, zMax: KEEP_HW, y: KEEP_TOPY });
-  elevBoxes.push({     xMin: -KEEP_HW, xMax: KEEP_HW, zMin: -KEEP_HW, zMax: KEEP_HW, maxY: KEEP_TOPY });
-
-  // Flag + light atop the keep
-  const poleMat = new THREE.MeshStandardMaterial({ color: 0x555566, roughness: 0.6 });
-  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 4.0, 6), poleMat);
-  pole.position.set(0, KEEP_TOPY + 2.0, 0);
-  scene.add(pole);
-  const flagMat2 = new THREE.MeshStandardMaterial({ color: 0xcc1111, emissive: 0x550000, emissiveIntensity: 0.5, side: THREE.DoubleSide });
-  const flagMesh = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 1.1), flagMat2);
-  flagMesh.position.set(1.0, KEEP_TOPY + 3.3, 0);
-  scene.add(flagMesh);
-  const keepPt = new THREE.PointLight(0xff7733, 3.0, 24);
-  keepPt.position.set(0, KEEP_TOPY + 1.0, 0);
-  scene.add(keepPt);
-
-  // Castle AABB wall colliders (maxY=CWAH so players on wall tops are not blocked)
-  const castleBoxes = [
-    { xMin: -(CW - CTR), xMax:  CW - CTR, zMin: -CW - halfCWT, zMax: -CW + halfCWT, maxY: CWAH },
-    { xMin: -(CW - CTR), xMax: -GATE_HW,  zMin:  CW - halfCWT, zMax:  CW + halfCWT, maxY: CWAH },
-    { xMin:  GATE_HW,    xMax:  CW - CTR, zMin:  CW - halfCWT, zMax:  CW + halfCWT, maxY: CWAH },
-    { xMin:  CW - halfCWT, xMax:  CW + halfCWT, zMin: -(CW - CTR), zMax: CW - CTR,  maxY: CWAH },
-    { xMin: -CW - halfCWT, xMax: -CW + halfCWT, zMin: -(CW - CTR), zMax: CW - CTR,  maxY: CWAH },
-  ];
-  const castleTowers = [
-    { x: -CW, z: -CW, radius: CTR },
-    { x:  CW, z: -CW, radius: CTR },
-    { x:  CW, z:  CW, radius: CTR },
-    { x: -CW, z:  CW, radius: CTR },
-  ];
+  addBanner(-RING_HW + 0.2, -6, true, 0x2244cc);
+  addBanner(-RING_HW + 0.2,  6, true, 0x2244cc);
+  addBanner( RING_HW - 0.2, -6, true, 0xcc2222);
+  addBanner( RING_HW - 0.2,  6, true, 0xcc2222);
 
   // ── Decor: trees, bushes, puddles in the open courtyard ground ───────────
   const leafMat   = new THREE.MeshStandardMaterial({ color: 0x2d5a27, roughness: 0.9 });
@@ -467,10 +455,11 @@ export function createScene(canvas) {
     scene.add(p);
   }
 
-  const TREE_SPOTS = [[16, 16], [-16, 16], [16, -16], [-16, -16], [50, 0], [-50, 0]];
+  const TREE_SPOTS = [[50, 0], [-50, 0]];
   TREE_SPOTS.forEach(([x, z]) => addTree(x, z));
   [[20, 0], [-20, 0], [0, 20], [0, -20], [0, -50]].forEach(([x, z]) => addBush(x, z));
-  [[8, 8], [-8, 8], [8, -8], [-8, -8]].forEach(([x, z]) => addPuddle(x, z, 1.4));
+  [[8, 8], [-8, 8], [8, -8]].forEach(([x, z]) => addPuddle(x, z, 1.4));
+  addPuddle(-8, -8, 2.2);
 
   const decorTrees = TREE_SPOTS.map(([x, z]) => ({ x, z, radius: 0.4 }));
 
@@ -483,10 +472,10 @@ export function createScene(canvas) {
 
   const colliders = {
     arenaSize: ARENA,
-    trees: [...castleTowers, ...decorTrees],
+    trees: [...ringTowers, ...decorTrees],
     platforms: elevPlatforms,
     ramps:     elevRamps,
-    boxes:     [...elevBoxes, ...castleBoxes],
+    boxes:     [...elevBoxes, ...ringWallBoxes],
   };
 
   return { scene, camera, renderer, colliders };
