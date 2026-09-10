@@ -14,7 +14,8 @@
     "@vercel/speed-insights": "^2.0.0",
     "firebase": "^12.13.0",
     "photon-realtime": "^4.4.0",
-    "three": "^0.164.0"
+    "three": "^0.164.0",
+    "vercel": "^58.9.1"
   },
   "devDependencies": {
     "vite": "^5.2.0"
