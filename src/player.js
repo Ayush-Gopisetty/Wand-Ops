@@ -5,12 +5,30 @@ const LERP_SPEED = 0.18;
 
 const PLAYER_COLORS = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf39c12, 0x1abc9c, 0xe91e63, 0xff6b35];
 
+export const PLAYER_SKINS = {
+  amethyst: { name: 'Amethyst', body: 0x9b59b6, accent: 0xffb347, glow: 0xff7a18, price: 0, unlockByDefault: true },
+  ember:    { name: 'Ember',    body: 0xd35400, accent: 0xffc36b, glow: 0xff6a00, price: 12, unlockByDefault: false },
+  tide:     { name: 'Tide',     body: 0x2980b9, accent: 0x8edcff, glow: 0x2e8bc0, price: 16, unlockByDefault: false },
+  verdant:  { name: 'Verdant',  body: 0x27ae60, accent: 0xb6ff8d, glow: 0x4ecb71, price: 20, unlockByDefault: false },
+  storm:    { name: 'Storm',    body: 0x5d6d7e, accent: 0xd6dbff, glow: 0x7d8cff, price: 24, unlockByDefault: false },
+};
+
+export const DEFAULT_SKIN_ID = 'amethyst';
+export const DEFAULT_UNLOCKED_SKIN_IDS = Object.entries(PLAYER_SKINS)
+  .filter(([, skin]) => skin.unlockByDefault)
+  .map(([skinId]) => skinId);
+
 export function remoteColor(actorNr) {
   return PLAYER_COLORS[actorNr % PLAYER_COLORS.length];
 }
 
+export function getSkinConfig(skinId = DEFAULT_SKIN_ID) {
+  return PLAYER_SKINS[skinId] || PLAYER_SKINS[DEFAULT_SKIN_ID];
+}
+
 export function createFirstPersonWand() {
   const group = new THREE.Group();
+  group.scale.setScalar(1.12);
 
   const wandGeo = new THREE.CylinderGeometry(0.045, 0.055, 0.82, 8);
   const wandMat = new THREE.MeshStandardMaterial({ color: 0x5b341c, roughness: 0.72 });
@@ -55,41 +73,153 @@ export function createFirstPersonWand() {
     opacity: 0.72,
   });
 
-  const scopeMountGeo = new THREE.BoxGeometry(0.06, 0.15, 0.12);
+  const scopeMountGeo = new THREE.BoxGeometry(0.08, 0.19, 0.14);
   const scopeMount = new THREE.Mesh(scopeMountGeo, scopeMat);
-  scopeMount.position.copy(wand.position).add(new THREE.Vector3(-0.02, 0.12, 0.02));
+  scopeMount.position.copy(wand.position).add(new THREE.Vector3(-0.03, 0.16, 0.03));
   scopeMount.rotation.z = wand.rotation.z;
   scopeMount.rotation.x = wand.rotation.x;
   group.add(scopeMount);
 
-  const scopeTubeGeo = new THREE.CylinderGeometry(0.07, 0.07, 0.34, 12);
+  const scopeTubeGeo = new THREE.CylinderGeometry(0.085, 0.095, 0.5, 16);
   const scopeTube = new THREE.Mesh(scopeTubeGeo, scopeMat);
-  scopeTube.position.copy(wand.position).add(new THREE.Vector3(0.02, 0.2, -0.02));
+  scopeTube.position.copy(wand.position).add(new THREE.Vector3(0.05, 0.25, -0.03));
   scopeTube.rotation.z = wand.rotation.z;
   scopeTube.rotation.x = wand.rotation.x;
   group.add(scopeTube);
 
-  const scopeRingGeo = new THREE.TorusGeometry(0.052, 0.012, 8, 18);
+  const scopeRingGeo = new THREE.TorusGeometry(0.07, 0.016, 10, 24);
   const frontRing = new THREE.Mesh(scopeRingGeo, scopeMat);
-  frontRing.position.copy(scopeTube.position).add(new THREE.Vector3(0.12, 0.14, -0.02));
+  frontRing.position.copy(scopeTube.position).add(new THREE.Vector3(0.18, 0.2, -0.03));
   frontRing.rotation.y = Math.PI / 2;
   frontRing.rotation.z = wand.rotation.z;
   frontRing.rotation.x = wand.rotation.x;
   group.add(frontRing);
 
   const rearRing = frontRing.clone();
-  rearRing.position.copy(scopeTube.position).add(new THREE.Vector3(-0.12, -0.14, 0.02));
+  rearRing.position.copy(scopeTube.position).add(new THREE.Vector3(-0.18, -0.2, 0.03));
   group.add(rearRing);
 
-  const lensGeo = new THREE.CircleGeometry(0.047, 20);
+  const lensGeo = new THREE.CircleGeometry(0.064, 24);
   const frontLens = new THREE.Mesh(lensGeo, glassMat);
-  frontLens.position.copy(scopeTube.position).add(new THREE.Vector3(0.118, 0.135, -0.018));
+  frontLens.position.copy(scopeTube.position).add(new THREE.Vector3(0.176, 0.195, -0.028));
   frontLens.rotation.y = -Math.PI / 2;
   frontLens.rotation.z = wand.rotation.z;
   frontLens.rotation.x = wand.rotation.x;
   group.add(frontLens);
 
+  const rearLens = new THREE.Mesh(lensGeo, glassMat.clone());
+  rearLens.position.copy(scopeTube.position).add(new THREE.Vector3(-0.176, -0.195, 0.028));
+  rearLens.rotation.y = -Math.PI / 2;
+  rearLens.rotation.z = wand.rotation.z;
+  rearLens.rotation.x = wand.rotation.x;
+  rearLens.material.opacity = 0.5;
+  group.add(rearLens);
+
+  const eyepieceGeo = new THREE.CylinderGeometry(0.11, 0.085, 0.12, 16);
+  const eyepiece = new THREE.Mesh(eyepieceGeo, scopeMat);
+  eyepiece.position.copy(scopeTube.position).add(new THREE.Vector3(-0.21, -0.235, 0.035));
+  eyepiece.rotation.z = wand.rotation.z;
+  eyepiece.rotation.x = wand.rotation.x;
+  group.add(eyepiece);
+
+  group.traverse((node) => {
+    if (!node.isMesh) return;
+    node.renderOrder = 50;
+    if (node.material) {
+      node.material.depthTest = false;
+      node.material.depthWrite = false;
+    }
+  });
+
   group.userData = { crystal, frontLens };
+  applyFirstPersonWandSkin(group, DEFAULT_SKIN_ID);
+  return group;
+}
+
+export function applyFirstPersonWandSkin(wandGroup, skinId) {
+  if (!wandGroup?.userData) return;
+  const skin = getSkinConfig(skinId);
+  const { crystal, frontLens } = wandGroup.userData;
+  if (crystal?.material) {
+    crystal.material.color.setHex(skin.accent);
+    crystal.material.emissive.setHex(skin.glow);
+  }
+  if (frontLens?.material) {
+    frontLens.material.color.setHex(skin.accent);
+    frontLens.material.emissive.setHex(skin.glow);
+  }
+}
+
+export function createWizardModel(color = getSkinConfig(DEFAULT_SKIN_ID).body, options = {}) {
+  const { includeNameTag = true, name = 'Wizard' } = options;
+  const group = new THREE.Group();
+
+  const bodyGeo = new THREE.BoxGeometry(0.85, 1.4, 0.85);
+  const bodyMat = new THREE.MeshStandardMaterial({ color });
+  const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
+  group.add(bodyMesh);
+
+  const trimGeo = new THREE.BoxGeometry(0.95, 0.6, 0.95);
+  const trimMat = new THREE.MeshStandardMaterial({ color: darken(color, 0.4) });
+  const trimMesh = new THREE.Mesh(trimGeo, trimMat);
+  trimMesh.position.y = -0.42;
+  group.add(trimMesh);
+
+  const hatMat = new THREE.MeshStandardMaterial({ color: 0x1a0033 });
+  const hatGeo = new THREE.ConeGeometry(0.38, 0.82, 8);
+  const hatMesh = new THREE.Mesh(hatGeo, hatMat);
+  hatMesh.position.y = 1.11;
+  group.add(hatMesh);
+
+  const brimGeo = new THREE.CylinderGeometry(0.54, 0.54, 0.08, 12);
+  const brimMesh = new THREE.Mesh(brimGeo, hatMat);
+  brimMesh.position.y = 0.74;
+  group.add(brimMesh);
+
+  const eyeGeo = new THREE.SphereGeometry(0.07, 6, 6);
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  [-0.22, 0.22].forEach((x) => {
+    const eye = new THREE.Mesh(eyeGeo, eyeMat);
+    eye.position.set(x, 0.18, 0.44);
+    group.add(eye);
+  });
+
+  const wandGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.7, 6);
+  const wandMat = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
+  const wandMesh = new THREE.Mesh(wandGeo, wandMat);
+  wandMesh.rotation.z = Math.PI / 6;
+  wandMesh.position.set(0.56, 0.1, 0.0);
+  group.add(wandMesh);
+
+  const wandScopeMat = new THREE.MeshStandardMaterial({ color: 0x2b2f39, roughness: 0.42, metalness: 0.58 });
+  const wandScopeMount = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.09, 0.08), wandScopeMat);
+  wandScopeMount.position.set(0.5, 0.24, 0.0);
+  wandScopeMount.rotation.z = wandMesh.rotation.z;
+  group.add(wandScopeMount);
+
+  const wandScopeTube = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.26, 12), wandScopeMat);
+  wandScopeTube.position.set(0.57, 0.31, 0.0);
+  wandScopeTube.rotation.z = wandMesh.rotation.z;
+  group.add(wandScopeTube);
+
+  let nameTag = null;
+  if (includeNameTag) {
+    nameTag = createNameTag(name);
+    group.add(nameTag);
+  }
+
+  group.userData = {
+    bodyMat,
+    trimMat,
+    hatMat,
+    bodyMesh,
+    trimMesh,
+    hatMesh,
+    brimMesh,
+    wandMesh,
+    nameTag,
+  };
+
   return group;
 }
 
@@ -139,10 +269,11 @@ function updateNameTag(sprite, text) {
 
 export class Player {
   constructor(scene, isLocal = false, color = 0x9b59b6) {
-    this.scene   = scene;
+    this.scene = scene;
     this.isLocal = isLocal;
-    this.id      = null;
-    this.health  = 100;
+    this.id = null;
+    this.health = 100;
+    this.skinId = DEFAULT_SKIN_ID;
 
     this.position = new THREE.Vector3(
       (Math.random() - 0.5) * 24,
@@ -156,14 +287,13 @@ export class Player {
     this.targetRotation = 0;
 
     this.hitFlashTimer = 0;
-    this._bodyColor    = color;
-    this.name          = 'Wizard';
+    this._bodyColor = color;
+    this.name = 'Wizard';
 
-    // Status effects (ticked in update; burn damage applied in main.js)
-    this.burnTimer     = 0;
-    this.burnDps       = 0;
-    this.slowTimer     = 0;
-    this.silenceTimer  = 0;
+    this.burnTimer = 0;
+    this.burnDps = 0;
+    this.slowTimer = 0;
+    this.silenceTimer = 0;
     this.groundedTimer = 0;
 
     this._buildMesh(color);
@@ -171,48 +301,12 @@ export class Player {
   }
 
   _buildMesh(color) {
-    this.group = new THREE.Group();
-
-    const bodyGeo = new THREE.BoxGeometry(0.85, 1.4, 0.85);
-    this._bodyMat = new THREE.MeshStandardMaterial({ color });
-    this.bodyMesh = new THREE.Mesh(bodyGeo, this._bodyMat);
-    this.group.add(this.bodyMesh);
-
-    const trimGeo = new THREE.BoxGeometry(0.95, 0.6, 0.95);
-    const trimMat = new THREE.MeshStandardMaterial({ color: darken(color, 0.4) });
-    const trim = new THREE.Mesh(trimGeo, trimMat);
-    trim.position.y = -0.42;
-    this.group.add(trim);
-
-    const hatGeo = new THREE.ConeGeometry(0.38, 0.82, 8);
-    const hatMat = new THREE.MeshStandardMaterial({ color: 0x1a0033 });
-    const hat = new THREE.Mesh(hatGeo, hatMat);
-    hat.position.y = 1.11;
-    this.group.add(hat);
-
-    const brimGeo = new THREE.CylinderGeometry(0.54, 0.54, 0.08, 12);
-    const brim = new THREE.Mesh(brimGeo, hatMat);
-    brim.position.y = 0.74;
-    this.group.add(brim);
-
-    const eyeGeo = new THREE.SphereGeometry(0.07, 6, 6);
-    const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    [-0.22, 0.22].forEach(x => {
-      const eye = new THREE.Mesh(eyeGeo, eyeMat);
-      eye.position.set(x, 0.18, 0.44);
-      this.group.add(eye);
-    });
-
-    const wandGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.7, 6);
-    const wandMat = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
-    const wand = new THREE.Mesh(wandGeo, wandMat);
-    wand.rotation.z = Math.PI / 6;
-    wand.position.set(0.56, 0.1, 0.0);
-    this.group.add(wand);
-
-    this.nameTag = createNameTag(this.name);
-    this.group.add(this.nameTag);
-
+    this.group = createWizardModel(color, { includeNameTag: true, name: this.name });
+    this._bodyMat = this.group.userData.bodyMat;
+    this._trimMat = this.group.userData.trimMat;
+    this._hatMat = this.group.userData.hatMat;
+    this.bodyMesh = this.group.userData.bodyMesh;
+    this.nameTag = this.group.userData.nameTag;
     this.group.position.copy(this.position);
   }
 
@@ -220,10 +314,9 @@ export class Player {
     if (this.isLocal) {
       this.position.x = clamp(this.position.x, -ARENA_HALF, ARENA_HALF);
       this.position.z = clamp(this.position.z, -ARENA_HALF, ARENA_HALF);
-      // Y managed by main.js (gravity + jump)
-      if (this.burnTimer     > 0) this.burnTimer     -= delta;
-      if (this.slowTimer     > 0) this.slowTimer     -= delta;
-      if (this.silenceTimer  > 0) this.silenceTimer  -= delta;
+      if (this.burnTimer > 0) this.burnTimer -= delta;
+      if (this.slowTimer > 0) this.slowTimer -= delta;
+      if (this.silenceTimer > 0) this.silenceTimer -= delta;
       if (this.groundedTimer > 0) this.groundedTimer -= delta;
     } else {
       this.position.lerp(this.targetPosition, LERP_SPEED);
@@ -236,22 +329,20 @@ export class Player {
     if (this.hitFlashTimer > 0) {
       this.hitFlashTimer -= delta;
       this._bodyMat.color.setHex(this.hitFlashTimer > 0 ? 0xff2222 : this._bodyColor);
-      if (this.hitFlashTimer <= 0) this._bodyMat.color.setHex(this._bodyColor);
     }
   }
 
   applySpellEffect(spell) {
     if (spell === 'fire') {
       this.burnTimer = 3;
-      this.burnDps   = 5;
+      this.burnDps = 5;
     } else if (spell === 'ice') {
       this.slowTimer = 3;
     } else if (spell === 'lightning') {
-      this.silenceTimer = 1;
+      this.silenceTimer = 2;
     } else if (spell === 'earth') {
       this.groundedTimer = 3;
     }
-    // air knockback is handled in main.js via velocity
   }
 
   takeDamage(amount) {
@@ -265,6 +356,14 @@ export class Player {
     if (this.nameTag) updateNameTag(this.nameTag, name);
   }
 
+  setSkin(skinId) {
+    const skin = getSkinConfig(skinId);
+    this.skinId = skinId in PLAYER_SKINS ? skinId : DEFAULT_SKIN_ID;
+    this._bodyColor = skin.body;
+    this._bodyMat.color.setHex(skin.body);
+    this._trimMat.color.setHex(darken(skin.body, 0.4));
+  }
+
   respawn() {
     this.health = 100;
     this.position.set(
@@ -273,11 +372,11 @@ export class Player {
       (Math.random() - 0.5) * 24
     );
     this.velocity.set(0, 0, 0);
-    this.hitFlashTimer  = 0;
-    this.burnTimer      = 0;
-    this.slowTimer      = 0;
-    this.silenceTimer   = 0;
-    this.groundedTimer  = 0;
+    this.hitFlashTimer = 0;
+    this.burnTimer = 0;
+    this.slowTimer = 0;
+    this.silenceTimer = 0;
+    this.groundedTimer = 0;
     this._bodyMat.color.setHex(this._bodyColor);
   }
 
@@ -286,12 +385,14 @@ export class Player {
   }
 }
 
-function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v));
+}
 
 function darken(hex, amount) {
   const r = ((hex >> 16) & 0xff) * (1 - amount);
-  const g = ((hex >>  8) & 0xff) * (1 - amount);
-  const b = ((hex)       & 0xff) * (1 - amount);
+  const g = ((hex >> 8) & 0xff) * (1 - amount);
+  const b = (hex & 0xff) * (1 - amount);
   return (r << 16) | (g << 8) | b;
 }
 
