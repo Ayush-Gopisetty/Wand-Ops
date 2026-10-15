@@ -10,6 +10,7 @@ const BOT_DESIRED_MAX_DIST = 15;
 const PLAYER_RADIUS = 0.45;
 const GROUND_Y = 0.75;
 const BOT_CLIMB_SPEED = 6;
+const PLATFORM_STEP_UP = 2;
 
 const _toTarget = new THREE.Vector3();
 const _forward = new THREE.Vector3();
@@ -57,7 +58,7 @@ export class SimpleBotController {
       resolveCollisions(this.player.position, this.colliders);
     }
 
-    const targetY = getGroundY(this.player.position.x, this.player.position.z, this.colliders);
+    const targetY = getGroundY(this.player.position.x, this.player.position.z, this.player.position.y, this.colliders);
     const maxStep = BOT_CLIMB_SPEED * delta;
     this.player.position.y += clamp(targetY - this.player.position.y, -maxStep, maxStep);
 
@@ -115,10 +116,11 @@ function resolveCollisions(position, colliders) {
   }
 }
 
-function getGroundY(x, z, colliders) {
+function getGroundY(x, z, currentY, colliders) {
   let y = GROUND_Y;
   if (!colliders) return y;
   for (const p of colliders.platforms || []) {
+    if (currentY < p.y - PLATFORM_STEP_UP) continue;
     if (x >= p.xMin && x <= p.xMax && z >= p.zMin && z <= p.zMax) y = Math.max(y, p.y);
   }
   for (const r of colliders.ramps || []) {

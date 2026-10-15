@@ -74,6 +74,11 @@ export class FireballManager {
           if (dx * dx + dz * dz < tree.radius * tree.radius) { hitTree = true; break; }
         }
         if (hitTree) { this._remove(i); continue; }
+        let hitBox = false;
+        for (const box of colliders.boxes || []) {
+          if (p.y < box.maxY && p.x > box.xMin && p.x < box.xMax && p.z > box.zMin && p.z < box.zMax) { hitBox = true; break; }
+        }
+        if (hitBox) { this._remove(i); continue; }
       }
 
       if (!simulatedOwners.has(fb.ownerId)) continue;

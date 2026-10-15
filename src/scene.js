@@ -11,7 +11,7 @@ export function createScene(canvas) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
 
-  const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.1, 120);
+  const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.1, 180);
 
   // ── Lighting ───────────────────────────────────────────────────────────────
   scene.add(new THREE.AmbientLight(0xfff5e0, 1.1));
@@ -305,16 +305,22 @@ export function createScene(canvas) {
   const halfRT   = RING_T / 2;
   const RING_WY  = GRND_Y_ + RING_H; // player foot level on wall top
 
-  function addRingMerlons(cx, cz, wallLen, isVert) {
+  // Merlons sit on the outer edge only so the wall top stays walkable
+  function addRingMerlons(cx, cz, wallLen, isVert, outerSign) {
     const count = Math.floor(wallLen / 2.4);
+    const depth = 0.7;
+    const edgeOff = outerSign * (halfRT + 0.2 - depth / 2);
     for (let i = 0; i < count; i++) {
       if (i % 2 !== 0) continue;
       const off = ((i + 0.5) / count - 0.5) * wallLen;
-      const m = new THREE.Mesh(new THREE.BoxGeometry(
-        isVert ? RING_T + 0.4 : 1.5, 1.2, isVert ? 1.5 : RING_T + 0.4,
-      ), stoneMat);
-      m.position.set(isVert ? cx : cx + off, RING_H + 0.6, isVert ? cz + off : cz);
+      const w = isVert ? depth : 1.5;
+      const d = isVert ? 1.5 : depth;
+      const mx = isVert ? cx + edgeOff : cx + off;
+      const mz = isVert ? cz + off : cz + edgeOff;
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, 1.2, d), stoneMat);
+      m.position.set(mx, RING_H + 0.6, mz);
       scene.add(m);
+      ringWallBoxes.push({ xMin: mx - w / 2, xMax: mx + w / 2, zMin: mz - d / 2, zMax: mz + d / 2, maxY: RING_H + 1.2 });
     }
   }
 
@@ -365,31 +371,38 @@ export function createScene(canvas) {
       const boxW  = isX ? RING_T      : RING_WING_W;
       const boxD  = isX ? RING_WING_W : RING_T;
       addBox(wingX, RING_H / 2, wingZ, boxW, RING_H, boxD);
-      addRingMerlons(wingX, wingZ, RING_WING_W, isX);
+      addRingMerlons(wingX, wingZ, RING_WING_W, isX, sign);
 
       const xMin = wingX - boxW / 2, xMax = wingX + boxW / 2;
       const zMin = wingZ - boxD / 2, zMax = wingZ + boxD / 2;
       ringWallBoxes.push({ xMin, xMax, zMin, zMax, maxY: RING_H });
       elevPlatforms.push({ xMin, xMax, zMin, zMax, y: RING_WY });
 
-      const stairLow  = sign * COURT_HW;
+      const isLadder  = isX && sign === 1;
       const stairHigh = constCoord - sign * halfRT;
-      if (isX && sign === 1) {
+      // A ladder's collider is a thin strip against the wall face, not a full staircase footprint.
+      // It tops out 0.5 short of the face because wall collision stops the player (radius 0.45) there.
+      const stairLow  = isLadder ? stairHigh - sign * 1.3 : sign * COURT_HW;
+      const rampEnd   = isLadder ? stairHigh - sign * 0.5 : stairHigh;
+      const rampHalfW = isLadder ? 0.6 : 2;
+      if (isLadder) {
         addLadder(stairHigh, alongCoord, false, RING_H);
       } else {
         addStaircase(constAxis, alongCoord, 4, stairLow, stairHigh, RING_H);
       }
-      const rXMin = isX ? Math.min(stairLow, stairHigh) : alongCoord - 2;
-      const rXMax = isX ? Math.max(stairLow, stairHigh) : alongCoord + 2;
-      const rZMin = isX ? alongCoord - 2 : Math.min(stairLow, stairHigh);
-      const rZMax = isX ? alongCoord + 2 : Math.max(stairLow, stairHigh);
-      elevRamps.push({ xMin: rXMin, xMax: rXMax, zMin: rZMin, zMax: rZMax, axis: constAxis, axisStart: stairLow, axisEnd: stairHigh, yStart: GRND_Y_, yEnd: RING_WY, steps: 6 });
+      const rXMin = isX ? Math.min(stairLow, stairHigh) : alongCoord - rampHalfW;
+      const rXMax = isX ? Math.max(stairLow, stairHigh) : alongCoord + rampHalfW;
+      const rZMin = isX ? alongCoord - rampHalfW : Math.min(stairLow, stairHigh);
+      const rZMax = isX ? alongCoord + rampHalfW : Math.max(stairLow, stairHigh);
+      elevRamps.push({ xMin: rXMin, xMax: rXMax, zMin: rZMin, zMax: rZMax, axis: constAxis, axisStart: stairLow, axisEnd: rampEnd, yStart: GRND_Y_, yEnd: RING_WY, steps: 6 });
     });
 
     // Gate lintel
     const lx = isX ? constCoord : 0;
     const lz = isX ? 0 : constCoord;
     addBox(lx, RING_H - 0.55, lz, isX ? RING_T : RING_GHW * 2, 1.0, isX ? RING_GHW * 2 : RING_T);
+    const lhw = isX ? halfRT : RING_GHW, lhd = isX ? RING_GHW : halfRT;
+    elevPlatforms.push({ xMin: lx - lhw, xMax: lx + lhw, zMin: lz - lhd, zMax: lz + lhd, y: RING_WY });
   });
 
   // Corner towers

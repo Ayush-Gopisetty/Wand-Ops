@@ -160,7 +160,7 @@ export class UIManager {
       if (player.isLocal) {
         ctx.save();
         ctx.translate(px, py);
-        ctx.rotate(localRotation);
+        ctx.rotate(-localRotation);
         ctx.fillStyle = '#fff4c2';
         ctx.beginPath();
         ctx.moveTo(0, -7);
