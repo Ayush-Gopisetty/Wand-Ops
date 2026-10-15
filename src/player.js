@@ -352,13 +352,13 @@ export class Player {
     this._trimMat.color.setHex(darken(skin.body, 0.4));
   }
 
-  respawn() {
+  respawn(spawnPoint = null) {
     this.health = 100;
-    this.position.set(
-      (Math.random() - 0.5) * 24,
-      0.75,
-      (Math.random() - 0.5) * 24
-    );
+    if (spawnPoint) {
+      this.position.set(spawnPoint[0], 0.75, spawnPoint[1]);
+    } else {
+      this.position.set((Math.random() - 0.5) * 24, 0.75, (Math.random() - 0.5) * 24);
+    }
     this.velocity.set(0, 0, 0);
     this.hitFlashTimer = 0;
     this.burnTimer = 0;

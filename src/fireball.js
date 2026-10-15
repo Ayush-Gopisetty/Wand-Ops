@@ -70,6 +70,7 @@ export class FireballManager {
         // Tree trunks (cylinder check in XZ plane)
         let hitTree = false;
         for (const tree of colliders.trees) {
+          if (tree.maxY !== undefined && p.y >= tree.maxY) continue;
           const dx = p.x - tree.x, dz = p.z - tree.z;
           if (dx * dx + dz * dz < tree.radius * tree.radius) { hitTree = true; break; }
         }

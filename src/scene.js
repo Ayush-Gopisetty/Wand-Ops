@@ -93,10 +93,52 @@ export function createScene(canvas) {
     return tex;
   }
 
-  const groundMat = new THREE.MeshStandardMaterial({ map: makeFlagstoneTexture(), roughness: 0.95 });
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(ARENA * 2, ARENA * 2), groundMat);
+  function makeGrassTexture() {
+    const S = 512;
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = S;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#4c7536';
+    ctx.fillRect(0, 0, S, S);
+    for (let i = 0; i < 9000; i++) {
+      const x = Math.random() * S, y = Math.random() * S;
+      ctx.strokeStyle = `hsl(${90 + Math.random() * 30}, ${30 + Math.random() * 20}%, ${22 + Math.random() * 18}%)`;
+      ctx.lineWidth = 1 + Math.random();
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + (Math.random() - 0.5) * 4, y - 3 - Math.random() * 5);
+      ctx.stroke();
+    }
+    const tex = new THREE.CanvasTexture(cv);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(22, 22);
+    return tex;
+  }
+
+  const grassMat = new THREE.MeshStandardMaterial({ map: makeGrassTexture(), roughness: 1 });
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(ARENA * 2, ARENA * 2), grassMat);
   ground.rotation.x = -Math.PI / 2;
   scene.add(ground);
+
+  // Flagstone inside the castle and on the paths out of each gate; polygonOffset keeps it from z-fighting the grass
+  const flagTex = makeFlagstoneTexture();
+  function addFlagstone(cx, cz, w, d) {
+    const tex = flagTex.clone();
+    tex.needsUpdate = true;
+    tex.repeat.set(w / 6, d / 6);
+    const mat = new THREE.MeshStandardMaterial({
+      map: tex, roughness: 0.95, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
+    });
+    const tile = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat);
+    tile.rotation.x = -Math.PI / 2;
+    tile.position.set(cx, 0.005, cz);
+    scene.add(tile);
+  }
+  addFlagstone(0, 0, 44, 44);
+  addFlagstone(0, 33.5, 6, 23);
+  addFlagstone(0, -33.5, 6, 23);
+  addFlagstone(33.5, 0, 23, 6);
+  addFlagstone(-33.5, 0, 23, 6);
 
 
   // ── Arena walls (stone fortress) ──────────────────────────────────────────
@@ -330,12 +372,12 @@ export function createScene(canvas) {
   // stretches badly on a thin rail box.
   const ladderRailMat = new THREE.MeshStandardMaterial({ color: 0x5a3f26, roughness: 0.8 });
   const ladderRungMat = new THREE.MeshStandardMaterial({ color: 0x3a2a18, roughness: 0.85 });
-  function addLadder(x, z, alongX, height) {
+  function addLadder(x, z, alongX, height, yBase = 0) {
     const rail = new THREE.Mesh(
       new THREE.BoxGeometry(alongX ? 1.0 : 0.15, height, alongX ? 0.15 : 1.0),
       ladderRailMat,
     );
-    rail.position.set(x, height / 2, z);
+    rail.position.set(x, yBase + height / 2, z);
     scene.add(rail);
     const rungCount = Math.round(height / 0.5);
     for (let i = 0; i < rungCount; i++) {
@@ -343,7 +385,7 @@ export function createScene(canvas) {
         new THREE.BoxGeometry(alongX ? 0.7 : 0.16, 0.1, alongX ? 0.16 : 0.7),
         ladderRungMat,
       );
-      rung.position.set(x, 0.3 + i * 0.5, z);
+      rung.position.set(x, yBase + 0.3 + i * 0.5, z);
       scene.add(rung);
     }
   }
@@ -420,8 +462,100 @@ export function createScene(canvas) {
     const tPt = new THREE.PointLight(0xff8833, 2.2, 15);
     tPt.position.set(tx * 0.85, 4.5, tz * 0.85);
     scene.add(tPt);
-    ringTowers.push({ x: tx, z: tz, radius: RING_CTR });
+    // maxY lets players standing on a climbable tower's roof pass over its collider
+    ringTowers.push({ x: tx, z: tz, radius: RING_CTR, maxY: RING_CTH });
   });
+
+  // Two opposite corner towers are climbable by a ladder from the wall top
+  const TOWER_TOP_Y = GRND_Y_ + RING_CTH;
+  [[RING_HW, RING_HW], [-RING_HW, -RING_HW]].forEach(([tx, tz]) => {
+    const sx = Math.sign(tx);
+    addLadder(tx - sx * RING_CTR, tz, false, RING_CTH - RING_H, RING_H);
+    // Tops out 0.5 before the tower face, where the tower collider stops a climbing player
+    const start = tx - sx * 4.3;
+    const end = tx - sx * 3.5;
+    const reach = tx - sx * 2.2;
+    elevRamps.push({
+      xMin: Math.min(start, reach), xMax: Math.max(start, reach), zMin: tz - 0.6, zMax: tz + 0.6,
+      axis: 'x', axisStart: start, axisEnd: end, yStart: RING_WY, yEnd: TOWER_TOP_Y, steps: 6,
+    });
+    elevPlatforms.push({ xMin: tx - 2.2, xMax: tx + 2.2, zMin: tz - 2.2, zMax: tz + 2.2, y: TOWER_TOP_Y });
+  });
+
+  // ── Cover ─────────────────────────────────────────────────────────────────
+  // Solid blocks that stop players and fireballs but can be jumped onto; maxY is the mesh top like the ring walls
+  const coverBoxes = [];
+  const coverPillars = [];
+  function addCoverCollider(cx, cz, w, h, d) {
+    const rect = { xMin: cx - w / 2, xMax: cx + w / 2, zMin: cz - d / 2, zMax: cz + d / 2 };
+    coverBoxes.push({ ...rect, maxY: h });
+    elevPlatforms.push({ ...rect, y: GRND_Y_ + h });
+  }
+  function addCover(cx, cz, w, h, d) {
+    addBox(cx, h / 2, cz, w, h, d);
+    addCoverCollider(cx, cz, w, h, d);
+  }
+  function addPillar(x, z, h) {
+    const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, h, 8), stoneMat);
+    pillar.position.set(x, h / 2, z);
+    scene.add(pillar);
+    coverPillars.push({ x, z, radius: 0.6, maxY: h });
+  }
+
+  // Courtyard: a fountain in the middle, a pinwheel of low walls, broken pillars on the gate lines.
+  // Low pieces must be taller than 1.05 or the player's step-over threshold (maxY - 0.3) lets them walk through.
+  const basin = new THREE.Mesh(new THREE.CylinderGeometry(2.3, 2.45, 1.1, 8), stoneMat);
+  basin.position.set(0, 0.55, 0);
+  scene.add(basin);
+  const basinWater = new THREE.Mesh(
+    new THREE.CircleGeometry(1.95, 8),
+    new THREE.MeshStandardMaterial({ color: 0x4f9fd0, emissive: 0x123a55, roughness: 0.2 }),
+  );
+  basinWater.rotation.x = -Math.PI / 2;
+  basinWater.position.y = 1.0;
+  scene.add(basinWater);
+  addCoverCollider(0, 0, 4.1, 1.1, 4.1);
+  addPillar(0, 0, 2.8);
+
+  addCover( 5.5,  5.5, 3.2, 1.2, 0.6);
+  addCover(-5.5,  5.5, 0.6, 1.2, 3.2);
+  addCover(-5.5, -5.5, 3.2, 1.2, 0.6);
+  addCover( 5.5, -5.5, 0.6, 1.2, 3.2);
+
+  addPillar(0,  6.5, 2.6);
+  addPillar(0, -6.5, 3.4);
+  addPillar( 6.5, 0, 2.2);
+  addPillar(-6.5, 0, 3.0);
+
+  // Outside the walls: broken wall ruins between the platforms, plus boulders toward the corners
+  function addRuin(cx, cz, alongX) {
+    addCover(cx, cz, alongX ? 4.6 : 0.8, 2.2, alongX ? 0.8 : 4.6);
+    // Lower broken chunk at the end nearer the map's centre line
+    const chunkX = alongX ? cx - Math.sign(cx) * 3.2 : cx;
+    const chunkZ = alongX ? cz : cz - Math.sign(cz) * 3.2;
+    addCover(chunkX, chunkZ, alongX ? 1.8 : 0.8, 1.2, alongX ? 0.8 : 1.8);
+  }
+  [[12, 30], [-12, 30], [12, -30], [-12, -30]].forEach(([x, z]) => addRuin(x, z, true));
+  [[30, 12], [30, -12], [-30, 12], [-30, -12]].forEach(([x, z]) => addRuin(x, z, false));
+
+  const rockMat = new THREE.MeshStandardMaterial({ color: 0x77736c, roughness: 0.95, flatShading: true });
+  function addRock(cx, cz) {
+    const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(1.5, 0), rockMat);
+    rock.scale.set(1.15, 0.85, 1);
+    rock.rotation.y = Math.random() * Math.PI;
+    rock.position.set(cx, 0.9, cz);
+    scene.add(rock);
+    addCoverCollider(cx, cz, 2.6, 2.0, 2.6);
+  }
+  [[30, 44], [-30, -44], [44, -30], [-44, 30]].forEach(([x, z]) => addRock(x, z));
+
+  // Respawn points spread over the map; the game picks the one farthest from enemies
+  const spawnPoints = [
+    [7.5, 7.5], [-7.5, -7.5],
+    [0, 25], [0, -25], [25, 0], [-25, 0],
+    [45, 45], [-45, 45], [45, -45], [-45, -45],
+    [14, 45], [-14, -45], [45, -14], [-45, 14],
+  ];
 
   // Team-colored banners on the ring wall (blue west, red east)
   function addBanner(x, z, faceX, hex) {
@@ -433,10 +567,12 @@ export function createScene(canvas) {
     flag.rotation.y = faceX ? Math.PI / 2 : 0;
     scene.add(flag);
   }
-  addBanner(-RING_HW + 0.2, -6, true, 0x2244cc);
-  addBanner(-RING_HW + 0.2,  6, true, 0x2244cc);
-  addBanner( RING_HW - 0.2, -6, true, 0xcc2222);
-  addBanner( RING_HW - 0.2,  6, true, 0xcc2222);
+  // Hung just off the wall's inner face; clear of the gate (z ±2.2) and the stairs/ladders (z ±6.6 and beyond)
+  const bannerX = RING_HW - halfRT - 0.05;
+  addBanner(-bannerX, -4.4, true, 0x2244cc);
+  addBanner(-bannerX,  4.4, true, 0x2244cc);
+  addBanner( bannerX, -4.4, true, 0xcc2222);
+  addBanner( bannerX,  4.4, true, 0xcc2222);
 
   // ── Decor: trees and bushes ──────────────────────────────────────────────
   const leafMat   = new THREE.MeshStandardMaterial({ color: 0x2d5a27, roughness: 0.9 });
@@ -462,7 +598,13 @@ export function createScene(canvas) {
 
   const TREE_SPOTS = [[50, 0], [-50, 0]];
   TREE_SPOTS.forEach(([x, z]) => addTree(x, z));
-  [[20, 0], [-20, 0], [0, 20], [0, -20], [0, -50]].forEach(([x, z]) => addBush(x, z));
+  // Bushes flank each gate against the outer wall face rather than sitting in the opening
+  const bushOff = RING_HW + halfRT + 1.1;
+  [
+    [bushOff, 3.6], [bushOff, -3.6], [-bushOff, 3.6], [-bushOff, -3.6],
+    [3.6, bushOff], [-3.6, bushOff], [3.6, -bushOff], [-3.6, -bushOff],
+    [0, -50],
+  ].forEach(([x, z]) => addBush(x, z));
 
   const decorTrees = TREE_SPOTS.map(([x, z]) => ({ x, z, radius: 0.4 }));
 
@@ -475,10 +617,11 @@ export function createScene(canvas) {
 
   const colliders = {
     arenaSize: ARENA,
-    trees: [...ringTowers, ...decorTrees],
+    trees: [...ringTowers, ...coverPillars, ...decorTrees],
     platforms: elevPlatforms,
     ramps:     elevRamps,
-    boxes:     [...elevBoxes, ...ringWallBoxes],
+    boxes:     [...elevBoxes, ...ringWallBoxes, ...coverBoxes],
+    spawnPoints,
   };
 
   return { scene, camera, renderer, colliders };

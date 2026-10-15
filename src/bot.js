@@ -16,6 +16,25 @@ const _toTarget = new THREE.Vector3();
 const _forward = new THREE.Vector3();
 const _strafe = new THREE.Vector3();
 const _move = new THREE.Vector3();
+const _probe = new THREE.Vector3();
+
+// Samples the shot path against the same solids fireballs collide with
+function hasLineOfSight(from, to, colliders) {
+  if (!colliders) return true;
+  const steps = Math.ceil(from.distanceTo(to) / 0.4);
+  for (let i = 1; i < steps; i++) {
+    _probe.lerpVectors(from, to, i / steps);
+    for (const box of colliders.boxes || []) {
+      if (_probe.y < box.maxY && _probe.x > box.xMin && _probe.x < box.xMax && _probe.z > box.zMin && _probe.z < box.zMax) return false;
+    }
+    for (const tree of colliders.trees) {
+      if (tree.maxY !== undefined && _probe.y >= tree.maxY) continue;
+      const dx = _probe.x - tree.x, dz = _probe.z - tree.z;
+      if (dx * dx + dz * dz < tree.radius * tree.radius) return false;
+    }
+  }
+  return true;
+}
 
 export class SimpleBotController {
   constructor(player, colliders) {
@@ -24,6 +43,11 @@ export class SimpleBotController {
     this._cooldown = 0.8;
     this._strafeDir = Math.random() > 0.5 ? 1 : -1;
     this._strafeTimer = 1.8;
+    this._windowStart = player.position.clone();
+    this._windowTime = 0;
+    this._detourTimer = 0;
+    this._detourDir = 1;
+    this._blocked = false;
   }
 
   update(delta, target) {
@@ -46,16 +70,34 @@ export class SimpleBotController {
     _strafe.set(-_forward.z, 0, _forward.x).multiplyScalar(this._strafeDir * BOT_STRAFE_SPEED);
     _move.copy(_strafe);
 
-    if (dist > BOT_DESIRED_MAX_DIST) {
+    // Keep closing in while cover blocks the shot instead of idling at preferred range
+    if (dist > BOT_DESIRED_MAX_DIST || (this._blocked && dist > BOT_DESIRED_MIN_DIST)) {
       _move.addScaledVector(_forward, 1.05);
     } else if (dist < BOT_DESIRED_MIN_DIST) {
       _move.addScaledVector(_forward, -0.9);
     }
 
     if (_move.lengthSq() > 0.0001) {
+      if (this._detourTimer > 0) {
+        this._detourTimer -= delta;
+        _move.set(-_forward.z, 0, _forward.x).multiplyScalar(this._detourDir).addScaledVector(_forward, 0.35);
+      }
       _move.normalize();
       this.player.position.addScaledVector(_move, BOT_MOVE_SPEED * delta);
       resolveCollisions(this.player.position, this.colliders);
+
+      // Pinned against cover: collision push-out makes the bot jitter in place, so judge
+      // progress over a short window and sidestep around the obstacle when it stalls
+      this._windowTime += delta;
+      if (this._windowTime >= 0.5) {
+        const net = Math.hypot(this.player.position.x - this._windowStart.x, this.player.position.z - this._windowStart.z);
+        if (this._detourTimer <= 0 && net < BOT_MOVE_SPEED * this._windowTime * 0.25) {
+          this._detourTimer = 0.9;
+          this._detourDir = Math.random() > 0.5 ? 1 : -1;
+        }
+        this._windowStart.copy(this.player.position);
+        this._windowTime = 0;
+      }
     }
 
     const targetY = getGroundY(this.player.position.x, this.player.position.z, this.player.position.y, this.colliders);
@@ -63,12 +105,18 @@ export class SimpleBotController {
     this.player.position.y += clamp(targetY - this.player.position.y, -maxStep, maxStep);
 
     if (this.player.slowTimer > 0 || this.player.silenceTimer > 0) return null;
+    if (dist > 18) this._blocked = false;
     if (this._cooldown > 0 || dist > 18) return null;
 
-    this._cooldown = BOT_FIRE_COOLDOWN_MIN + Math.random() * (BOT_FIRE_COOLDOWN_MAX - BOT_FIRE_COOLDOWN_MIN);
     const spawnPos = this.player.position.clone()
       .add(new THREE.Vector3(0, BOT_EYE_HEIGHT, 0))
       .addScaledVector(_forward, 0.65);
+    this._blocked = !hasLineOfSight(spawnPos, target.position, this.colliders);
+    if (this._blocked) {
+      this._cooldown = 0.25;
+      return null;
+    }
+    this._cooldown = BOT_FIRE_COOLDOWN_MIN + Math.random() * (BOT_FIRE_COOLDOWN_MAX - BOT_FIRE_COOLDOWN_MIN);
 
     // Aim from the eye at the target's body centre; a level shot from eye height passes overhead
     return {
@@ -87,6 +135,7 @@ function resolveCollisions(position, colliders) {
   position.z = clamp(position.z, -bound, bound);
 
   for (const tree of colliders.trees) {
+    if (tree.maxY !== undefined && position.y >= tree.maxY - 0.3) continue;
     const dx = position.x - tree.x;
     const dz = position.z - tree.z;
     const distSq = dx * dx + dz * dz;
