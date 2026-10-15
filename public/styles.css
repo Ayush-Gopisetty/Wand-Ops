@@ -202,9 +202,8 @@ body {
 /* ── FPS counter ── */
 #fps-counter {
   position: absolute;
-  top: 14px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 244px;
+  left: 16px;
   font-size: 13px;
   font-family: var(--font-label);
   font-weight: 700;
@@ -246,7 +245,7 @@ body {
 /* ── Kill feed ── */
 #kill-feed {
   position: absolute;
-  top: 262px;
+  top: 282px;
   left: 14px;
   display: flex;
   flex-direction: column;
