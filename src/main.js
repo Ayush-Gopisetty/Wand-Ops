@@ -59,7 +59,6 @@ const GROUND_Y = 0.75;
 const PLATFORM_STEP_UP = 2;
 const BOT_IDS = [9001, 9002];
 const BOT_SPAWNS = [[0, 20], [0, -20]];
-const BOT_COLOR = 0xffd166;
 const WEAPON_STATS = {
   fire: {
     name: 'Fire Wand',
@@ -1003,10 +1002,16 @@ function setLocalSkin(skinId, shouldBroadcast = true) {
   }
 }
 
-function addBot(id, name, simulate, position = null) {
-  const player = new Player(scene, simulate, BOT_COLOR);
+function pickBotSkin() {
+  const skins = Object.keys(PLAYER_SKINS);
+  return skins[Math.floor(Math.random() * skins.length)];
+}
+
+function addBot(id, name, simulate, position = null, skinId = DEFAULT_SKIN_ID) {
+  const player = new Player(scene, simulate, getSkinConfig(skinId).body);
   player.id = id;
   player.setName(name);
+  player.setSkin(skinId);
   if (position) {
     player.position.copy(position);
   } else {
@@ -1018,7 +1023,7 @@ function addBot(id, name, simulate, position = null) {
   bots.set(id, { player, ai: simulate ? new SimpleBotController(player, colliders) : null, name });
   ensureScoreEntry(id);
   playerNames.set(id, name);
-  playerSkins.set(id, DEFAULT_SKIN_ID);
+  playerSkins.set(id, player.skinId);
   refreshScoreboard();
   ui.addKillEntry(`${name} joined the arena.`);
   updateDisplayedPlayerCount();
@@ -1054,7 +1059,7 @@ function refreshBots() {
   if (!host) return;
   const desired = getDesiredBotCount();
   BOT_IDS.forEach((id, i) => {
-    if (i < desired && !bots.has(id)) addBot(id, pickBotGamerTag(), true);
+    if (i < desired && !bots.has(id)) addBot(id, pickBotGamerTag(), true, null, pickBotSkin());
     else if (i >= desired && bots.has(id)) removeBot(id);
   });
 }
@@ -1067,6 +1072,7 @@ function sendBotState() {
     +player.position.z.toFixed(2),
     +player.rotation.toFixed(3),
     name,
+    player.skinId,
   ]));
 }
 
@@ -1131,12 +1137,12 @@ function getMinimapPlayers() {
     });
   });
 
+  // Drawn exactly like human players so the minimap doesn't give bots away
   bots.forEach(({ player }) => {
     players.push({
       x: player.position.x,
       z: player.position.z,
-      color: `#${BOT_COLOR.toString(16).padStart(6, '0')}`,
-      isBot: true,
+      color: `#${getSkinConfig(player.skinId).body.toString(16).padStart(6, '0')}`,
     });
   });
 
@@ -1421,19 +1427,24 @@ function init() {
     onBotState(actorNr, { b }) {
       if (isBotHost() || !Array.isArray(b)) return;
       const seen = new Set();
-      for (const [id, x, y, z, r, rawName] of b) {
+      for (const [id, x, y, z, r, rawName, rawSkin] of b) {
         if (!isBotId(id)) continue;
         seen.add(id);
         const name = sanitizePlayerName(rawName);
+        const skinId = sanitizeSkinId(rawSkin);
         let bot = bots.get(id);
         if (!bot) {
-          addBot(id, name, false, new THREE.Vector3(x, y, z));
+          addBot(id, name, false, new THREE.Vector3(x, y, z), skinId);
           bot = bots.get(id);
         } else if (bot.name !== name) {
           bot.name = name;
           bot.player.setName(name);
           playerNames.set(id, name);
           refreshScoreboard();
+        }
+        if (bot.player.skinId !== skinId) {
+          bot.player.setSkin(skinId);
+          playerSkins.set(id, skinId);
         }
         bot.player.targetPosition.set(x, y, z);
         bot.player.targetRotation = r;

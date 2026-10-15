@@ -169,7 +169,7 @@ export class UIManager {
       } else {
         ctx.fillStyle = player.color || '#ff8f6b';
         ctx.beginPath();
-        ctx.arc(px, py, player.isBot ? 5 : 4.5, 0, Math.PI * 2);
+        ctx.arc(px, py, 4.5, 0, Math.PI * 2);
         ctx.fill();
       }
     }
