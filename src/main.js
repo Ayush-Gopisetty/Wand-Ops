@@ -108,6 +108,21 @@ let previewScene, previewCamera, previewRenderer, previewModel;
 const remotePlayers = new Map();
 let trainingBot = null;
 let trainingBotAI = null;
+let trainingBotName = '';
+const BOT_GAMER_TAGS = [
+  'xX_HexLord_Xx', 'NoScopeMerlin', 'FrostByte', 'Gandalf_Main', 'spellsl1nger',
+  'ManaBurnt', 'xXArcaneXx', 'CritWizard99', 'pyro_kid07', 'LagWizard',
+  'ImOnlyLvl3', 'quickscopeqt', 'Sir_Fizzle', 'DarkMageOP', 'sweatyM4ge',
+  'cast_n_blast', 'EzSpellz', 'MrMagicMissile', 'TheRealWizzard', 'NotABot_42',
+  'icykicks', 'Hexagon_Joe', 'CrispyCaster', 'zap_zap_zap', 'Owlbear_Andy',
+  'SpellCheck404', 'oneshot_oliver', 'BigStaffEnergy', 'm0rgana', 'tilted_tom',
+];
+
+function pickBotGamerTag() {
+  const own = (localPlayerName || '').toLowerCase();
+  const options = BOT_GAMER_TAGS.filter((tag) => tag.toLowerCase() !== own && tag !== trainingBotName);
+  return options[Math.floor(Math.random() * options.length)];
+}
 let firebaseServices = null;
 
 let controls, fireballs, network, ui, colliders;
@@ -254,7 +269,7 @@ function writeGuestProfile() {
 
 function getPlayerLabel(actorNr, isLocal = false) {
   if (isLocal || actorNr === localActorId) return '⚔ You';
-  if (actorNr === BOT_ID) return 'Training Bot';
+  if (actorNr === BOT_ID) return trainingBotName;
   return playerNames.get(actorNr) || `Wizard ${actorNr}`;
 }
 
@@ -812,16 +827,17 @@ function spawnTrainingBot() {
   if (trainingBot || localActorId < 0 || hasHumanOpponents()) return;
   const bot = new Player(scene, true, BOT_COLOR);
   bot.id = BOT_ID;
-  bot.setName('Training Bot');
+  trainingBotName = pickBotGamerTag();
+  bot.setName(trainingBotName);
   bot.position.set(0, GROUND_Y, 20);
   bot.group.position.copy(bot.position);
   trainingBot = bot;
   trainingBotAI = new SimpleBotController(bot, colliders);
   ensureScoreEntry(BOT_ID);
-  playerNames.set(BOT_ID, 'Training Bot');
+  playerNames.set(BOT_ID, trainingBotName);
   playerSkins.set(BOT_ID, DEFAULT_SKIN_ID);
   refreshScoreboard();
-  ui.addKillEntry('Training Bot joined the arena.');
+  ui.addKillEntry(`${trainingBotName} joined the arena.`);
   updateDisplayedPlayerCount();
 }
 
@@ -840,7 +856,7 @@ function removeTrainingBot(reason = '') {
 
 function refreshTrainingBotState() {
   if (hasHumanOpponents()) {
-    removeTrainingBot('Training Bot left for a live match.');
+    removeTrainingBot(`${trainingBotName} left for a live match.`);
     return;
   }
   spawnTrainingBot();
@@ -1417,7 +1433,7 @@ function update(delta) {
         const mine = scores.get(localActorId);
         if (mine) network.sendScoreUpdate(localActorId, mine.kills + 1, mine.deaths);
       } else {
-        handleDefeat(localActorId, targetId, 'You', 'Training Bot');
+        handleDefeat(localActorId, targetId, 'You', trainingBotName);
       }
       return;
     }
@@ -1432,7 +1448,7 @@ function update(delta) {
 
       localPlayer.respawn();
       ui.setHealth(localPlayer.health);
-      handleDefeat(BOT_ID, localActorId, 'Training Bot', 'you');
+      handleDefeat(BOT_ID, localActorId, trainingBotName, 'you');
     }
   }, colliders);
 
