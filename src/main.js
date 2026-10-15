@@ -909,6 +909,20 @@ function getNearestHuman(position) {
   return nearest;
 }
 
+// Random pick among the 3 spawn points farthest from everyone else, so respawns are safe but not predictable
+function pickSpawnPoint(self) {
+  const others = [localPlayer, ...remotePlayers.values(), ...[...bots.values()].map((b) => b.player)]
+    .filter((p) => p && p !== self);
+  const ranked = colliders.spawnPoints
+    .map((pt) => {
+      let nearest = Infinity;
+      for (const o of others) nearest = Math.min(nearest, Math.hypot(o.position.x - pt[0], o.position.z - pt[1]));
+      return { pt, nearest };
+    })
+    .sort((a, b) => b.nearest - a.nearest);
+  return ranked[Math.floor(Math.random() * Math.min(3, ranked.length))].pt;
+}
+
 function getCombatTarget(id) {
   return remotePlayers.get(id) || bots.get(id)?.player || null;
 }
@@ -984,7 +998,7 @@ function handleBotHit(botId, targetId, damage, spell, dir) {
     localPlayer.applySpellEffect(spell);
     ui.setHealth(localPlayer.health);
     if (!dead) return;
-    localPlayer.respawn();
+    localPlayer.respawn(pickSpawnPoint(localPlayer));
     network.sendRespawn();
     ui.setHealth(localPlayer.health);
   } else {
@@ -997,7 +1011,7 @@ function handleBotHit(botId, targetId, damage, spell, dir) {
 }
 
 function handleRemoteHitDefeat(actorNr) {
-  localPlayer.respawn();
+  localPlayer.respawn(pickSpawnPoint(localPlayer));
   network.sendRespawn();
   ui.setHealth(localPlayer.health);
   queueLifetimeStats({ deaths: 1 });
@@ -1094,6 +1108,7 @@ function init() {
   }
 
   localPlayer = new Player(scene, true, getSkinConfig(localSkinId).body);
+  localPlayer.respawn(pickSpawnPoint(localPlayer));
   localPlayer.setName(localPlayerName);
   localPlayer.setSkin(localSkinId);
   localPlayer.group.visible = false;
@@ -1225,7 +1240,7 @@ function init() {
       ensureScoreEntry(victimId).deaths++;
       const bot = bots.get(victimId);
       if (bot) {
-        if (bot.ai) bot.player.respawn();
+        if (bot.ai) bot.player.respawn(pickSpawnPoint(bot.player));
         else bot.player.health = 100;
       }
       refreshScoreboard();
@@ -1454,6 +1469,7 @@ function updateLocalPlayer(delta) {
     localPlayer.position.x = clamp(localPlayer.position.x, -bound, bound);
     localPlayer.position.z = clamp(localPlayer.position.z, -bound, bound);
     for (const tree of colliders.trees) {
+      if (tree.maxY !== undefined && localPlayer.position.y >= tree.maxY - 0.3) continue;
       const dxTree = localPlayer.position.x - tree.x;
       const dzTree = localPlayer.position.z - tree.z;
       const distSq = dxTree * dxTree + dzTree * dzTree;
@@ -1506,7 +1522,7 @@ function updateLocalPlayer(delta) {
     ui.setHealth(localPlayer.health);
     if (dead) {
       queueLifetimeStats({ deaths: 1 });
-      localPlayer.respawn();
+      localPlayer.respawn(pickSpawnPoint(localPlayer));
       ui.setHealth(localPlayer.health);
     }
   }
@@ -1552,7 +1568,7 @@ function updateWorld(delta) {
       if (!dead) return;
 
       // Only the simulating client moves a respawned body; mirrored copies just reset health
-      if (target.isLocal) target.respawn();
+      if (target.isLocal) target.respawn(pickSpawnPoint(target));
       else target.health = 100;
       handleDefeat(localActorId, targetId, 'You', getPlayerLabel(targetId));
       network.sendKill(localActorId, targetId);
