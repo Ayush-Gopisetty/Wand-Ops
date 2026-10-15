@@ -66,7 +66,7 @@
       <div class="lo-nav-actions">
         <span class="lo-auth-user" id="auth-user-badge" hidden></span>
         <div class="lo-currency">
-          <span class="lo-coin">$</span><span id="coin-count">0</span>
+          <span class="lo-coin" aria-hidden="true"></span><span id="coin-count">0</span><span class="lo-sr-only"> coins</span>
         </div>
         <button class="lo-icon-btn" title="Shop">🛒</button>
         <button class="lo-icon-btn" title="Help">❓</button>
@@ -83,6 +83,7 @@
           <p id="overlay-status" class="lo-play-status">Connecting…</p>
           <h2 class="lo-play-label">PLAY</h2>
           <p class="lo-play-mode">QUICK MATCH: ARENA</p>
+          <p class="lo-play-meta" id="lobby-online"></p>
         </div>
 
         <div class="lo-spell-tray lo-spell-tray-sidebar" onclick="event.stopPropagation()">
@@ -116,7 +117,7 @@
         </div>
 
         <div class="lo-card lo-weapon-stats" onclick="event.stopPropagation()">
-          <div class="lo-card-head"><span>+</span> WEAPON STATS</div>
+          <div class="lo-card-head"><span>🪄</span> WEAPON STATS</div>
           <div class="lo-weapon-name" id="weapon-stats-name">Fire Wand</div>
           <div class="lo-stat-bars" id="weapon-stat-bars">
             <div class="lo-stat-bar-row">
@@ -148,8 +149,6 @@
           </div>
           <div class="lo-status-dot"></div>
         </div>
-
-        <h1 class="lo-player-name" id="lo-player-name">ARCHMAGE HEX</h1>
 
         <div class="lo-name-field" onclick="event.stopPropagation()">
           <span class="lo-name-field-label">Wizard Name</span>
@@ -190,6 +189,7 @@
               <span class="lo-skin-action">Buy</span>
             </button>
           </div>
+          <div class="lo-shop-note" id="shop-signedin-note">Sign in to save purchased skins to your account.</div>
         </div>
 
         <p id="overlay-hint" class="lo-hint">WASD · Mouse · LMB cast · Space jump</p>
@@ -197,24 +197,11 @@
 
       <aside class="lo-right">
         <div class="lo-card" id="daily-quests-card">
-          <div class="lo-card-head"><span>Daily</span> DAILY QUESTS</div>
-          <div class="lo-quest-note" id="daily-quest-reset">Refreshes daily.</div>
+          <div class="lo-card-head"><span>📜</span> DAILY QUESTS</div>
           <div class="lo-quest-list" id="daily-quest-list"></div>
         </div>
 
-        <div class="lo-card" id="shop-card">
-          <div class="lo-card-head"><span>Shop</span> ARCANE SHOP</div>
-          <div class="lo-shop-summary">
-            <div>
-              <div class="lo-shop-title" id="shop-selected-skin-name">Amethyst</div>
-              <div class="lo-shop-copy" id="shop-selected-skin-copy">Default skin equipped.</div>
-            </div>
-            <button class="lo-shop-cta" id="shop-selected-skin-btn" type="button">Equipped</button>
-          </div>
-          <div class="lo-shop-note" id="shop-signedin-note">Sign in to save purchased skins to your account.</div>
-        </div>
-
-        <div class="lo-card">
+        <div class="lo-card lo-lifetime-card">
           <div class="lo-card-head"><span>📊</span> LIFETIME STATS</div>
           <div class="lo-stat-row">
             <span class="lo-stat-label">KILLS</span>
@@ -237,20 +224,9 @@
 
         <div class="lo-card lo-news-card" onclick="event.stopPropagation()">
           <div class="lo-card-head"><span>📣</span> WIZARD NEWS</div>
-          <div class="lo-news-thumb">
-            <svg viewBox="0 0 48 32" fill="none"><rect width="48" height="32" rx="4" fill="#313252"/><path d="M18 20 L24 12 L30 20Z" fill="#4c4355"/><circle cx="32" cy="13" r="3" fill="#4c4355"/></svg>
-          </div>
           <div class="lo-news-body">
             <div class="lo-news-title">PATCH v0.25: NEON WANDS</div>
             <div class="lo-news-desc">New magical skins and arena rebalancing just dropped in this week's update…</div>
-          </div>
-          <div class="lo-card-divider"></div>
-          <div class="lo-news-event">
-            <div class="lo-event-ico">📅</div>
-            <div>
-              <div class="lo-event-name">WEEKLY TOURNAMENT</div>
-              <div class="lo-event-time">Starts in 4h 20m</div>
-            </div>
           </div>
         </div>
       </aside>
@@ -266,7 +242,7 @@
       <div class="lo-footer-right">
         <span>DISCORD</span>
         <span>𝕏</span>
-        <span class="lo-footer-copy">© 2024 Blue Wizard Digital</span>
+        <span class="lo-footer-copy" id="footer-copy">© Blue Wizard Digital</span>
       </div>
     </footer>
 
@@ -299,19 +275,5 @@
   </div>
 
   <script type="module" src="/src/main.js"></script>
-
-  <script>
-    (function() {
-      const el = document.getElementById('lo-player-name');
-      if (!el) return;
-      const text = el.textContent;
-      el.innerHTML = text.split('').map((ch, i) => {
-        if (ch === ' ') return '<span class="lo-char-space"> </span>';
-        const rot = i % 2 === 0 ? -3 : 3;
-        const ty = i % 2 === 0 ? 2 : -2;
-        return `<span class="lo-char" style="transform:rotate(${rot}deg) translateY(${ty}px)">${ch}</span>`;
-      }).join('');
-    })();
-  </script>
 </body>
 </html>
