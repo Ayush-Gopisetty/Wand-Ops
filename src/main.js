@@ -45,6 +45,11 @@ const PITCH_MIN = -1.4;
 const PITCH_MAX = 1.4;
 const DEFAULT_FOV = 72;
 const ADS_FOV = 44;
+const SETTINGS_KEY = 'wand-ops-settings';
+const DEFAULT_SETTINGS = { sensitivity: 1, fov: DEFAULT_FOV, showFps: true };
+const CHAT_MAX_LEN = 120;
+const CHAT_HISTORY = 50;
+const CHAT_COOLDOWN_MS = 800;
 const SHOOT_COOLDOWN = 0.5;
 const NET_TICK = 1 / 13;
 const EYE_HEIGHT = 1.5;
@@ -127,6 +132,7 @@ const isBotId = (id) => BOT_IDS.includes(id);
 let firebaseServices = null;
 
 let controls, fireballs, network, ui, colliders;
+let settings = { ...DEFAULT_SETTINGS };
 const scores = new Map();
 const playerNames = new Map();
 const playerSkins = new Map();
@@ -633,6 +639,177 @@ function closeAuthModal() {
   toggleAuthModal(false);
 }
 
+// ── Settings ─────────────────────────────────────────────────────────────────
+function loadSettings() {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'); } catch { saved = {}; }
+  return {
+    sensitivity: clamp(Number(saved.sensitivity) || DEFAULT_SETTINGS.sensitivity, 0.2, 3),
+    fov: clamp(Number(saved.fov) || DEFAULT_SETTINGS.fov, 60, 100),
+    showFps: saved.showFps === undefined ? DEFAULT_SETTINGS.showFps : Boolean(saved.showFps),
+  };
+}
+
+function applySettings() {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  const fpsEl = document.getElementById('fps-counter');
+  if (fpsEl) fpsEl.style.display = settings.showFps ? '' : 'none';
+  const sens = document.getElementById('setting-sens');
+  const fov = document.getElementById('setting-fov');
+  const fps = document.getElementById('setting-fps');
+  if (sens) sens.value = settings.sensitivity;
+  if (fov) fov.value = settings.fov;
+  if (fps) fps.checked = settings.showFps;
+  const sensOut = document.getElementById('setting-sens-value');
+  const fovOut = document.getElementById('setting-fov-value');
+  if (sensOut) sensOut.textContent = `${settings.sensitivity.toFixed(1)}×`;
+  if (fovOut) fovOut.textContent = `${settings.fov}°`;
+}
+
+// ── Lobby panels (help / settings / chat) ────────────────────────────────────
+function closeModals() {
+  document.querySelectorAll('.lo-modal-backdrop').forEach((m) => { m.hidden = true; });
+}
+
+function openModal(id) {
+  closeModals();
+  const modal = document.getElementById(id);
+  if (!modal) return;
+  modal.hidden = false;
+  modal.querySelector('[data-close-modal]')?.focus();
+}
+
+// ── Chat ─────────────────────────────────────────────────────────────────────
+function sanitizeChat(text) {
+  return String(text ?? '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, CHAT_MAX_LEN);
+}
+
+function addChatMessage(actorNr, rawText) {
+  const text = sanitizeChat(rawText);
+  if (!text) return;
+  const log = document.getElementById('chat-log');
+  if (!log) return;
+  log.querySelector('.lo-chat-empty')?.remove();
+
+  const mine = actorNr === localActorId;
+  const name = mine ? localPlayerName : getPlayerLabel(actorNr);
+  const row = document.createElement('div');
+  row.className = mine ? 'lo-chat-msg mine' : 'lo-chat-msg';
+  const nameEl = document.createElement('span');
+  nameEl.className = 'lo-chat-name';
+  nameEl.textContent = name;
+  row.append(nameEl, document.createTextNode(text));
+  log.appendChild(row);
+  while (log.children.length > CHAT_HISTORY) log.firstElementChild.remove();
+  log.scrollTop = log.scrollHeight;
+
+  if (mine) return;
+  const chatOpen = !document.getElementById('chat-modal')?.hidden;
+  if (!chatOpen) document.getElementById('chat-unread')?.removeAttribute('hidden');
+  if (document.pointerLockElement) ui.addKillEntry(`💬 ${name}: ${text}`);
+}
+
+function updateChatNote() {
+  const note = document.getElementById('chat-note');
+  if (!note) return;
+  note.textContent = network?.isOnline()
+    ? 'Messages go to everyone in this match. Be kind.'
+    : "You're playing offline, so only you can see these messages.";
+}
+
+function setupTopBar() {
+  document.getElementById('nav-shop-btn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeModals();
+    const picker = document.querySelector('.lo-skin-picker');
+    if (!picker) return;
+    picker.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    picker.classList.remove('lo-flash');
+    void picker.offsetWidth; // restart the animation on repeat clicks
+    picker.classList.add('lo-flash');
+  });
+
+  document.getElementById('nav-help-btn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openModal('help-modal');
+  });
+
+  document.getElementById('nav-settings-btn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    applySettings();
+    openModal('settings-modal');
+  });
+
+  document.getElementById('nav-chat-btn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    updateChatNote();
+    openModal('chat-modal');
+    document.getElementById('chat-unread')?.setAttribute('hidden', '');
+    document.getElementById('chat-input')?.focus();
+  });
+
+  document.querySelectorAll('.lo-modal-backdrop').forEach((backdrop) => {
+    backdrop.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeModals();
+    });
+    // Keep typing in panel fields away from the game's key handlers (Space, Tab, WASD)
+    backdrop.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeModals();
+      e.stopPropagation();
+    });
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !document.pointerLockElement) closeModals();
+  });
+  document.querySelectorAll('[data-close-modal]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeModals();
+    });
+  });
+
+  document.getElementById('setting-sens')?.addEventListener('input', (e) => {
+    settings.sensitivity = clamp(Number(e.target.value), 0.2, 3);
+    applySettings();
+  });
+  document.getElementById('setting-fov')?.addEventListener('input', (e) => {
+    settings.fov = clamp(Number(e.target.value), 60, 100);
+    applySettings();
+  });
+  document.getElementById('setting-fps')?.addEventListener('change', (e) => {
+    settings.showFps = e.target.checked;
+    applySettings();
+  });
+  document.getElementById('settings-reset-btn')?.addEventListener('click', () => {
+    settings = { ...DEFAULT_SETTINGS };
+    applySettings();
+  });
+
+  let lastChatAt = 0;
+  document.getElementById('chat-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const input = document.getElementById('chat-input');
+    const text = sanitizeChat(input?.value);
+    const now = performance.now();
+    if (!text || now - lastChatAt < CHAT_COOLDOWN_MS) return;
+    lastChatAt = now;
+    input.value = '';
+    addChatMessage(localActorId, text);
+    network.sendChat(text);
+  });
+
+  const log = document.getElementById('chat-log');
+  if (log && !log.children.length) {
+    const empty = document.createElement('div');
+    empty.className = 'lo-chat-empty';
+    empty.textContent = 'No messages yet.';
+    log.appendChild(empty);
+  }
+
+  applySettings();
+}
+
 function setGuestMode(enabled) {
   isGuestMode = enabled;
   localStorage.setItem('wand-ops-guest-mode', enabled ? 'true' : 'false');
@@ -1028,7 +1205,8 @@ function init() {
   scene.add(camera);
   // Three.js layers filter lights too, so the wand pass needs the scene's lights
   scene.traverse((obj) => { if (obj.isLight) obj.layers.enable(FIRST_PERSON_LAYER); });
-  camera.fov = DEFAULT_FOV;
+  settings = loadSettings();
+  camera.fov = settings.fov;
   camera.updateProjectionMatrix();
 
   const storedName = localStorage.getItem('wand-ops-player-name');
@@ -1048,6 +1226,7 @@ function init() {
   fireballs = new FireballManager(scene);
   toggleAuthModal(false);
   setupFirebaseAuth();
+  setupTopBar();
   updateLifetimeStatsUi();
   updateCoinUi();
   renderDailyQuests();
@@ -1236,6 +1415,10 @@ function init() {
       updateLocalKDA();
     },
 
+    onChat(actorNr, { m }) {
+      addChatMessage(actorNr, m);
+    },
+
     onBotState(actorNr, { b }) {
       if (isBotHost() || !Array.isArray(b)) return;
       const seen = new Set();
@@ -1356,8 +1539,9 @@ function init() {
 
   document.addEventListener('keydown', (e) => {
     if (e.code === 'Tab') {
-      e.preventDefault();
+      // Only claim Tab in-game, so it still moves focus between lobby fields
       if (!document.pointerLockElement) return;
+      e.preventDefault();
       ui.showScoreboard();
     }
   });
@@ -1438,8 +1622,9 @@ function update(delta) {
 
 function updateLocalPlayer(delta) {
   const { dx, dy } = controls.consumeMouseDelta();
-  cameraYaw -= dx * MOUSE_SENS;
-  cameraPitch = clamp(cameraPitch - dy * MOUSE_SENS, PITCH_MIN, PITCH_MAX);
+  const sens = MOUSE_SENS * settings.sensitivity;
+  cameraYaw -= dx * sens;
+  cameraPitch = clamp(cameraPitch - dy * sens, PITCH_MIN, PITCH_MAX);
 
   localPlayer.rotation = cameraYaw;
 
@@ -1626,7 +1811,7 @@ function updateCamera() {
     );
   }
 
-  camera.fov = THREE.MathUtils.lerp(DEFAULT_FOV, ADS_FOV, aimBlend);
+  camera.fov = THREE.MathUtils.lerp(settings.fov, ADS_FOV, aimBlend);
   camera.updateProjectionMatrix();
 
   if (scopeOverlayEl) {

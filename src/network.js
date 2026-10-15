@@ -14,6 +14,7 @@ export const EV_RESPAWN      = 6; // {} — sent by victim on respawn
 export const EV_PLAYER_NAME  = 7; // { actorNr, name }
 export const EV_PLAYER_SKIN  = 8; // { actorNr, skinId }
 export const EV_BOT_STATE    = 9; // { b: [[id, x, y, z, r, name], ...] } — sent by the bot host
+export const EV_CHAT         = 10; // { m: text }
 
 export class NetworkManager {
   constructor(callbacks) {
@@ -113,6 +114,7 @@ export class NetworkManager {
         case EV_PLAYER_NAME:  this.callbacks.onPlayerName(content);  break;
         case EV_PLAYER_SKIN:  this.callbacks.onPlayerSkin(content);  break;
         case EV_BOT_STATE:    this.callbacks.onBotState(actorNr, content); break;
+        case EV_CHAT:         this.callbacks.onChat(actorNr, content); break;
       }
     };
 
@@ -182,6 +184,16 @@ export class NetworkManager {
   sendBotState(bots) {
     if (!this.connected || !this.client) return;
     this.client.raiseEvent(EV_BOT_STATE, { b: bots });
+  }
+
+  sendChat(text) {
+    if (!this.isOnline()) return;
+    this.client.raiseEvent(EV_CHAT, { m: text });
+  }
+
+  /** True only in a real Photon room; offline mode has no client. */
+  isOnline() {
+    return this.connected && Boolean(this.client);
   }
 
   sendKill(killerId, victimId) {

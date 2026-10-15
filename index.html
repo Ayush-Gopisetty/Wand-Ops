@@ -68,10 +68,10 @@
         <div class="lo-currency">
           <span class="lo-coin" aria-hidden="true"></span><span id="coin-count">0</span><span class="lo-sr-only"> coins</span>
         </div>
-        <button class="lo-icon-btn" title="Shop">🛒</button>
-        <button class="lo-icon-btn" title="Help">❓</button>
-        <button class="lo-icon-btn" title="Settings">⚙️</button>
-        <button class="lo-icon-btn" title="Chat">💬</button>
+        <button class="lo-icon-btn" id="nav-shop-btn" type="button" title="Shop" aria-label="Shop">🛒</button>
+        <button class="lo-icon-btn" id="nav-help-btn" type="button" title="How to play" aria-label="How to play">❓</button>
+        <button class="lo-icon-btn" id="nav-settings-btn" type="button" title="Settings" aria-label="Settings">⚙️</button>
+        <button class="lo-icon-btn" id="nav-chat-btn" type="button" title="Chat" aria-label="Chat">💬<span class="lo-unread-dot" id="chat-unread" hidden></span></button>
         <button class="lo-auth-btn" id="auth-signin-btn" type="button">Sign In</button>
         <button class="lo-signout-btn" id="auth-signout-btn" type="button" hidden>Sign Out</button>
       </div>
@@ -270,6 +270,95 @@
           </button>
           <p class="lo-auth-status" id="auth-status-text"></p>
         </div>
+      </div>
+    </div>
+
+    <div class="lo-modal-backdrop" id="help-modal" hidden>
+      <div class="lo-modal lo-modal-wide" role="dialog" aria-modal="true" aria-labelledby="help-title" onclick="event.stopPropagation()">
+        <div class="lo-modal-head">
+          <div>
+            <div class="lo-modal-kicker">Help</div>
+            <h2 class="lo-modal-title" id="help-title">How To Play</h2>
+          </div>
+          <button class="lo-modal-close" type="button" data-close-modal aria-label="Close">×</button>
+        </div>
+        <div class="lo-help-grid">
+          <section>
+            <h3 class="lo-help-head">Controls</h3>
+            <dl class="lo-keys">
+              <dt>W A S D</dt><dd>Move</dd>
+              <dt>Mouse</dt><dd>Look around</dd>
+              <dt>Left click</dt><dd>Cast your spell</dd>
+              <dt>Right click</dt><dd>Hold to aim down the scope</dd>
+              <dt>Space</dt><dd>Jump</dd>
+              <dt>Tab</dt><dd>Hold to see the scoreboard</dd>
+              <dt>Esc</dt><dd>Back to the menu</dd>
+            </dl>
+          </section>
+          <section>
+            <h3 class="lo-help-head">Spells</h3>
+            <dl class="lo-keys">
+              <dt>🔥 Fire</dt><dd>Burns for 5 damage a second</dd>
+              <dt>❄️ Ice</dt><dd>Slows the target</dd>
+              <dt>⚡ Lightning</dt><dd>Silences: no casting for 2s</dd>
+              <dt>💨 Air</dt><dd>Knocks the target back</dd>
+              <dt>🪨 Earth</dt><dd>Grounds: no jumping for 3s</dd>
+            </dl>
+          </section>
+          <section>
+            <h3 class="lo-help-head">The Arena</h3>
+            <p class="lo-modal-copy">Stairs and ladders lead onto the castle walls, and two corner towers have ladders from the wall top to their roofs. Low walls, the fountain and the ruins can be jumped onto.</p>
+          </section>
+          <section>
+            <h3 class="lo-help-head">Coins &amp; Skins</h3>
+            <p class="lo-modal-copy">Every kill earns a coin, and daily quests pay out more. Spend coins on skins with the 🛒 button. Sign in to keep your coins and stats across devices.</p>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <div class="lo-modal-backdrop" id="settings-modal" hidden>
+      <div class="lo-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title" onclick="event.stopPropagation()">
+        <div class="lo-modal-head">
+          <div>
+            <div class="lo-modal-kicker">Settings</div>
+            <h2 class="lo-modal-title" id="settings-title">Game Settings</h2>
+          </div>
+          <button class="lo-modal-close" type="button" data-close-modal aria-label="Close">×</button>
+        </div>
+        <div class="lo-settings">
+          <label class="lo-setting">
+            <span class="lo-setting-label">Mouse sensitivity <output id="setting-sens-value"></output></span>
+            <input type="range" id="setting-sens" min="0.2" max="3" step="0.1" />
+          </label>
+          <label class="lo-setting">
+            <span class="lo-setting-label">Field of view <output id="setting-fov-value"></output></span>
+            <input type="range" id="setting-fov" min="60" max="100" step="1" />
+          </label>
+          <label class="lo-setting lo-setting-check">
+            <input type="checkbox" id="setting-fps" />
+            <span class="lo-setting-label">Show FPS counter</span>
+          </label>
+          <button class="lo-settings-reset" id="settings-reset-btn" type="button">Reset to defaults</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="lo-modal-backdrop" id="chat-modal" hidden>
+      <div class="lo-modal lo-chat" role="dialog" aria-modal="true" aria-labelledby="chat-title" onclick="event.stopPropagation()">
+        <div class="lo-modal-head">
+          <div>
+            <div class="lo-modal-kicker">Chat</div>
+            <h2 class="lo-modal-title" id="chat-title">Arena Chat</h2>
+          </div>
+          <button class="lo-modal-close" type="button" data-close-modal aria-label="Close">×</button>
+        </div>
+        <p class="lo-chat-note" id="chat-note"></p>
+        <div class="lo-chat-log" id="chat-log" aria-live="polite"></div>
+        <form class="lo-chat-form" id="chat-form">
+          <input id="chat-input" type="text" maxlength="120" placeholder="Say something…" autocomplete="off" />
+          <button class="lo-chat-send" type="submit">Send</button>
+        </form>
       </div>
     </div>
   </div>
