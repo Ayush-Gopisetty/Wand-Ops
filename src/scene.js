@@ -438,10 +438,9 @@ export function createScene(canvas) {
   addBanner( RING_HW - 0.2, -6, true, 0xcc2222);
   addBanner( RING_HW - 0.2,  6, true, 0xcc2222);
 
-  // ── Decor: trees, bushes, puddles in the open courtyard ground ───────────
+  // ── Decor: trees and bushes ──────────────────────────────────────────────
   const leafMat   = new THREE.MeshStandardMaterial({ color: 0x2d5a27, roughness: 0.9 });
   const trunkMat  = new THREE.MeshStandardMaterial({ color: 0x4a3220, roughness: 0.95 });
-  const puddleMat = new THREE.MeshStandardMaterial({ color: 0x1c2b33, roughness: 0.15, metalness: 0.3 });
 
   function addTree(x, z) {
     const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.28, 2.2, 6), trunkMat);
@@ -461,18 +460,9 @@ export function createScene(canvas) {
     }
   }
 
-  function addPuddle(x, z, r) {
-    const p = new THREE.Mesh(new THREE.CircleGeometry(r, 16), puddleMat);
-    p.rotation.x = -Math.PI / 2;
-    p.position.set(x, 0.03, z);
-    scene.add(p);
-  }
-
   const TREE_SPOTS = [[50, 0], [-50, 0]];
   TREE_SPOTS.forEach(([x, z]) => addTree(x, z));
   [[20, 0], [-20, 0], [0, 20], [0, -20], [0, -50]].forEach(([x, z]) => addBush(x, z));
-  [[8, 8], [-8, 8], [8, -8]].forEach(([x, z]) => addPuddle(x, z, 1.4));
-  addPuddle(-8, -8, 2.2);
 
   const decorTrees = TREE_SPOTS.map(([x, z]) => ({ x, z, radius: 0.4 }));
 
