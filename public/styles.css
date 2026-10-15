@@ -649,7 +649,22 @@ body {
   font-weight: 700;
   color: var(--tertiary);
 }
-.lo-coin { font-size: 13px; }
+.lo-coin {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff6b0, #f5c518 45%, #b8860b 100%);
+  box-shadow: inset 0 0 0 1.5px rgba(120, 80, 0, 0.55), 0 0 6px rgba(245, 197, 24, 0.45);
+}
+
+.lo-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
 
 .lo-icon-btn {
   width: 36px;
@@ -717,23 +732,25 @@ body {
 }
 
 .lo-left, .lo-right {
-  width: 300px;
+  width: clamp(300px, 21vw, 380px);
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
   overflow-y: auto;
-  scrollbar-width: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--outline-variant) transparent;
 }
-.lo-left::-webkit-scrollbar,
-.lo-right::-webkit-scrollbar { display: none; }
+/* Without this, overflowing columns squash their cards instead of scrolling */
+.lo-left > *, .lo-right > * { flex-shrink: 0; }
 
 .lo-center {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
+  justify-content: center;
+  gap: clamp(8px, 1.6vh, 14px);
   min-width: 0;
 }
 
@@ -753,17 +770,27 @@ body {
   position: relative;
   background: var(--secondary-container);
   border-radius: var(--radius-md);
-  padding: 28px 24px 24px;
+  padding: 18px 20px 16px;
   cursor: pointer;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
   transition: transform 0.12s;
-  box-shadow: 0 6px 0 var(--secondary-dark);
+  box-shadow: 0 6px 0 var(--secondary-dark), 0 0 0 0 rgba(255, 95, 210, 0.5);
+  animation: lo-play-pulse 2.4s ease-in-out infinite;
   overflow: hidden;
 }
-.lo-play-card:hover { transform: translateY(-2px); }
+.lo-play-card:hover { transform: translateY(-2px); animation-play-state: paused; }
+
+@keyframes lo-play-pulse {
+  0%, 100% { box-shadow: 0 6px 0 var(--secondary-dark), 0 0 0 0 rgba(255, 95, 210, 0.45); }
+  50%      { box-shadow: 0 6px 0 var(--secondary-dark), 0 0 26px 4px rgba(255, 95, 210, 0.35); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lo-play-card { animation: none; }
+}
 .lo-play-card:active { transform: translateY(4px); box-shadow: none; }
 
 .lo-play-card::before {
@@ -803,6 +830,32 @@ body {
   text-transform: uppercase;
 }
 
+/* The legacy #overlay-status rule (large text) would otherwise win on specificity */
+#overlay-status.lo-play-status {
+  font-size: 11px;
+  opacity: 1;
+}
+
+.lo-play-meta {
+  font-family: var(--font-label);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: rgba(255,255,255,0.85);
+  min-height: 1em;
+}
+.lo-play-meta:not(:empty)::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: #7dffa8;
+  box-shadow: 0 0 6px #7dffa8;
+  vertical-align: 1px;
+}
+
 /* ── Generic card ── */
 .lo-card {
   background: var(--surface-container);
@@ -827,6 +880,23 @@ body {
   gap: 6px;
   padding-bottom: 6px;
   border-bottom: 1px solid var(--outline-variant);
+}
+
+/* ── Lifetime stats: 2x2 tiles ── */
+.lo-lifetime-card {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.lo-lifetime-card .lo-card-head,
+.lo-lifetime-card .lo-stat-note { grid-column: 1 / -1; }
+.lo-lifetime-card .lo-stat-row {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-container-high);
 }
 
 /* ── Season stats ── */
@@ -924,13 +994,13 @@ body {
 }
 
 .lo-avatar-oval {
-  width: 200px;
-  height: 260px;
+  height: clamp(190px, 30vh, 270px);
+  aspect-ratio: 200 / 260;
   background:
     radial-gradient(circle at 50% 24%, rgba(255,255,255,0.06), transparent 28%),
     linear-gradient(180deg, rgba(60,58,100,0.85), rgba(26,27,52,0.95));
   border: 2px solid rgba(151, 141, 160, 0.55);
-  border-radius: 100px / 130px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -956,25 +1026,6 @@ body {
   border-radius: 50%;
   border: 2px solid var(--surface);
   box-shadow: 0 0 8px var(--tertiary);
-}
-
-/* ── Center: player name (bouncy) ── */
-.lo-player-name {
-  font-size: 32px;
-  font-weight: 800;
-  font-style: italic;
-  letter-spacing: -0.01em;
-  color: var(--primary);
-  text-align: center;
-  line-height: 1;
-  filter: drop-shadow(0 0 16px rgba(216,185,255,0.4));
-}
-.lo-char {
-  display: inline-block;
-}
-.lo-char-space {
-  display: inline-block;
-  width: 0.35em;
 }
 
 /* ── Center: level + rank chips ── */
@@ -1015,8 +1066,9 @@ body {
   align-items: center;
   gap: 8px;
   width: 100%;
-  max-width: 340px;
+  max-width: 380px;
 }
+.lo-skin-picker .lo-shop-note { text-align: center; }
 .lo-name-field-label {
   font-family: var(--font-label);
   font-size: 10px;
@@ -1154,9 +1206,16 @@ body {
   flex-wrap: wrap;
 }
 
+.lo-spell-tray-sidebar {
+  padding-top: 16px;
+}
+.lo-spell-tray-sidebar #spell-picker {
+  row-gap: 14px;
+}
 .lo-spell-tray-sidebar .spell-btn {
-  flex: 1 1 calc(50% - 8px);
-  max-width: calc(50% - 4px);
+  flex: 1 1 calc(33.333% - 8px);
+  max-width: calc(33.333% - 6px);
+  padding: 9px 4px 7px;
 }
 
 .lo-weapon-stats {
@@ -1175,13 +1234,14 @@ body {
 .lo-stat-bars {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .lo-stat-bar-row {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
+  display: grid;
+  grid-template-columns: 112px 1fr;
+  align-items: center;
+  gap: 10px;
 }
 
 .lo-stat-bar-label {
@@ -1195,7 +1255,7 @@ body {
 
 .lo-stat-bar-track {
   position: relative;
-  height: 14px;
+  height: 10px;
   border-radius: var(--radius-full);
   border: 1px solid rgba(255,255,255,0.14);
   background:
@@ -1272,9 +1332,12 @@ body {
 }
 
 /* ── Right: news card ── */
-.lo-news-card { gap: 12px; }
+.lo-news-card { gap: 10px; }
 
-.lo-quest-note,
+/* Right column cards run a little tighter so the column fits a laptop-height window */
+.lo-right { gap: 10px; }
+.lo-right .lo-card { padding: 13px 14px; gap: 8px; }
+
 .lo-shop-note {
   font-family: var(--font-label);
   font-size: 11px;
@@ -1285,7 +1348,7 @@ body {
 .lo-quest-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .lo-quest-item {
@@ -1293,7 +1356,7 @@ body {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
-  padding: 12px;
+  padding: 10px 12px;
   border-radius: var(--radius-sm);
   background: var(--surface-container-high);
   border: 1px solid rgba(255,255,255,0.06);
@@ -1314,8 +1377,8 @@ body {
 
 .lo-quest-progress-track {
   width: 100%;
-  height: 8px;
-  margin-top: 8px;
+  height: 7px;
+  margin-top: 6px;
   border-radius: var(--radius-full);
   background: rgba(255,255,255,0.08);
   overflow: hidden;
@@ -1329,8 +1392,8 @@ body {
 }
 
 .lo-quest-claim {
-  min-width: 88px;
-  padding: 9px 12px;
+  min-width: 76px;
+  padding: 8px 10px;
   border: none;
   border-radius: 12px;
   background: linear-gradient(135deg, rgba(120,70,210,0.95), rgba(56,90,214,0.95));
@@ -1347,61 +1410,6 @@ body {
   opacity: 0.65;
 }
 
-.lo-shop-summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px;
-  border-radius: var(--radius-sm);
-  background: var(--surface-container-high);
-  border: 1px solid rgba(255,255,255,0.06);
-}
-
-.lo-shop-title {
-  font-size: 14px;
-  font-weight: 800;
-  color: var(--on-surface);
-}
-
-.lo-shop-copy {
-  margin-top: 4px;
-  font-family: var(--font-label);
-  font-size: 11px;
-  color: var(--on-surface-dim);
-  line-height: 1.4;
-}
-
-.lo-shop-cta {
-  padding: 10px 14px;
-  border: 1px solid rgba(216,185,255,0.35);
-  border-radius: 12px;
-  background: linear-gradient(135deg, rgba(120,70,210,0.95), rgba(56,90,214,0.95));
-  color: #fff;
-  font-family: var(--font-label);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.lo-shop-cta[disabled] {
-  opacity: 0.6;
-  cursor: default;
-}
-
-.lo-news-thumb {
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-  background: var(--surface-container-top);
-  height: 90px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.lo-news-thumb svg { width: 100%; height: 100%; }
-
 .lo-news-body { display: flex; flex-direction: column; gap: 5px; }
 
 .lo-news-title {
@@ -1416,43 +1424,6 @@ body {
   font-size: 12px;
   color: var(--on-surface-dim);
   line-height: 1.5;
-}
-
-.lo-card-divider {
-  height: 1px;
-  background: var(--outline-variant);
-}
-
-.lo-news-event {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.lo-event-ico {
-  font-size: 22px;
-  width: 40px;
-  height: 40px;
-  background: var(--surface-container-high);
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.lo-event-name {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--on-surface);
-}
-
-.lo-event-time {
-  font-family: var(--font-label);
-  font-size: 11px;
-  color: var(--on-surface-dim);
-  margin-top: 2px;
 }
 
 /* ── Footer ── */

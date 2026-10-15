@@ -302,6 +302,10 @@ function isBotHost() {
 function updateDisplayedPlayerCount() {
   const baseCount = network ? network.getPlayerCount() : 1;
   ui.setPlayerCount(baseCount + bots.size);
+  const lobbyOnline = document.getElementById('lobby-online');
+  if (lobbyOnline && localActorId >= 0) {
+    lobbyOnline.textContent = `${baseCount} online · ${bots.size} bot${bots.size === 1 ? '' : 's'}`;
+  }
 }
 
 function readGuestCoins() {
@@ -326,23 +330,8 @@ function updateCoinUi() {
   if (coinEl) coinEl.textContent = String(coinCount);
 }
 
-function updateShopSummary() {
-  const nameEl = document.getElementById('shop-selected-skin-name');
-  const copyEl = document.getElementById('shop-selected-skin-copy');
-  const buttonEl = document.getElementById('shop-selected-skin-btn');
+function updateSkinSaveNote() {
   const noteEl = document.getElementById('shop-signedin-note');
-  const skin = getSkinConfig(localSkinId);
-
-  if (nameEl) nameEl.textContent = skin.name;
-  if (copyEl) {
-    copyEl.textContent = ownsSkin(localSkinId)
-      ? `${skin.name} is ready for your next match.`
-      : `${skin.name} costs ${skin.price} coins.`;
-  }
-  if (buttonEl) {
-    buttonEl.textContent = ownsSkin(localSkinId) ? 'Equipped' : `Buy ${skin.price}`;
-    buttonEl.disabled = ownsSkin(localSkinId);
-  }
   if (noteEl) {
     noteEl.textContent = authSession?.user
       ? 'Purchases and equipped skins are saved to Firebase.'
@@ -368,15 +357,13 @@ function renderSkinShop() {
     }
   });
 
-  updateShopSummary();
+  updateSkinSaveNote();
 }
 
 function renderDailyQuests() {
   const listEl = document.getElementById('daily-quest-list');
-  const resetEl = document.getElementById('daily-quest-reset');
   if (!listEl) return;
 
-  if (resetEl) resetEl.textContent = `Quest board for ${dailyQuestState.dateKey}`;
 
   listEl.innerHTML = dailyQuestState.quests.map((quest) => {
     const progress = Math.min(quest.target, quest.progress);
@@ -388,7 +375,7 @@ function renderDailyQuests() {
       <div class="lo-quest-item">
         <div>
           <div class="lo-quest-title">${quest.label}</div>
-          <div class="lo-quest-meta">${progress}/${quest.target} complete · reward ${quest.reward} coins</div>
+          <div class="lo-quest-meta">Reward: ${quest.reward} coins</div>
           <div class="lo-quest-progress-track">
             <div class="lo-quest-progress-fill" style="width:${progressPct}%"></div>
           </div>
@@ -489,7 +476,15 @@ async function buySkin(skinId) {
     await persistProfile();
     return;
   }
-  if (coinCount < skin.price) return;
+  if (coinCount < skin.price) {
+    const noteEl = document.getElementById('shop-signedin-note');
+    if (noteEl) {
+      noteEl.textContent = `${skin.name} costs ${skin.price} coins. You have ${coinCount}. Earn coins from kills and quests.`;
+      clearTimeout(buySkin.noteTimer);
+      buySkin.noteTimer = setTimeout(updateSkinSaveNote, 3000);
+    }
+    return;
+  }
 
   coinCount -= skin.price;
   if (authSession?.user) queueLifetimeStats({ coins: -skin.price });
@@ -825,7 +820,7 @@ function setLocalSkin(skinId, shouldBroadcast = true) {
   localStorage.setItem('wand-ops-player-skin', localSkinId);
   applyHomepageSkinPreview(localSkinId);
   syncSkinPicker(localSkinId);
-  updateShopSummary();
+  updateSkinSaveNote();
   if (shouldBroadcast && localActorId >= 0) {
     network.sendPlayerSkin(localActorId, localSkinId);
   }
@@ -1047,8 +1042,6 @@ function init() {
     : DEFAULT_SKIN_ID;
   coinCount = readGuestCoins();
   playerNameInput.value = localPlayerName;
-  const loPlayerNameEl = document.getElementById('lo-player-name');
-  if (loPlayerNameEl) loPlayerNameEl.textContent = localPlayerName.toUpperCase();
 
   controls = new Controls();
   ui = new UIManager();
@@ -1062,9 +1055,10 @@ function init() {
 
   if (heroPreviewCanvas) {
     previewScene = new THREE.Scene();
+    // Frames the whole model (about 2.6 tall from boots to hat tip) with room for the oval mask
     previewCamera = new THREE.PerspectiveCamera(28, 200 / 260, 0.1, 100);
-    previewCamera.position.set(0, 0.95, 4.2);
-    previewCamera.lookAt(0, 0.75, 0);
+    previewCamera.position.set(0, 0.85, 6.6);
+    previewCamera.lookAt(0, 0.3, 0);
 
     previewRenderer = new THREE.WebGLRenderer({
       canvas: heroPreviewCanvas,
@@ -1147,11 +1141,6 @@ function init() {
     });
   });
 
-  document.getElementById('shop-selected-skin-btn')?.addEventListener('click', async (event) => {
-    event.stopPropagation();
-    await buySkin(localSkinId);
-  });
-
   document.querySelectorAll('.spell-btn').forEach((btn) => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1177,7 +1166,7 @@ function init() {
       refreshScoreboard();
       network.sendPlayerName(actorNr, localPlayerName);
       network.sendPlayerSkin(actorNr, localSkinId);
-      ui.setOverlayStatus('Click to play');
+      ui.setOverlayStatus('Ready');
     },
 
     onPlayerJoin(actorNr) {
@@ -1305,7 +1294,7 @@ function init() {
     },
 
     onConnectionFailed(reason) {
-      ui.setOverlayStatus(`Multiplayer unavailable — ${reason}. Click to play solo.`);
+      ui.setOverlayStatus(`Solo mode · ${reason}`);
       localActorId = 1;
       localPlayer.id = 1;
       playerNames.set(1, localPlayerName);
@@ -1340,6 +1329,9 @@ function init() {
   });
 
   network.connect();
+
+  const footerCopy = document.getElementById('footer-copy');
+  if (footerCopy) footerCopy.textContent = `© ${new Date().getFullYear()} Blue Wizard Digital`;
 
   ui.showOverlay(true);
   ui.setHealth(100);
