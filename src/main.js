@@ -310,7 +310,7 @@ function updateDisplayedPlayerCount() {
   ui.setPlayerCount(baseCount + bots.size);
   const lobbyOnline = document.getElementById('lobby-online');
   if (lobbyOnline && localActorId >= 0) {
-    lobbyOnline.textContent = `${baseCount} online · ${bots.size} bot${bots.size === 1 ? '' : 's'}`;
+    lobbyOnline.textContent = `${baseCount + bots.size} online`;
   }
 }
 
