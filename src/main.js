@@ -7,6 +7,7 @@ import {
   createFirstPersonWand,
   applyFirstPersonWandSkin,
   FIRST_PERSON_LAYER,
+  WAND_SCOPE_HEIGHT,
   createWizardModel,
   PLAYER_SKINS,
   DEFAULT_SKIN_ID,
@@ -139,8 +140,10 @@ const _yAxis = new THREE.Vector3(0, 1, 0);
 const _forward = new THREE.Vector3();
 const _lookAt = new THREE.Vector3();
 const _knockbackVel = new THREE.Vector3();
-const _wandBasePos = new THREE.Vector3(0.34, -0.34, -0.6);
-const _wandAimPos = new THREE.Vector3(0.035, -0.14, -0.33);
+const _wandBasePos = new THREE.Vector3(0.3, -0.34, -0.64);
+// Centers the scope on the view; at this distance the eyepiece lines up with the scope overlay circle
+const _wandAimPos = new THREE.Vector3(0, -WAND_SCOPE_HEIGHT, -0.5);
+const WAND_HIP_ROT = { x: 0.06, y: 0.08, z: -0.1 };
 
 const clock = new THREE.Clock();
 let scopeOverlayEl = null;
@@ -1479,9 +1482,9 @@ function updateCamera() {
     firstPersonWand.position.x += Math.sin(sway * 7.5) * 0.012 * moving;
     firstPersonWand.position.y += Math.cos(sway * 15) * 0.01 * moving;
     firstPersonWand.rotation.set(
-      THREE.MathUtils.lerp(-0.22, -0.025, aimBlend) + Math.sin(sway * 8.5) * 0.015 * moving,
-      THREE.MathUtils.lerp(Math.PI + 0.2, Math.PI + 0.01, aimBlend),
-      THREE.MathUtils.lerp(-0.04, -0.006, aimBlend)
+      THREE.MathUtils.lerp(WAND_HIP_ROT.x, 0, aimBlend) + Math.sin(sway * 8.5) * 0.015 * moving,
+      THREE.MathUtils.lerp(WAND_HIP_ROT.y, 0, aimBlend),
+      THREE.MathUtils.lerp(WAND_HIP_ROT.z, 0, aimBlend)
     );
   }
 

@@ -29,27 +29,24 @@ export function getSkinConfig(skinId = DEFAULT_SKIN_ID) {
 // Drawn in a separate pass after a depth clear so the wand never clips into walls
 export const FIRST_PERSON_LAYER = 1;
 
+// Local frame: origin at the hand, forward is -Z, scope on top with its eyepiece facing the player (+Z)
+export const WAND_SCOPE_HEIGHT = 0.17;
+
 export function createFirstPersonWand() {
   const group = new THREE.Group();
-  group.scale.setScalar(1.12);
 
-  const wandGeo = new THREE.CylinderGeometry(0.045, 0.055, 0.82, 8);
   const wandMat = new THREE.MeshStandardMaterial({ color: 0x5b341c, roughness: 0.72 });
-  const wand = new THREE.Mesh(wandGeo, wandMat);
-  wand.rotation.z = Math.PI * 0.42;
-  wand.rotation.x = Math.PI * 0.06;
-  wand.position.set(0.42, -0.34, -0.72);
+  const wand = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.055, 0.92, 8), wandMat);
+  wand.rotation.x = -Math.PI / 2;
+  wand.position.z = -0.36;
   group.add(wand);
 
-  const gripGeo = new THREE.CylinderGeometry(0.055, 0.06, 0.2, 8);
   const gripMat = new THREE.MeshStandardMaterial({ color: 0x2b170d, roughness: 0.85 });
-  const grip = new THREE.Mesh(gripGeo, gripMat);
-  grip.rotation.z = wand.rotation.z;
-  grip.rotation.x = wand.rotation.x;
-  grip.position.copy(wand.position).add(new THREE.Vector3(-0.09, -0.11, 0.07));
+  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.065, 0.2, 8), gripMat);
+  grip.rotation.x = -Math.PI / 2;
+  grip.position.z = 0.02;
   group.add(grip);
 
-  const crystalGeo = new THREE.OctahedronGeometry(0.07, 0);
   const crystalMat = new THREE.MeshStandardMaterial({
     color: 0xffb347,
     emissive: 0xff7a18,
@@ -57,8 +54,8 @@ export function createFirstPersonWand() {
     roughness: 0.25,
     metalness: 0.1,
   });
-  const crystal = new THREE.Mesh(crystalGeo, crystalMat);
-  crystal.position.copy(wand.position).add(new THREE.Vector3(0.22, 0.29, -0.04));
+  const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.07, 0), crystalMat);
+  crystal.position.z = -0.88;
   group.add(crystal);
 
   const scopeMat = new THREE.MeshStandardMaterial({
@@ -66,6 +63,9 @@ export function createFirstPersonWand() {
     roughness: 0.38,
     metalness: 0.72,
   });
+  // Open-ended tubes need their inner wall drawn so the view through the scope stays clean
+  const scopeInnerMat = scopeMat.clone();
+  scopeInnerMat.side = THREE.DoubleSide;
   const glassMat = new THREE.MeshStandardMaterial({
     color: 0x8edcff,
     emissive: 0x2e8bc0,
@@ -73,57 +73,47 @@ export function createFirstPersonWand() {
     roughness: 0.08,
     metalness: 0.15,
     transparent: true,
-    opacity: 0.72,
+    opacity: 0.35,
   });
 
-  const scopeMountGeo = new THREE.BoxGeometry(0.08, 0.19, 0.14);
-  const scopeMount = new THREE.Mesh(scopeMountGeo, scopeMat);
-  scopeMount.position.copy(wand.position).add(new THREE.Vector3(-0.03, 0.16, 0.03));
-  scopeMount.rotation.z = wand.rotation.z;
-  scopeMount.rotation.x = wand.rotation.x;
+  const scopeY = WAND_SCOPE_HEIGHT;
+  const scopeFront = -0.53;
+  const scopeRear = -0.07;
+
+  const scopeMount = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.04, 0.16), scopeMat);
+  scopeMount.position.set(0, 0.055, -0.3);
   group.add(scopeMount);
 
-  const scopeTubeGeo = new THREE.CylinderGeometry(0.085, 0.095, 0.5, 16);
-  const scopeTube = new THREE.Mesh(scopeTubeGeo, scopeMat);
-  scopeTube.position.copy(wand.position).add(new THREE.Vector3(0.05, 0.25, -0.03));
-  scopeTube.rotation.z = wand.rotation.z;
-  scopeTube.rotation.x = wand.rotation.x;
+  const scopeTube = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.095, scopeRear - scopeFront, 16, 1, true), scopeInnerMat);
+  scopeTube.rotation.x = -Math.PI / 2;
+  scopeTube.position.set(0, scopeY, (scopeFront + scopeRear) / 2);
   group.add(scopeTube);
 
-  const scopeRingGeo = new THREE.TorusGeometry(0.07, 0.016, 10, 24);
+  const scopeRingGeo = new THREE.TorusGeometry(0.097, 0.016, 10, 24);
   const frontRing = new THREE.Mesh(scopeRingGeo, scopeMat);
-  frontRing.position.copy(scopeTube.position).add(new THREE.Vector3(0.18, 0.2, -0.03));
-  frontRing.rotation.y = Math.PI / 2;
-  frontRing.rotation.z = wand.rotation.z;
-  frontRing.rotation.x = wand.rotation.x;
+  frontRing.position.set(0, scopeY, scopeFront);
   group.add(frontRing);
 
-  const rearRing = frontRing.clone();
-  rearRing.position.copy(scopeTube.position).add(new THREE.Vector3(-0.18, -0.2, 0.03));
+  const rearRing = new THREE.Mesh(scopeRingGeo, scopeMat);
+  rearRing.position.set(0, scopeY, scopeRear);
   group.add(rearRing);
 
-  const lensGeo = new THREE.CircleGeometry(0.064, 24);
+  const lensGeo = new THREE.CircleGeometry(0.08, 24);
   const frontLens = new THREE.Mesh(lensGeo, glassMat);
-  frontLens.position.copy(scopeTube.position).add(new THREE.Vector3(0.176, 0.195, -0.028));
-  frontLens.rotation.y = -Math.PI / 2;
-  frontLens.rotation.z = wand.rotation.z;
-  frontLens.rotation.x = wand.rotation.x;
+  frontLens.rotation.y = Math.PI;
+  frontLens.position.set(0, scopeY, scopeFront - 0.005);
   group.add(frontLens);
 
-  const rearLens = new THREE.Mesh(lensGeo, glassMat.clone());
-  rearLens.position.copy(scopeTube.position).add(new THREE.Vector3(-0.176, -0.195, 0.028));
-  rearLens.rotation.y = -Math.PI / 2;
-  rearLens.rotation.z = wand.rotation.z;
-  rearLens.rotation.x = wand.rotation.x;
-  rearLens.material.opacity = 0.5;
-  group.add(rearLens);
-
-  const eyepieceGeo = new THREE.CylinderGeometry(0.11, 0.085, 0.12, 16);
-  const eyepiece = new THREE.Mesh(eyepieceGeo, scopeMat);
-  eyepiece.position.copy(scopeTube.position).add(new THREE.Vector3(-0.21, -0.235, 0.035));
-  eyepiece.rotation.z = wand.rotation.z;
-  eyepiece.rotation.x = wand.rotation.x;
+  const eyepieceLen = 0.12;
+  const eyepiece = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.085, eyepieceLen, 16, 1, true), scopeInnerMat);
+  eyepiece.rotation.x = Math.PI / 2;
+  eyepiece.position.set(0, scopeY, scopeRear + eyepieceLen / 2);
   group.add(eyepiece);
+
+  const rearLens = new THREE.Mesh(lensGeo, glassMat.clone());
+  rearLens.material.opacity = 0.18;
+  rearLens.position.set(0, scopeY, scopeRear + 0.01);
+  group.add(rearLens);
 
   group.traverse((node) => {
     if (node.isMesh) node.layers.set(FIRST_PERSON_LAYER);
