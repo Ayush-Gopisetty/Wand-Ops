@@ -16,7 +16,6 @@ export class UIManager {
     this._effectStatus = document.getElementById('effect-status');
     this._scoreboard = document.getElementById('scoreboard');
     this._scoreBody = document.getElementById('scoreboard-body');
-    this._scoreboardVisible = false;
     this._minimap = document.getElementById('minimap');
     this._minimapCtx = this._minimap?.getContext('2d') || null;
   }
@@ -70,13 +69,11 @@ export class UIManager {
     this._effectStatus.dataset.effect = effect || '';
   }
 
-  toggleScoreboard() {
-    this._scoreboardVisible = !this._scoreboardVisible;
-    this._scoreboard.style.display = this._scoreboardVisible ? 'flex' : 'none';
+  showScoreboard() {
+    this._scoreboard.style.display = 'flex';
   }
 
   hideScoreboard() {
-    this._scoreboardVisible = false;
     this._scoreboard.style.display = 'none';
   }
 

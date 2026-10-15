@@ -1351,9 +1351,15 @@ function init() {
     if (e.code === 'Tab') {
       e.preventDefault();
       if (!document.pointerLockElement) return;
-      ui.toggleScoreboard();
+      ui.showScoreboard();
     }
   });
+
+  document.addEventListener('keyup', (e) => {
+    if (e.code === 'Tab') ui.hideScoreboard();
+  });
+  // A missed keyup (e.g. alt-tabbing away) would otherwise leave the scoreboard stuck open
+  window.addEventListener('blur', () => ui.hideScoreboard());
 
   window.addEventListener('resize', updateHeroPreviewSize);
 
