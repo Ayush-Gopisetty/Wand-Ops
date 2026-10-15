@@ -52,7 +52,8 @@ const JUMP_VELOCITY = 8;
 const GRAVITY = 22;
 const GROUND_Y = 0.75;
 const PLATFORM_STEP_UP = 2;
-const BOT_ID = 9001;
+const BOT_IDS = [9001, 9002];
+const BOT_SPAWNS = [[0, 20], [0, -20]];
 const BOT_COLOR = 0xffd166;
 const WEAPON_STATS = {
   fire: {
@@ -106,9 +107,7 @@ let localPlayer;
 let firstPersonWand;
 let previewScene, previewCamera, previewRenderer, previewModel;
 const remotePlayers = new Map();
-let trainingBot = null;
-let trainingBotAI = null;
-let trainingBotName = '';
+const bots = new Map(); // id -> { player, ai, name }; ai is set only on the bot host
 const BOT_GAMER_TAGS = [
   'xX_HexLord_Xx', 'NoScopeMerlin', 'FrostByte', 'Gandalf_Main', 'spellsl1nger',
   'ManaBurnt', 'xXArcaneXx', 'CritWizard99', 'pyro_kid07', 'LagWizard',
@@ -119,10 +118,12 @@ const BOT_GAMER_TAGS = [
 ];
 
 function pickBotGamerTag() {
-  const own = (localPlayerName || '').toLowerCase();
-  const options = BOT_GAMER_TAGS.filter((tag) => tag.toLowerCase() !== own && tag !== trainingBotName);
-  return options[Math.floor(Math.random() * options.length)];
+  const taken = new Set([localPlayerName, ...playerNames.values()].map((n) => (n || '').toLowerCase()));
+  const options = BOT_GAMER_TAGS.filter((tag) => !taken.has(tag.toLowerCase()));
+  return options[Math.floor(Math.random() * options.length)] || 'Wizard';
 }
+
+const isBotId = (id) => BOT_IDS.includes(id);
 let firebaseServices = null;
 
 let controls, fireballs, network, ui, colliders;
@@ -269,7 +270,6 @@ function writeGuestProfile() {
 
 function getPlayerLabel(actorNr, isLocal = false) {
   if (isLocal || actorNr === localActorId) return '⚔ You';
-  if (actorNr === BOT_ID) return trainingBotName;
   return playerNames.get(actorNr) || `Wizard ${actorNr}`;
 }
 
@@ -284,16 +284,24 @@ function refreshScoreboard() {
   ui.updateScoreboard(scores, localActorId, getPlayerLabel);
 }
 
-function hasHumanOpponents() {
+// Bots fill the lobby to 3 combatants: 1 human -> 2 bots, 2 humans -> 1 bot, 3+ humans -> none
+function getDesiredBotCount() {
+  const humans = 1 + remotePlayers.size;
+  return humans <= 2 ? 3 - humans : 0;
+}
+
+// The lowest-numbered human runs the bots; everyone else mirrors them from EV_BOT_STATE
+function isBotHost() {
+  if (localActorId < 0) return false;
   for (const actorNr of remotePlayers.keys()) {
-    if (actorNr !== BOT_ID) return true;
+    if (actorNr < localActorId) return false;
   }
-  return false;
+  return true;
 }
 
 function updateDisplayedPlayerCount() {
   const baseCount = network ? network.getPlayerCount() : 1;
-  ui.setPlayerCount(baseCount + (trainingBot ? 1 : 0));
+  ui.setPlayerCount(baseCount + bots.size);
 }
 
 function readGuestCoins() {
@@ -823,55 +831,98 @@ function setLocalSkin(skinId, shouldBroadcast = true) {
   }
 }
 
-function spawnTrainingBot() {
-  if (trainingBot || localActorId < 0 || hasHumanOpponents()) return;
-  const bot = new Player(scene, true, BOT_COLOR);
-  bot.id = BOT_ID;
-  trainingBotName = pickBotGamerTag();
-  bot.setName(trainingBotName);
-  bot.position.set(0, GROUND_Y, 20);
-  bot.group.position.copy(bot.position);
-  trainingBot = bot;
-  trainingBotAI = new SimpleBotController(bot, colliders);
-  ensureScoreEntry(BOT_ID);
-  playerNames.set(BOT_ID, trainingBotName);
-  playerSkins.set(BOT_ID, DEFAULT_SKIN_ID);
-  refreshScoreboard();
-  ui.addKillEntry(`${trainingBotName} joined the arena.`);
-  updateDisplayedPlayerCount();
-}
-
-function removeTrainingBot(reason = '') {
-  if (!trainingBot) return;
-  trainingBot.remove();
-  trainingBot = null;
-  trainingBotAI = null;
-  scores.delete(BOT_ID);
-  playerNames.delete(BOT_ID);
-  playerSkins.delete(BOT_ID);
-  refreshScoreboard();
-  if (reason) ui.addKillEntry(reason);
-  updateDisplayedPlayerCount();
-}
-
-function refreshTrainingBotState() {
-  if (hasHumanOpponents()) {
-    removeTrainingBot(`${trainingBotName} left for a live match.`);
-    return;
+function addBot(id, name, simulate, position = null) {
+  const player = new Player(scene, simulate, BOT_COLOR);
+  player.id = id;
+  player.setName(name);
+  if (position) {
+    player.position.copy(position);
+  } else {
+    const [sx, sz] = BOT_SPAWNS[BOT_IDS.indexOf(id)];
+    player.position.set(sx, GROUND_Y, sz);
   }
-  spawnTrainingBot();
+  player.targetPosition.copy(player.position);
+  player.group.position.copy(player.position);
+  bots.set(id, { player, ai: simulate ? new SimpleBotController(player, colliders) : null, name });
+  ensureScoreEntry(id);
+  playerNames.set(id, name);
+  playerSkins.set(id, DEFAULT_SKIN_ID);
+  refreshScoreboard();
+  ui.addKillEntry(`${name} joined the arena.`);
+  updateDisplayedPlayerCount();
+}
+
+function removeBot(id) {
+  const bot = bots.get(id);
+  if (!bot) return;
+  bot.player.remove();
+  bots.delete(id);
+  scores.delete(id);
+  playerNames.delete(id);
+  playerSkins.delete(id);
+  refreshScoreboard();
+  ui.addKillEntry(`${bot.name} left the arena.`);
+  updateDisplayedPlayerCount();
+}
+
+function refreshBots() {
+  if (localActorId < 0) return;
+  const host = isBotHost();
+  // Host hand-off: the new host takes over simulating the bots it was mirroring
+  for (const bot of bots.values()) {
+    if (host && !bot.ai) {
+      bot.player.isLocal = true;
+      bot.ai = new SimpleBotController(bot.player, colliders);
+    } else if (!host && bot.ai) {
+      bot.player.isLocal = false;
+      bot.player.targetPosition.copy(bot.player.position);
+      bot.ai = null;
+    }
+  }
+  if (!host) return;
+  const desired = getDesiredBotCount();
+  BOT_IDS.forEach((id, i) => {
+    if (i < desired && !bots.has(id)) addBot(id, pickBotGamerTag(), true);
+    else if (i >= desired && bots.has(id)) removeBot(id);
+  });
+}
+
+function sendBotState() {
+  network.sendBotState([...bots].map(([id, { player, name }]) => [
+    id,
+    +player.position.x.toFixed(2),
+    +player.position.y.toFixed(2),
+    +player.position.z.toFixed(2),
+    +player.rotation.toFixed(3),
+    name,
+  ]));
+}
+
+// Bots leave the local player alone while they're in the menu
+function getNearestHuman(position) {
+  let nearest = controls.isLocked ? localPlayer : null;
+  let best = nearest ? localPlayer.position.distanceToSquared(position) : Infinity;
+  for (const player of remotePlayers.values()) {
+    const d = player.position.distanceToSquared(position);
+    if (d < best) { best = d; nearest = player; }
+  }
+  return nearest;
+}
+
+function getCombatTarget(id) {
+  return remotePlayers.get(id) || bots.get(id)?.player || null;
 }
 
 function getCombatTargets() {
   const targets = new Map(remotePlayers);
   targets.set(localActorId, localPlayer);
-  if (trainingBot) targets.set(BOT_ID, trainingBot);
+  bots.forEach((bot, id) => targets.set(id, bot.player));
   return targets;
 }
 
 function getSimulatedOwners() {
   const owners = new Set([localActorId]);
-  if (trainingBot) owners.add(BOT_ID);
+  bots.forEach((bot, id) => { if (bot.ai) owners.add(id); });
   return owners;
 }
 
@@ -894,14 +945,14 @@ function getMinimapPlayers() {
     });
   });
 
-  if (trainingBot) {
+  bots.forEach(({ player }) => {
     players.push({
-      x: trainingBot.position.x,
-      z: trainingBot.position.z,
+      x: player.position.x,
+      z: player.position.z,
       color: `#${BOT_COLOR.toString(16).padStart(6, '0')}`,
       isBot: true,
     });
-  }
+  });
 
   return players;
 }
@@ -920,6 +971,29 @@ function handleDefeat(killerId, victimId, killerLabel, victimLabel) {
   } else if (victimId === localActorId) {
     ui.addKillEntry(`${killerLabel} defeated you!`);
   }
+}
+
+// Runs on the bot host for hits landed by a bot's fireball
+function handleBotHit(botId, targetId, damage, spell, dir) {
+  if (isBotId(targetId)) return;
+  network.sendHit(targetId, damage, spell, spell === 'air' ? dir : null, botId);
+  if (targetId === localActorId) {
+    const dead = localPlayer.takeDamage(damage);
+    ui.addDamageNumber(damage, 'taken');
+    queueLifetimeStats({ damage_taken: damage });
+    localPlayer.applySpellEffect(spell);
+    ui.setHealth(localPlayer.health);
+    if (!dead) return;
+    localPlayer.respawn();
+    network.sendRespawn();
+    ui.setHealth(localPlayer.health);
+  } else {
+    const target = remotePlayers.get(targetId);
+    if (!target || !target.takeDamage(damage)) return;
+    target.health = 100;
+  }
+  handleDefeat(botId, targetId, getPlayerLabel(botId), getPlayerLabel(targetId));
+  network.sendKill(botId, targetId);
 }
 
 function handleRemoteHitDefeat(actorNr) {
@@ -1084,7 +1158,7 @@ function init() {
       playerSkins.set(actorNr, localSkinId);
       scores.set(actorNr, { kills: 0, deaths: 0, assists: 0 });
       updateLocalKDA();
-      refreshTrainingBotState();
+      refreshBots();
       refreshScoreboard();
       network.sendPlayerName(actorNr, localPlayerName);
       network.sendPlayerSkin(actorNr, localSkinId);
@@ -1101,7 +1175,7 @@ function init() {
       playerNames.set(actorNr, `Wizard ${actorNr}`);
       playerSkins.set(actorNr, DEFAULT_SKIN_ID);
       scores.set(actorNr, { kills: 0, deaths: 0, assists: 0 });
-      refreshTrainingBotState();
+      refreshBots();
       updateDisplayedPlayerCount();
       refreshScoreboard();
       if (localActorId >= 0) {
@@ -1109,6 +1183,13 @@ function init() {
         if (mine) network.sendScoreUpdate(localActorId, mine.kills, mine.deaths);
         network.sendPlayerName(localActorId, localPlayerName);
         network.sendPlayerSkin(localActorId, localSkinId);
+      }
+      if (isBotHost()) {
+        sendBotState();
+        bots.forEach((_, id) => {
+          const s = scores.get(id);
+          if (s) network.sendScoreUpdate(id, s.kills, s.deaths);
+        });
       }
     },
 
@@ -1120,7 +1201,7 @@ function init() {
       scores.delete(actorNr);
       playerNames.delete(actorNr);
       playerSkins.delete(actorNr);
-      refreshTrainingBotState();
+      refreshBots();
       updateDisplayedPlayerCount();
       refreshScoreboard();
     },
@@ -1136,14 +1217,44 @@ function init() {
     onFireball(actorNr, data) {
       const pos = new THREE.Vector3(data.px, data.py, data.pz);
       const dir = new THREE.Vector3(data.dx, data.dy, data.dz);
-      fireballs.spawn(pos, dir, actorNr, data.sp || 'fire');
+      fireballs.spawn(pos, dir, isBotId(data.o) ? data.o : actorNr, data.sp || 'fire');
     },
 
     onKill({ killerId, victimId }) {
       ensureScoreEntry(killerId).kills++;
       ensureScoreEntry(victimId).deaths++;
+      const bot = bots.get(victimId);
+      if (bot) {
+        if (bot.ai) bot.player.respawn();
+        else bot.player.health = 100;
+      }
       refreshScoreboard();
       updateLocalKDA();
+    },
+
+    onBotState(actorNr, { b }) {
+      if (isBotHost() || !Array.isArray(b)) return;
+      const seen = new Set();
+      for (const [id, x, y, z, r, rawName] of b) {
+        if (!isBotId(id)) continue;
+        seen.add(id);
+        const name = sanitizePlayerName(rawName);
+        let bot = bots.get(id);
+        if (!bot) {
+          addBot(id, name, false, new THREE.Vector3(x, y, z));
+          bot = bots.get(id);
+        } else if (bot.name !== name) {
+          bot.name = name;
+          bot.player.setName(name);
+          playerNames.set(id, name);
+          refreshScoreboard();
+        }
+        bot.player.targetPosition.set(x, y, z);
+        bot.player.targetRotation = r;
+      }
+      for (const id of [...bots.keys()]) {
+        if (!seen.has(id)) removeBot(id);
+      }
     },
 
     onScoreUpdate({ actorNr, kills, deaths }) {
@@ -1186,7 +1297,7 @@ function init() {
       playerSkins.set(1, localSkinId);
       ensureScoreEntry(localActorId);
       updateLocalKDA();
-      refreshTrainingBotState();
+      refreshBots();
       refreshScoreboard();
     },
 
@@ -1202,9 +1313,9 @@ function init() {
         }
 
         ui.setHealth(localPlayer.health);
-        if (dead) handleRemoteHitDefeat(actorNr);
+        if (dead) handleRemoteHitDefeat(isBotId(data.by) ? data.by : actorNr);
       } else {
-        const target = remotePlayers.get(data.targetId);
+        const target = getCombatTarget(data.targetId);
         if (target) {
           target.takeDamage(data.damage);
           if (actorNr === localActorId) ui.addDamageNumber(data.damage, 'dealt');
@@ -1306,8 +1417,13 @@ function renderFirstPersonPass() {
 
 function update(delta) {
   aimBlend = THREE.MathUtils.lerp(aimBlend, controls.isAiming ? 1 : 0, 1 - Math.exp(-delta * 14));
-  if (!controls.isLocked || localActorId < 0) return;
+  if (localActorId < 0) return;
+  if (controls.isLocked) updateLocalPlayer(delta);
+  // Keeps running in the menu so a bot host doesn't freeze the bots for everyone else
+  updateWorld(delta);
+}
 
+function updateLocalPlayer(delta) {
   const { dx, dy } = controls.consumeMouseDelta();
   cameraYaw -= dx * MOUSE_SENS;
   cameraPitch = clamp(cameraPitch - dy * MOUSE_SENS, PITCH_MIN, PITCH_MAX);
@@ -1402,20 +1518,25 @@ function update(delta) {
     shootTimer = SHOOT_COOLDOWN;
     castFireball();
   }
+}
 
-  if (trainingBot && trainingBotAI) {
-    const botShot = trainingBotAI.update(delta, localPlayer);
-    if (botShot) fireballs.spawn(botShot.position, botShot.direction, BOT_ID, botShot.spell);
-  }
+function updateWorld(delta) {
+  bots.forEach((bot, id) => {
+    if (!bot.ai) return;
+    const botShot = bot.ai.update(delta, getNearestHuman(bot.player.position));
+    if (!botShot) return;
+    fireballs.spawn(botShot.position, botShot.direction, id, botShot.spell);
+    network.sendFireball(botShot.position, botShot.direction, botShot.spell, id);
+  });
 
   localPlayer.update(delta);
-  if (trainingBot) trainingBot.update(delta);
+  bots.forEach((bot) => bot.player.update(delta));
   remotePlayers.forEach((p) => p.update(delta));
 
   fireballs.update(delta, getCombatTargets(), getSimulatedOwners(), (ownerId, targetId, damage, spell, dir) => {
     if (ownerId === localActorId) {
       network.sendHit(targetId, damage, spell, spell === 'air' ? dir : null);
-      const target = targetId === BOT_ID ? trainingBot : remotePlayers.get(targetId);
+      const target = getCombatTarget(targetId);
       if (!target) return;
 
       const dead = target.takeDamage(damage);
@@ -1424,38 +1545,25 @@ function update(delta) {
       progressDailyQuests('damage_dealt', damage);
       if (!dead) return;
 
-      target.respawn();
-      if (targetId !== BOT_ID) {
-        awardCoins(1);
-        queueLifetimeStats({ kills: 1 });
-        progressDailyQuests('kills', 1);
-        network.sendKill(localActorId, targetId);
-        const mine = scores.get(localActorId);
-        if (mine) network.sendScoreUpdate(localActorId, mine.kills + 1, mine.deaths);
-      } else {
-        handleDefeat(localActorId, targetId, 'You', trainingBotName);
-      }
+      // Only the simulating client moves a respawned body; mirrored copies just reset health
+      if (target.isLocal) target.respawn();
+      else target.health = 100;
+      handleDefeat(localActorId, targetId, 'You', getPlayerLabel(targetId));
+      network.sendKill(localActorId, targetId);
+      const mine = scores.get(localActorId);
+      if (mine) network.sendScoreUpdate(localActorId, mine.kills, mine.deaths);
       return;
     }
 
-    if (ownerId === BOT_ID && targetId === localActorId) {
-      const dead = localPlayer.takeDamage(damage);
-      ui.addDamageNumber(damage, 'taken');
-      queueLifetimeStats({ damage_taken: damage });
-      localPlayer.applySpellEffect(spell);
-      ui.setHealth(localPlayer.health);
-      if (!dead) return;
-
-      localPlayer.respawn();
-      ui.setHealth(localPlayer.health);
-      handleDefeat(BOT_ID, localActorId, trainingBotName, 'you');
-    }
+    if (isBotId(ownerId)) handleBotHit(ownerId, targetId, damage, spell, dir);
   }, colliders);
 
   netTimer += delta;
   if (netTimer >= NET_TICK) {
     netTimer = 0;
     network.sendPosition(localPlayer.position, localPlayer.rotation);
+    // Sent even when empty so mirrors drop bots once the lobby fills up
+    if (remotePlayers.size && isBotHost()) sendBotState();
     updateDisplayedPlayerCount();
   }
 }

@@ -70,9 +70,10 @@ export class SimpleBotController {
       .add(new THREE.Vector3(0, BOT_EYE_HEIGHT, 0))
       .addScaledVector(_forward, 0.65);
 
+    // Aim from the eye at the target's body centre; a level shot from eye height passes overhead
     return {
       position: spawnPos,
-      direction: _forward.clone(),
+      direction: target.position.clone().sub(spawnPos).normalize(),
       spell: 'fire',
     };
   }
