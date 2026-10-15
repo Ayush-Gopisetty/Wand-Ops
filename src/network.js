@@ -13,6 +13,7 @@ export const EV_SCORE_UPDATE = 5; // { actorNr, kills, deaths }
 export const EV_RESPAWN      = 6; // {} — sent by victim on respawn
 export const EV_PLAYER_NAME  = 7; // { actorNr, name }
 export const EV_PLAYER_SKIN  = 8; // { actorNr, skinId }
+export const EV_BOT_STATE    = 9; // { b: [[id, x, y, z, r, name], ...] } — sent by the bot host
 
 export class NetworkManager {
   constructor(callbacks) {
@@ -111,6 +112,7 @@ export class NetworkManager {
         case EV_RESPAWN:      this.callbacks.onRespawn(actorNr);     break;
         case EV_PLAYER_NAME:  this.callbacks.onPlayerName(content);  break;
         case EV_PLAYER_SKIN:  this.callbacks.onPlayerSkin(content);  break;
+        case EV_BOT_STATE:    this.callbacks.onBotState(actorNr, content); break;
       }
     };
 
@@ -156,20 +158,30 @@ export class NetworkManager {
     });
   }
 
-  sendFireball(position, direction, spell = 'fire') {
+  // ownerId is set when the bot host fires on behalf of a bot
+  sendFireball(position, direction, spell = 'fire', ownerId = null) {
     if (!this.connected || !this.client) return;
-    this.client.raiseEvent(EV_FIREBALL, {
+    const data = {
       px: +position.x.toFixed(3), py: +position.y.toFixed(3), pz: +position.z.toFixed(3),
       dx: +direction.x.toFixed(4), dy: +direction.y.toFixed(4), dz: +direction.z.toFixed(4),
       sp: spell,
-    });
+    };
+    if (ownerId !== null) data.o = ownerId;
+    this.client.raiseEvent(EV_FIREBALL, data);
   }
 
-  sendHit(targetId, damage, spell = 'fire', dir = null) {
+  // attackerId is set when the bot host reports a hit by a bot
+  sendHit(targetId, damage, spell = 'fire', dir = null, attackerId = null) {
     if (!this.connected || !this.client) return;
     const data = { targetId, damage, sp: spell };
     if (dir) { data.kx = +dir.x.toFixed(3); data.ky = +dir.y.toFixed(3); data.kz = +dir.z.toFixed(3); }
+    if (attackerId !== null) data.by = attackerId;
     this.client.raiseEvent(EV_HIT, data);
+  }
+
+  sendBotState(bots) {
+    if (!this.connected || !this.client) return;
+    this.client.raiseEvent(EV_BOT_STATE, { b: bots });
   }
 
   sendKill(killerId, victimId) {
