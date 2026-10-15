@@ -1298,7 +1298,6 @@ function init() {
     if (playerNameInput.value !== localPlayerName) playerNameInput.value = localPlayerName;
     localStorage.setItem('wand-ops-player-name', localPlayerName);
     localPlayer.setName(localPlayerName);
-    if (loPlayerNameEl) loPlayerNameEl.textContent = localPlayerName.toUpperCase();
     if (localActorId >= 0) {
       playerNames.set(localActorId, localPlayerName);
       refreshScoreboard();

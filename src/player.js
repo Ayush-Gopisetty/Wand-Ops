@@ -308,7 +308,9 @@ export class Player {
       if (this.groundedTimer > 0) this.groundedTimer -= delta;
     } else {
       this.position.lerp(this.targetPosition, LERP_SPEED);
-      this.rotation += (this.targetRotation - this.rotation) * LERP_SPEED;
+      // Turn the short way round: a raw difference across ±π (or an unwrapped yaw) spins nearly a full circle
+      const diff = this.targetRotation - this.rotation;
+      this.rotation += Math.atan2(Math.sin(diff), Math.cos(diff)) * LERP_SPEED;
     }
 
     this.group.position.copy(this.position);
