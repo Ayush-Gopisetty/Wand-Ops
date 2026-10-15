@@ -6,6 +6,7 @@ import {
   remoteColor,
   createFirstPersonWand,
   applyFirstPersonWandSkin,
+  FIRST_PERSON_LAYER,
   createWizardModel,
   PLAYER_SKINS,
   DEFAULT_SKIN_ID,
@@ -923,6 +924,8 @@ function init() {
   const skinButtons = [...document.querySelectorAll('.lo-skin-btn')];
   ({ scene, camera, renderer, colliders } = createScene(canvas));
   scene.add(camera);
+  // Three.js layers filter lights too, so the wand pass needs the scene's lights
+  scene.traverse((obj) => { if (obj.isLight) obj.layers.enable(FIRST_PERSON_LAYER); });
   camera.fov = DEFAULT_FOV;
   camera.updateProjectionMatrix();
 
@@ -1265,7 +1268,21 @@ function loop() {
   updateCamera();
   if (ui && colliders) ui.renderMinimap(getMinimapPlayers(), colliders.arenaSize, localPlayer?.rotation || 0);
   renderer.render(scene, camera);
+  renderFirstPersonPass();
   renderHeroPreview(delta);
+}
+
+function renderFirstPersonPass() {
+  // A color background forces a full clear on render, which would wipe the world pass
+  const background = scene.background;
+  scene.background = null;
+  renderer.autoClear = false;
+  renderer.clearDepth();
+  camera.layers.set(FIRST_PERSON_LAYER);
+  renderer.render(scene, camera);
+  camera.layers.set(0);
+  renderer.autoClear = true;
+  scene.background = background;
 }
 
 function update(delta) {
