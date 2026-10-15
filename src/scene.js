@@ -441,7 +441,15 @@ export function createScene(canvas) {
   // ── Decor: trees, bushes, puddles in the open courtyard ground ───────────
   const leafMat   = new THREE.MeshStandardMaterial({ color: 0x2d5a27, roughness: 0.9 });
   const trunkMat  = new THREE.MeshStandardMaterial({ color: 0x4a3220, roughness: 0.95 });
-  const puddleMat = new THREE.MeshStandardMaterial({ color: 0x1c2b33, roughness: 0.15, metalness: 0.3 });
+  // No environment map to reflect, so a dark metallic puddle renders as a black disc; tint the ground instead
+  const puddleMat = new THREE.MeshStandardMaterial({
+    color: 0x6fa8c8,
+    roughness: 0.1,
+    metalness: 0,
+    transparent: true,
+    opacity: 0.4,
+    depthWrite: false,
+  });
 
   function addTree(x, z) {
     const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.28, 2.2, 6), trunkMat);
