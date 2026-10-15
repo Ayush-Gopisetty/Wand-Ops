@@ -26,6 +26,9 @@ export function getSkinConfig(skinId = DEFAULT_SKIN_ID) {
   return PLAYER_SKINS[skinId] || PLAYER_SKINS[DEFAULT_SKIN_ID];
 }
 
+// Drawn in a separate pass after a depth clear so the wand never clips into walls
+export const FIRST_PERSON_LAYER = 1;
+
 export function createFirstPersonWand() {
   const group = new THREE.Group();
   group.scale.setScalar(1.12);
@@ -123,12 +126,7 @@ export function createFirstPersonWand() {
   group.add(eyepiece);
 
   group.traverse((node) => {
-    if (!node.isMesh) return;
-    node.renderOrder = 50;
-    if (node.material) {
-      node.material.depthTest = false;
-      node.material.depthWrite = false;
-    }
+    if (node.isMesh) node.layers.set(FIRST_PERSON_LAYER);
   });
 
   group.userData = { crystal, frontLens };
