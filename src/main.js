@@ -49,6 +49,7 @@ const EYE_HEIGHT = 1.5;
 const JUMP_VELOCITY = 8;
 const GRAVITY = 22;
 const GROUND_Y = 0.75;
+const PLATFORM_STEP_UP = 2;
 const BOT_ID = 9001;
 const BOT_COLOR = 0xffd166;
 const WEAPON_STATS = {
@@ -1227,10 +1228,12 @@ function init() {
   loop();
 }
 
-function getGroundY(x, z) {
+function getGroundY(x, z, currentY) {
   let y = GROUND_Y;
   if (!colliders) return y;
   for (const p of colliders.platforms || []) {
+    // Platforms far above the player (e.g. the gate lintel) are overhead, not floor
+    if (currentY < p.y - PLATFORM_STEP_UP) continue;
     if (x >= p.xMin && x <= p.xMax && z >= p.zMin && z <= p.zMax) y = Math.max(y, p.y);
   }
   for (const r of colliders.ramps || []) {
@@ -1333,7 +1336,7 @@ function update(delta) {
   }
   playerVelocityY -= GRAVITY * delta;
   localPlayer.position.y += playerVelocityY * delta;
-  const groundY = getGroundY(localPlayer.position.x, localPlayer.position.z);
+  const groundY = getGroundY(localPlayer.position.x, localPlayer.position.z, localPlayer.position.y);
   if (localPlayer.position.y <= groundY) {
     localPlayer.position.y = groundY;
     playerVelocityY = 0;
