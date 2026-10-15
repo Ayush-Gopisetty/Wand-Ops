@@ -89,12 +89,11 @@ export class UIManager {
       const isLocal = id === localActorId;
       if (isLocal) tr.classList.add('local-row');
       const label = getPlayerLabel ? getPlayerLabel(id, isLocal) : (isLocal ? '⚔ You' : 'Wizard ' + id);
-      tr.innerHTML = `
-        <td>${i + 1}</td>
-        <td>${label}</td>
-        <td>${s.kills}</td>
-        <td>${s.deaths}</td>
-      `;
+      for (const value of [i + 1, label, s.kills, s.deaths]) {
+        const td = document.createElement('td');
+        td.textContent = value;
+        tr.appendChild(td);
+      }
       this._scoreBody.appendChild(tr);
     });
   }
