@@ -4,13 +4,120 @@ const LERP_SPEED = 0.18;
 
 const PLAYER_COLORS = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf39c12, 0x1abc9c, 0xe91e63, 0xff6b35];
 
+// body is the skin's representative colour (robe, swatch, minimap dot). Premium skins add a `robe`
+// look: a glowing pattern texture, a glow strength and/or translucency, plus trim and eye colours.
 export const PLAYER_SKINS = {
-  amethyst: { name: 'Amethyst', body: 0x9b59b6, accent: 0xffb347, glow: 0xff7a18, price: 0, unlockByDefault: true },
-  ember:    { name: 'Ember',    body: 0xd35400, accent: 0xffc36b, glow: 0xff6a00, price: 12, unlockByDefault: false },
-  tide:     { name: 'Tide',     body: 0x2980b9, accent: 0x8edcff, glow: 0x2e8bc0, price: 16, unlockByDefault: false },
-  verdant:  { name: 'Verdant',  body: 0x27ae60, accent: 0xb6ff8d, glow: 0x4ecb71, price: 20, unlockByDefault: false },
-  storm:    { name: 'Storm',    body: 0x5d6d7e, accent: 0xd6dbff, glow: 0x7d8cff, price: 24, unlockByDefault: false },
+  amethyst:   { name: 'Amethyst',   rarity: 'common',    body: 0x9b59b6, accent: 0xffb347, glow: 0xff7a18, price: 0, unlockByDefault: true },
+  ember:      { name: 'Ember',      rarity: 'common',    body: 0xd35400, accent: 0xffc36b, glow: 0xff6a00, price: 12, unlockByDefault: false },
+  tide:       { name: 'Tide',       rarity: 'rare',      body: 0x2980b9, accent: 0x8edcff, glow: 0x2e8bc0, price: 16, unlockByDefault: false },
+  verdant:    { name: 'Verdant',    rarity: 'rare',      body: 0x27ae60, accent: 0xb6ff8d, glow: 0x4ecb71, price: 20, unlockByDefault: false },
+  storm:      { name: 'Storm',      rarity: 'rare',      body: 0x5d6d7e, accent: 0xd6dbff, glow: 0x7d8cff, price: 24, unlockByDefault: false },
+  starweaver: {
+    name: 'Starweaver', rarity: 'epic', body: 0x26327a, accent: 0xffd166, glow: 0xffc94d, price: 40, unlockByDefault: false,
+    robe: { pattern: 'stars', glow: 0.9 }, trim: 0xc9a227, eyes: 0xffe9a8,
+  },
+  emberlord: {
+    name: 'Ember Lord', rarity: 'legendary', body: 0x8a2a10, accent: 0xff7a1a, glow: 0xff4a00, price: 75, unlockByDefault: false,
+    robe: { pattern: 'lava', glow: 1.3 }, trim: 0x140d0b, eyes: 0xff8a2a,
+  },
+  phantom: {
+    name: 'Phantom', rarity: 'legendary', body: 0x6fe3d0, accent: 0x9ff7ff, glow: 0x4fd8ff, price: 75, unlockByDefault: false,
+    robe: { opacity: 0.45, glow: 0.35 }, eyes: 0x8ffcff,
+  },
 };
+
+// ── Robe pattern textures (drawn once, shared by every model wearing the skin) ──
+const _patternCache = new Map();
+
+function makeStarTexture() {
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const bg = ctx.createLinearGradient(0, 0, 0, size);
+  bg.addColorStop(0, '#0f1640');
+  bg.addColorStop(1, '#1b2466');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, size, size);
+  for (let i = 0; i < 140; i++) {
+    const r = Math.random() < 0.12 ? 1.6 + Math.random() * 1.4 : 0.5 + Math.random() * 0.9;
+    ctx.fillStyle = Math.random() < 0.3 ? '#ffd88a' : '#ffffff';
+    ctx.globalAlpha = 0.6 + Math.random() * 0.4;
+    ctx.beginPath();
+    ctx.arc(Math.random() * size, Math.random() * size, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  return canvas;
+}
+
+function makeLavaTexture() {
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#1b1210';
+  ctx.fillRect(0, 0, size, size);
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 14; i++) {
+    let x = Math.random() * size;
+    let y = Math.random() * size;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    for (let s = 0; s < 6; s++) {
+      x += (Math.random() - 0.5) * 60;
+      y += 10 + Math.random() * 30;
+      ctx.lineTo(x, y);
+    }
+    ctx.strokeStyle = '#ff6a10';
+    ctx.shadowColor = '#ffb347';
+    ctx.shadowBlur = 8;
+    ctx.lineWidth = 1.5 + Math.random() * 2.5;
+    ctx.stroke();
+  }
+  return canvas;
+}
+
+function getPatternTexture(pattern) {
+  if (!_patternCache.has(pattern)) {
+    const canvas = pattern === 'lava' ? makeLavaTexture() : makeStarTexture();
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    _patternCache.set(pattern, tex);
+  }
+  return _patternCache.get(pattern);
+}
+
+/** Applies a skin's colours, pattern, glow and translucency to a wizard model. Returns the robe's base colour. */
+export function applySkinToModel(parts, skinId) {
+  const skin = getSkinConfig(skinId);
+  const robe = skin.robe || {};
+  const map = robe.pattern ? getPatternTexture(robe.pattern) : null;
+  const opacity = robe.opacity ?? 1;
+  const base = map ? 0xffffff : skin.body;
+
+  for (const mat of [parts.bodyMat, parts.trimMat]) {
+    mat.transparent = opacity < 1;
+    mat.opacity = opacity;
+    mat.depthWrite = opacity >= 1;
+    mat.needsUpdate = true;
+  }
+
+  const body = parts.bodyMat;
+  body.color.setHex(base);
+  body.map = map;
+  body.emissiveMap = map;
+  // Patterned robes glow through their texture; plain glowing robes glow in their own colour
+  body.emissive.setHex(map ? 0xffffff : robe.glow ? skin.body : 0x000000);
+  body.emissiveIntensity = robe.glow ?? 0;
+
+  parts.trimMat.color.setHex(skin.trim ?? darken(skin.body, 0.4));
+  parts.accentMat?.color.setHex(skin.accent);
+  parts.accentMat?.emissive.setHex(skin.accent);
+  parts.eyeMat?.color.setHex(skin.eyes ?? 0xfff3c4);
+  return base;
+}
 
 export const DEFAULT_SKIN_ID = 'amethyst';
 export const DEFAULT_UNLOCKED_SKIN_IDS = Object.entries(PLAYER_SKINS)
@@ -227,6 +334,7 @@ export function createWizardModel(color = getSkinConfig(DEFAULT_SKIN_ID).body, o
     bodyMat,
     trimMat,
     accentMat,
+    eyeMat,
     hatMat,
     bodyMesh,
     trimMesh,
@@ -320,7 +428,6 @@ export class Player {
     this.group = createWizardModel(color, { includeNameTag: true, name: this.name });
     this._bodyMat = this.group.userData.bodyMat;
     this._trimMat = this.group.userData.trimMat;
-    this._accentMat = this.group.userData.accentMat;
     this._hatMat = this.group.userData.hatMat;
     this.bodyMesh = this.group.userData.bodyMesh;
     this.nameTag = this.group.userData.nameTag;
@@ -374,13 +481,8 @@ export class Player {
   }
 
   setSkin(skinId) {
-    const skin = getSkinConfig(skinId);
     this.skinId = skinId in PLAYER_SKINS ? skinId : DEFAULT_SKIN_ID;
-    this._bodyColor = skin.body;
-    this._bodyMat.color.setHex(skin.body);
-    this._trimMat.color.setHex(darken(skin.body, 0.4));
-    this._accentMat.color.setHex(skin.accent);
-    this._accentMat.emissive.setHex(skin.accent);
+    this._bodyColor = applySkinToModel(this.group.userData, this.skinId);
   }
 
   respawn(spawnPoint = null) {

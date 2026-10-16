@@ -940,7 +940,7 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: clamp(8px, 1.6vh, 14px);
+  gap: clamp(6px, 1.2vh, 14px);
   min-width: 0;
 }
 
@@ -1184,7 +1184,7 @@ body {
 }
 
 .lo-avatar-oval {
-  height: clamp(190px, 30vh, 270px);
+  height: clamp(165px, 23vh, 270px);
   aspect-ratio: 200 / 260;
   background:
     radial-gradient(circle at 50% 24%, rgba(255,255,255,0.06), transparent 28%),
@@ -1289,16 +1289,17 @@ body {
 .lo-skin-grid {
   width: 100%;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px 8px;
 }
 
 .lo-skin-btn {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 10px 6px;
+  gap: 4px;
+  padding: 8px 6px 7px;
   border-radius: var(--radius);
   border: 1.5px solid var(--outline-variant);
   background: var(--surface-container-high);
@@ -1351,6 +1352,46 @@ body {
 
 .lo-skin-action {
   color: var(--outline);
+}
+
+/* Rarity: coloured border plus a small badge on Epic and Legendary skins */
+.lo-skin-btn[data-rarity="rare"] { border-color: rgba(96, 165, 250, 0.55); }
+.lo-skin-btn[data-rarity="epic"] { border-color: rgba(178, 107, 255, 0.75); box-shadow: 0 0 10px rgba(178, 107, 255, 0.25); }
+.lo-skin-btn[data-rarity="legendary"] { border-color: rgba(255, 183, 3, 0.8); box-shadow: 0 0 12px rgba(255, 183, 3, 0.3); }
+.lo-skin-btn[data-rarity="epic"]::before,
+.lo-skin-btn[data-rarity="legendary"]::before {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  font-family: var(--font-label);
+  font-size: 7.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #1a1030;
+  white-space: nowrap;
+}
+.lo-skin-btn[data-rarity="epic"]::before { content: 'EPIC'; background: #c493ff; }
+.lo-skin-btn[data-rarity="legendary"]::before { content: 'LEGENDARY'; background: #ffc340; }
+
+.lo-swatch-stars {
+  background:
+    radial-gradient(circle at 30% 30%, #fff 0 1px, transparent 1.5px),
+    radial-gradient(circle at 65% 55%, #ffd88a 0 1.2px, transparent 1.7px),
+    radial-gradient(circle at 45% 75%, #fff 0 0.8px, transparent 1.3px),
+    radial-gradient(circle at 72% 25%, #fff 0 0.8px, transparent 1.3px),
+    radial-gradient(circle at 40% 35%, #3a4aa8, #141b4d 75%);
+}
+.lo-swatch-lava {
+  background:
+    linear-gradient(115deg, transparent 42%, #ff7a1a 44%, #ffb347 46%, transparent 48%),
+    linear-gradient(60deg, transparent 58%, #ff6a10 60%, transparent 63%),
+    radial-gradient(circle at 35% 30%, #4a2a20, #1b1210 75%);
+}
+.lo-swatch-phantom {
+  background: radial-gradient(circle at 32% 28%, #ffffff, rgba(111, 227, 208, 0.7) 45%, rgba(79, 216, 255, 0.25) 100%);
 }
 
 .lo-skin-btn.locked {
