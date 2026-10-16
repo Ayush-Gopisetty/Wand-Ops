@@ -16,6 +16,23 @@ export const EV_PLAYER_SKIN  = 8; // { actorNr, skinId }
 export const EV_BOT_STATE    = 9; // { b: [[id, x, y, z, r, name], ...] } — sent by the bot host
 export const EV_CHAT         = 10; // { m: text }
 
+// Per-sender token buckets as [refill per second, burst]. Normal play stays well under these:
+// positions and bot state tick at 13 Hz, a player fires at most every 0.5s, and the bot host
+// also relays its bots' shots, hits and scores. Anything past the limit is a flood and is dropped.
+const EVENT_LIMITS = {
+  [EV_POSITION]:     [30, 40],
+  [EV_FIREBALL]:     [10, 15],
+  [EV_HIT]:          [12, 20],
+  [EV_KILL]:         [4, 8],
+  [EV_SCORE_UPDATE]: [6, 12],
+  [EV_RESPAWN]:      [2, 4],
+  [EV_PLAYER_NAME]:  [2, 6],
+  [EV_PLAYER_SKIN]:  [2, 6],
+  [EV_BOT_STATE]:    [30, 40],
+  [EV_CHAT]:         [1.5, 4],
+};
+const TOTAL_LIMIT = [100, 140]; // all event types combined, per sender
+
 export class NetworkManager {
   constructor(callbacks) {
     this.callbacks       = callbacks;
@@ -23,6 +40,41 @@ export class NetworkManager {
     this.localActorNr    = -1;
     this.connected       = false;
     this._joiningRoom    = false;
+    this._buckets        = new Map();
+    this._warned         = new Set();
+  }
+
+  // Token-bucket check for one event from one sender
+  _take(key, [rate, burst]) {
+    const now = performance.now() / 1000;
+    let bucket = this._buckets.get(key);
+    if (!bucket) {
+      bucket = { tokens: burst, t: now };
+      this._buckets.set(key, bucket);
+    }
+    bucket.tokens = Math.min(burst, bucket.tokens + (now - bucket.t) * rate);
+    bucket.t = now;
+    if (bucket.tokens < 1) return false;
+    bucket.tokens -= 1;
+    return true;
+  }
+
+  _allowEvent(actorNr, code, content) {
+    const limit = EVENT_LIMITS[code];
+    if (!limit || !content || typeof content !== 'object') return false;
+    if (this._take(`${actorNr}`, TOTAL_LIMIT) && this._take(`${actorNr}:${code}`, limit)) return true;
+    if (!this._warned.has(actorNr)) {
+      this._warned.add(actorNr);
+      console.warn(`[Network] Rate-limiting player ${actorNr}: dropping excess events.`);
+    }
+    return false;
+  }
+
+  _forgetActor(actorNr) {
+    for (const key of this._buckets.keys()) {
+      if (key === `${actorNr}` || key.startsWith(`${actorNr}:`)) this._buckets.delete(key);
+    }
+    this._warned.delete(actorNr);
   }
 
   connect() {
@@ -99,11 +151,13 @@ export class NetworkManager {
     };
 
     this.client.onActorLeave = (actor) => {
+      this._forgetActor(actor.actorNr);
       this.callbacks.onPlayerLeave(actor.actorNr);
     };
 
     // ── Custom events ─────────────────────────────────────────────────────
     this.client.onEvent = (code, content, actorNr) => {
+      if (!this._allowEvent(actorNr, code, content)) return;
       switch (code) {
         case EV_POSITION: this.callbacks.onPosition(actorNr, content); break;
         case EV_FIREBALL: this.callbacks.onFireball(actorNr, content); break;
@@ -111,8 +165,8 @@ export class NetworkManager {
         case EV_KILL:         this.callbacks.onKill(content);        break;
         case EV_SCORE_UPDATE: this.callbacks.onScoreUpdate(content);  break;
         case EV_RESPAWN:      this.callbacks.onRespawn(actorNr);     break;
-        case EV_PLAYER_NAME:  this.callbacks.onPlayerName(content);  break;
-        case EV_PLAYER_SKIN:  this.callbacks.onPlayerSkin(content);  break;
+        case EV_PLAYER_NAME:  this.callbacks.onPlayerName(actorNr, content); break;
+        case EV_PLAYER_SKIN:  this.callbacks.onPlayerSkin(actorNr, content); break;
         case EV_BOT_STATE:    this.callbacks.onBotState(actorNr, content); break;
         case EV_CHAT:         this.callbacks.onChat(actorNr, content); break;
       }

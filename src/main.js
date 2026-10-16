@@ -15,7 +15,7 @@ import {
   getSkinConfig,
 } from './player.js';
 import { Controls } from './controls.js';
-import { FireballManager } from './fireball.js';
+import { FireballManager, SPELL_CONFIG } from './fireball.js';
 import { NetworkManager } from './network.js';
 import { UIManager } from './ui.js';
 import { SimpleBotController } from './bot.js';
@@ -53,6 +53,9 @@ const CHAT_HISTORY = 50;
 const CHAT_COOLDOWN_MS = 800;
 const SHOOT_COOLDOWN = 0.5;
 const NET_TICK = 1 / 13;
+// Incoming hits can't claim more than the strongest spell does
+const MAX_HIT_DAMAGE = Math.max(...Object.values(SPELL_CONFIG).map((s) => s.damage));
+const NAME_SEND_DELAY_MS = 400;
 const EYE_HEIGHT = 1.5;
 const JUMP_VELOCITY = 8;
 const GRAVITY = 22;
@@ -1299,6 +1302,7 @@ function init() {
 
   playerNameInput.addEventListener('click', (e) => e.stopPropagation());
   playerNameInput.addEventListener('keydown', (e) => e.stopPropagation());
+  let nameSendTimer = null;
   playerNameInput.addEventListener('input', () => {
     localPlayerName = sanitizePlayerName(playerNameInput.value);
     if (playerNameInput.value !== localPlayerName) playerNameInput.value = localPlayerName;
@@ -1307,7 +1311,9 @@ function init() {
     if (localActorId >= 0) {
       playerNames.set(localActorId, localPlayerName);
       refreshScoreboard();
-      network.sendPlayerName(localActorId, localPlayerName);
+      // Send once typing pauses rather than per keystroke, which would trip other players' rate limit
+      clearTimeout(nameSendTimer);
+      nameSendTimer = setTimeout(() => network.sendPlayerName(localActorId, localPlayerName), NAME_SEND_DELAY_MS);
     }
   });
 
@@ -1426,6 +1432,8 @@ function init() {
 
     onBotState(actorNr, { b }) {
       if (isBotHost() || !Array.isArray(b)) return;
+      // Only the bot host (lowest-numbered player) may drive the bots
+      for (const id of remotePlayers.keys()) if (id < actorNr) return;
       const seen = new Set();
       for (const [id, x, y, z, r, rawName, rawSkin] of b) {
         if (!isBotId(id)) continue;
@@ -1460,7 +1468,8 @@ function init() {
       refreshScoreboard();
     },
 
-    onPlayerName({ actorNr, name }) {
+    onPlayerName(sender, { actorNr, name }) {
+      if (actorNr !== sender) return; // players may only rename themselves
       const cleanName = sanitizePlayerName(name);
       playerNames.set(actorNr, cleanName);
       const player = remotePlayers.get(actorNr);
@@ -1468,7 +1477,8 @@ function init() {
       refreshScoreboard();
     },
 
-    onPlayerSkin({ actorNr, skinId }) {
+    onPlayerSkin(sender, { actorNr, skinId }) {
+      if (actorNr !== sender) return;
       const cleanSkin = sanitizeSkinId(skinId);
       playerSkins.set(actorNr, cleanSkin);
       const player = remotePlayers.get(actorNr);
@@ -1499,13 +1509,14 @@ function init() {
     },
 
     onHit(actorNr, data) {
+      const damage = clamp(Number(data.damage) || 0, 0, MAX_HIT_DAMAGE);
       if (data.targetId === localActorId) {
-        const dead = localPlayer.takeDamage(data.damage);
-        ui.addDamageNumber(data.damage, 'taken');
-        queueLifetimeStats({ damage_taken: data.damage });
+        const dead = localPlayer.takeDamage(damage);
+        ui.addDamageNumber(damage, 'taken');
+        queueLifetimeStats({ damage_taken: damage });
         localPlayer.applySpellEffect(data.sp || 'fire');
 
-        if (data.sp === 'air' && data.kx !== undefined) {
+        if (data.sp === 'air' && Number.isFinite(data.kx) && Number.isFinite(data.kz)) {
           _knockbackVel.set(data.kx, 0, data.kz).normalize().multiplyScalar(30);
         }
 
@@ -1514,8 +1525,8 @@ function init() {
       } else {
         const target = getCombatTarget(data.targetId);
         if (target) {
-          target.takeDamage(data.damage);
-          if (actorNr === localActorId) ui.addDamageNumber(data.damage, 'dealt');
+          target.takeDamage(damage);
+          if (actorNr === localActorId) ui.addDamageNumber(damage, 'dealt');
         }
       }
     },
