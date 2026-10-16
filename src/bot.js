@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { getGroundY, moveWithCollisions } from './collision.js';
 
 const BOT_MOVE_SPEED = 5.8;
 const BOT_STRAFE_SPEED = 0.9;
@@ -7,16 +8,14 @@ const BOT_FIRE_COOLDOWN_MIN = 0.9;
 const BOT_FIRE_COOLDOWN_MAX = 1.45;
 const BOT_DESIRED_MIN_DIST = 8;
 const BOT_DESIRED_MAX_DIST = 15;
-const PLAYER_RADIUS = 0.45;
-const GROUND_Y = 0.75;
 const BOT_CLIMB_SPEED = 6;
-const PLATFORM_STEP_UP = 2;
 
 const _toTarget = new THREE.Vector3();
 const _forward = new THREE.Vector3();
 const _strafe = new THREE.Vector3();
 const _move = new THREE.Vector3();
 const _probe = new THREE.Vector3();
+const _stepDelta = new THREE.Vector3();
 
 // Samples the shot path against the same solids fireballs collide with
 function hasLineOfSight(from, to, colliders) {
@@ -48,6 +47,8 @@ export class SimpleBotController {
     this._detourTimer = 0;
     this._detourDir = 1;
     this._blocked = false;
+    // Height the bot is really standing at; its visible y eases up toward this, so stairs are judged against it
+    this._supportY = player.position.y;
   }
 
   update(delta, target) {
@@ -83,8 +84,8 @@ export class SimpleBotController {
         _move.set(-_forward.z, 0, _forward.x).multiplyScalar(this._detourDir).addScaledVector(_forward, 0.35);
       }
       _move.normalize();
-      this.player.position.addScaledVector(_move, BOT_MOVE_SPEED * delta);
-      resolveCollisions(this.player.position, this.colliders);
+      _stepDelta.copy(_move).multiplyScalar(BOT_MOVE_SPEED * delta);
+      moveWithCollisions(this.player.position, _stepDelta, this.colliders, Math.max(this.player.position.y, this._supportY));
 
       // Pinned against cover: collision push-out makes the bot jitter in place, so judge
       // progress over a short window and sidestep around the obstacle when it stalls
@@ -100,7 +101,8 @@ export class SimpleBotController {
       }
     }
 
-    const targetY = getGroundY(this.player.position.x, this.player.position.z, this.player.position.y, this.colliders);
+    const targetY = getGroundY(this.player.position.x, this.player.position.z, this.player.position.y, this.colliders, Math.max(this.player.position.y, this._supportY));
+    this._supportY = targetY;
     const maxStep = BOT_CLIMB_SPEED * delta;
     this.player.position.y += clamp(targetY - this.player.position.y, -maxStep, maxStep);
 
@@ -125,63 +127,6 @@ export class SimpleBotController {
       spell: 'fire',
     };
   }
-}
-
-function resolveCollisions(position, colliders) {
-  if (!colliders) return;
-
-  const bound = colliders.arenaSize - PLAYER_RADIUS;
-  position.x = clamp(position.x, -bound, bound);
-  position.z = clamp(position.z, -bound, bound);
-
-  for (const tree of colliders.trees) {
-    if (tree.maxY !== undefined && position.y >= tree.maxY - 0.3) continue;
-    const dx = position.x - tree.x;
-    const dz = position.z - tree.z;
-    const distSq = dx * dx + dz * dz;
-    const minDist = tree.radius + PLAYER_RADIUS;
-    if (distSq < minDist * minDist && distSq > 0.0001) {
-      const dist = Math.sqrt(distSq);
-      const overlap = minDist - dist;
-      position.x += (dx / dist) * overlap;
-      position.z += (dz / dist) * overlap;
-    }
-  }
-
-  for (const box of colliders.boxes || []) {
-    if (position.y >= box.maxY - 0.3) continue;
-    const px = position.x;
-    const pz = position.z;
-    if (px > box.xMin && px < box.xMax && pz > box.zMin && pz < box.zMax) {
-      const dxMin = px - box.xMin;
-      const dxMax = box.xMax - px;
-      const dzMin = pz - box.zMin;
-      const dzMax = box.zMax - pz;
-      const minD = Math.min(dxMin, dxMax, dzMin, dzMax);
-      if (minD === dxMin) position.x = box.xMin - PLAYER_RADIUS;
-      else if (minD === dxMax) position.x = box.xMax + PLAYER_RADIUS;
-      else if (minD === dzMin) position.z = box.zMin - PLAYER_RADIUS;
-      else position.z = box.zMax + PLAYER_RADIUS;
-    }
-  }
-}
-
-function getGroundY(x, z, currentY, colliders) {
-  let y = GROUND_Y;
-  if (!colliders) return y;
-  for (const p of colliders.platforms || []) {
-    if (currentY < p.y - PLATFORM_STEP_UP) continue;
-    if (x >= p.xMin && x <= p.xMax && z >= p.zMin && z <= p.zMax) y = Math.max(y, p.y);
-  }
-  for (const r of colliders.ramps || []) {
-    if (x >= r.xMin && x <= r.xMax && z >= r.zMin && z <= r.zMax) {
-      const a = r.axis === 'z' ? z : x;
-      let t = (a - r.axisStart) / (r.axisEnd - r.axisStart);
-      if (r.steps) t = Math.ceil(clamp(t, 0, 1) * r.steps) / r.steps;
-      y = Math.max(y, r.yStart + t * (r.yEnd - r.yStart));
-    }
-  }
-  return y;
 }
 
 function clamp(v, min, max) {

@@ -19,6 +19,7 @@ import { FireballManager } from './fireball.js';
 import { NetworkManager } from './network.js';
 import { UIManager } from './ui.js';
 import { SimpleBotController } from './bot.js';
+import { GROUND_Y, getGroundY as groundYAt, isOverRamp, moveWithCollisions } from './collision.js';
 import { injectSpeedInsights } from '@vercel/speed-insights';
 import {
   onAuthStateChanged,
@@ -55,8 +56,6 @@ const NET_TICK = 1 / 13;
 const EYE_HEIGHT = 1.5;
 const JUMP_VELOCITY = 8;
 const GRAVITY = 22;
-const GROUND_Y = 0.75;
-const PLATFORM_STEP_UP = 2;
 const BOT_IDS = [9001, 9002];
 const BOT_SPAWNS = [[0, 20], [0, -20]];
 const WEAPON_STATS = {
@@ -161,6 +160,7 @@ const _yAxis = new THREE.Vector3(0, 1, 0);
 const _forward = new THREE.Vector3();
 const _lookAt = new THREE.Vector3();
 const _knockbackVel = new THREE.Vector3();
+const _stepDelta = new THREE.Vector3();
 const _wandBasePos = new THREE.Vector3(0.3, -0.34, -0.64);
 // Centers the scope on the view; at this distance the eyepiece lines up with the scope overlay circle
 const _wandAimPos = new THREE.Vector3(0, -WAND_SCOPE_HEIGHT, -0.5);
@@ -1569,23 +1569,7 @@ function init() {
 }
 
 function getGroundY(x, z, currentY) {
-  let y = GROUND_Y;
-  if (!colliders) return y;
-  for (const p of colliders.platforms || []) {
-    // Platforms far above the player (e.g. the gate lintel) are overhead, not floor
-    if (currentY < p.y - PLATFORM_STEP_UP) continue;
-    if (x >= p.xMin && x <= p.xMax && z >= p.zMin && z <= p.zMax) y = Math.max(y, p.y);
-  }
-  for (const r of colliders.ramps || []) {
-    if (x >= r.xMin && x <= r.xMax && z >= r.zMin && z <= r.zMax) {
-      const a = r.axis === 'z' ? z : x;
-      let t = (a - r.axisStart) / (r.axisEnd - r.axisStart);
-      // Snap to the top of the physical step underfoot so players can't sink into the stone
-      if (r.steps) t = Math.ceil(clamp(t, 0, 1) * r.steps) / r.steps;
-      y = Math.max(y, r.yStart + t * (r.yEnd - r.yStart));
-    }
-  }
-  return y;
+  return groundYAt(x, z, currentY, colliders);
 }
 
 let _fpsFrames = 0, _fpsAccum = 0;
@@ -1644,52 +1628,19 @@ function updateLocalPlayer(delta) {
   if (controls.isDown('KeyA') || controls.isDown('ArrowLeft')) _moveDir.x -= 1;
   if (controls.isDown('KeyD') || controls.isDown('ArrowRight')) _moveDir.x += 1;
 
+  // Walking and knockback share one displacement, applied in collision-checked sub-steps so a
+  // fast frame or an air-spell shove can't carry the player through a thin wall
+  _stepDelta.set(0, 0, 0);
   if (_moveDir.lengthSq() > 0) {
     _moveDir.normalize().applyAxisAngle(_yAxis, cameraYaw);
     const speed = localPlayer.slowTimer > 0 ? MOVE_SPEED * SLOW_FACTOR : MOVE_SPEED;
-    localPlayer.position.addScaledVector(_moveDir, speed * delta);
+    _stepDelta.addScaledVector(_moveDir, speed * delta);
   }
-
-  if (colliders) {
-    const pr = 0.45;
-    const bound = colliders.arenaSize - pr;
-    localPlayer.position.x = clamp(localPlayer.position.x, -bound, bound);
-    localPlayer.position.z = clamp(localPlayer.position.z, -bound, bound);
-    for (const tree of colliders.trees) {
-      if (tree.maxY !== undefined && localPlayer.position.y >= tree.maxY - 0.3) continue;
-      const dxTree = localPlayer.position.x - tree.x;
-      const dzTree = localPlayer.position.z - tree.z;
-      const distSq = dxTree * dxTree + dzTree * dzTree;
-      const minDist = tree.radius + pr;
-      if (distSq < minDist * minDist && distSq > 0.0001) {
-        const dist = Math.sqrt(distSq);
-        const overlap = minDist - dist;
-        localPlayer.position.x += (dxTree / dist) * overlap;
-        localPlayer.position.z += (dzTree / dist) * overlap;
-      }
-    }
-    for (const box of colliders.boxes || []) {
-      if (localPlayer.position.y >= box.maxY - 0.3) continue;
-      const px = localPlayer.position.x;
-      const pz = localPlayer.position.z;
-      if (px > box.xMin && px < box.xMax && pz > box.zMin && pz < box.zMax) {
-        const dxMin = px - box.xMin;
-        const dxMax = box.xMax - px;
-        const dzMin = pz - box.zMin;
-        const dzMax = box.zMax - pz;
-        const minD = Math.min(dxMin, dxMax, dzMin, dzMax);
-        if (minD === dxMin) localPlayer.position.x = box.xMin - pr;
-        else if (minD === dxMax) localPlayer.position.x = box.xMax + pr;
-        else if (minD === dzMin) localPlayer.position.z = box.zMin - pr;
-        else localPlayer.position.z = box.zMax + pr;
-      }
-    }
-  }
-
   if (_knockbackVel.lengthSq() > 0.01) {
-    localPlayer.position.addScaledVector(_knockbackVel, delta);
+    _stepDelta.addScaledVector(_knockbackVel, delta);
     _knockbackVel.multiplyScalar(Math.max(0, 1 - delta * 7));
   }
+  moveWithCollisions(localPlayer.position, _stepDelta, colliders);
 
   if (controls.consumeJump() && isGrounded && localPlayer.groundedTimer <= 0) {
     playerVelocityY = JUMP_VELOCITY;
@@ -1794,16 +1745,75 @@ function castFireball() {
   progressDailyQuests('spells_cast', 1);
 }
 
+// Player collision lets the eye reach a wall face, which is inside the camera's near plane and
+// fills the screen with stone. Keep the camera (not the player) a little way off solid geometry.
+const CAMERA_CLEARANCE = 0.35;
+
+function keepCameraOutOfSolids() {
+  if (!colliders) return;
+  const pos = camera.position;
+  const m = CAMERA_CLEARANCE;
+  for (const tree of colliders.trees) {
+    if (tree.maxY !== undefined && pos.y >= tree.maxY) continue;
+    const dx = pos.x - tree.x;
+    const dz = pos.z - tree.z;
+    const minDist = tree.radius + m;
+    const distSq = dx * dx + dz * dz;
+    if (distSq < minDist * minDist && distSq > 0.0001) {
+      const scale = minDist / Math.sqrt(distSq);
+      pos.x = tree.x + dx * scale;
+      pos.z = tree.z + dz * scale;
+    }
+  }
+  for (const box of colliders.boxes || []) {
+    if (pos.y >= box.maxY) continue;
+    if (pos.x <= box.xMin - m || pos.x >= box.xMax + m || pos.z <= box.zMin - m || pos.z >= box.zMax + m) continue;
+    const dxMin = pos.x - (box.xMin - m);
+    const dxMax = (box.xMax + m) - pos.x;
+    const dzMin = pos.z - (box.zMin - m);
+    const dzMax = (box.zMax + m) - pos.z;
+    const minD = Math.min(dxMin, dxMax, dzMin, dzMax);
+    if (minD === dxMin) pos.x = box.xMin - m;
+    else if (minD === dxMax) pos.x = box.xMax + m;
+    else if (minD === dzMin) pos.z = box.zMin - m;
+    else pos.z = box.zMax + m;
+  }
+}
+
+// Stairs lift the player a whole step the instant they cross its edge, which reads as a hop. While
+// on a staircase the eye height eases toward the real height instead; jumping and falling stay exact.
+const STAIR_EYE_EASE = 14;       // 1/s; ~0.07s to cover most of a step
+const STAIR_EYE_GRACE = 0.3;     // keep easing briefly after leaving the stairs so the last step settles
+let _eyeY = null;
+let _eyeEaseTimer = 0;
+let _lastEyeT = 0;
+
+function smoothedEyeY() {
+  const now = performance.now();
+  const dt = Math.min(0.1, Math.max(0, (now - _lastEyeT) / 1000));
+  _lastEyeT = now;
+  const target = localPlayer.position.y + EYE_HEIGHT;
+
+  if (isOverRamp(localPlayer.position.x, localPlayer.position.z, colliders)) _eyeEaseTimer = STAIR_EYE_GRACE;
+  else _eyeEaseTimer = Math.max(0, _eyeEaseTimer - dt);
+
+  const jumpingUp = playerVelocityY > 1;
+  const easing = _eyeEaseTimer > 0 && !jumpingUp && _eyeY !== null && Math.abs(target - _eyeY) < 1.6;
+  _eyeY = easing ? _eyeY + (target - _eyeY) * (1 - Math.exp(-STAIR_EYE_EASE * dt)) : target;
+  return _eyeY;
+}
+
 function updateCamera() {
   camera.position.set(
     localPlayer.position.x,
-    localPlayer.position.y + EYE_HEIGHT,
+    smoothedEyeY(),
     localPlayer.position.z
   );
+  keepCameraOutOfSolids();
 
   _lookAt.set(
     localPlayer.position.x - Math.sin(cameraYaw) * Math.cos(cameraPitch),
-    localPlayer.position.y + EYE_HEIGHT + Math.sin(cameraPitch),
+    camera.position.y + Math.sin(cameraPitch),
     localPlayer.position.z - Math.cos(cameraYaw) * Math.cos(cameraPitch)
   );
   camera.lookAt(_lookAt);

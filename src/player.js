@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 
-const ARENA_HALF = 39;
 const LERP_SPEED = 0.18;
 
 const PLAYER_COLORS = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf39c12, 0x1abc9c, 0xe91e63, 0xff6b35];
@@ -300,8 +299,6 @@ export class Player {
 
   update(delta) {
     if (this.isLocal) {
-      this.position.x = clamp(this.position.x, -ARENA_HALF, ARENA_HALF);
-      this.position.z = clamp(this.position.z, -ARENA_HALF, ARENA_HALF);
       if (this.burnTimer > 0) this.burnTimer -= delta;
       if (this.slowTimer > 0) this.slowTimer -= delta;
       if (this.silenceTimer > 0) this.silenceTimer -= delta;
@@ -373,10 +370,6 @@ export class Player {
   remove() {
     this.scene.remove(this.group);
   }
-}
-
-function clamp(v, min, max) {
-  return Math.max(min, Math.min(max, v));
 }
 
 function darken(hex, amount) {
