@@ -1082,6 +1082,8 @@ function applyHomepageSkinPreview(skinId) {
   if (previewModel?.userData?.bodyMat && previewModel?.userData?.trimMat) {
     previewModel.userData.bodyMat.color.setHex(skin.body);
     previewModel.userData.trimMat.color.setHex(darkenHex(skin.body, 0.4));
+    previewModel.userData.accentMat?.color.setHex(skin.accent);
+    previewModel.userData.accentMat?.emissive.setHex(skin.accent);
   }
 }
 
@@ -1342,8 +1344,8 @@ function init() {
     previewScene = new THREE.Scene();
     // Frames the whole model (about 2.6 tall from boots to hat tip) with room for the oval mask
     previewCamera = new THREE.PerspectiveCamera(28, 200 / 260, 0.1, 100);
-    previewCamera.position.set(0, 0.85, 6.6);
-    previewCamera.lookAt(0, 0.3, 0);
+    previewCamera.position.set(0, 1.0, 7.1);
+    previewCamera.lookAt(0, 0.42, 0);
 
     previewRenderer = new THREE.WebGLRenderer({
       canvas: heroPreviewCanvas,
@@ -1381,7 +1383,7 @@ function init() {
     });
     previewModel.scale.setScalar(1.18);
     previewModel.position.set(0, -0.18, 0);
-    previewModel.rotation.y = -0.58;
+    previewModel.rotation.y = Math.PI - 0.58; // the model's front faces -Z; start three-quarters toward the camera
     previewScene.add(previewModel);
     updateHeroPreviewSize();
   }
