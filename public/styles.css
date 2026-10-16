@@ -939,10 +939,19 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* "safe": if the column is taller than the window, overflow goes to the bottom (and scrolls)
+     instead of spilling off the top and cutting the title */
+  justify-content: safe center;
   gap: clamp(6px, 1.2vh, 14px);
   min-width: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--outline-variant) transparent;
 }
+.lo-center > * { flex-shrink: 0; }
+
+/* Scale the title with window height too, so short windows don't push it out of view */
+#overlay .lo-page-title { font-size: clamp(1.8rem, min(6vw, 7vh), 3.5rem); }
 
 .lo-page-title {
   font-size: clamp(2.6rem, 5vw, 4.6rem);
@@ -1184,7 +1193,7 @@ body {
 }
 
 .lo-avatar-oval {
-  height: clamp(165px, 23vh, 270px);
+  height: clamp(120px, 21vh, 270px);
   aspect-ratio: 200 / 260;
   background:
     radial-gradient(circle at 50% 24%, rgba(255,255,255,0.06), transparent 28%),
@@ -1854,4 +1863,14 @@ body {
 
 .lo-auth-status.success {
   color: #a7f3d0;
+}
+
+/* Short windows (laptop browsers): tighten the centre column so the title and all skins fit */
+@media (max-height: 760px) {
+  .lo-hint { display: none; }
+}
+@media (max-height: 700px) {
+  .lo-skin-grid { row-gap: 10px; }
+  .lo-skin-btn { gap: 2px; padding: 6px 4px 5px; }
+  .lo-skin-swatch { width: 24px; height: 24px; }
 }
