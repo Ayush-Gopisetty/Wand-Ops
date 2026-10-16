@@ -220,7 +220,7 @@
           <div class="lo-shop-note" id="shop-signedin-note">Sign in to save purchased skins to your account.</div>
         </div>
 
-        <p id="overlay-hint" class="lo-hint">WASD · Mouse · LMB cast · Space jump</p>
+        <p id="overlay-hint" class="lo-hint">WASD · Click cast · Shift aim · Enter chat</p>
       </section>
 
       <aside class="lo-right">
@@ -252,40 +252,14 @@
 
         <div class="lo-card lo-news-card" onclick="event.stopPropagation()">
           <div class="lo-card-head"><span>📣</span> WIZARD NEWS</div>
-          <ul class="lo-news-list">
-            <li class="lo-news-item">
-              <span class="lo-news-tag">New</span>
-              <div class="lo-news-title">Legendary skins have arrived</div>
-              <div class="lo-news-desc">Starweaver (Epic), Ember Lord and Phantom (Legendary) are in the skin shop, with new rarity tiers to show them off.</div>
-            </li>
-            <li class="lo-news-item">
-              <span class="lo-news-tag update">Update</span>
-              <div class="lo-news-title">Every wizard got a makeover</div>
-              <div class="lo-news-desc">Flowing robes, bent hats, beards and a wand in hand. Skins now colour your sash, hat band and wand crystal too.</div>
-            </li>
-            <li class="lo-news-item">
-              <span class="lo-news-tag">New</span>
-              <div class="lo-news-title">Sound on!</div>
-              <div class="lo-news-desc">Every wand has its own hit sound, plus kill chimes and a heartbeat when you're low. Tune the volume in ⚙️ Settings.</div>
-            </li>
-            <li class="lo-news-item">
-              <span class="lo-news-tag update">Update</span>
-              <div class="lo-news-title">The castle, rebuilt</div>
-              <div class="lo-news-desc">Cover in the courtyard, ruins and boulders outside the walls, climbable towers and safer respawns.</div>
-            </li>
-            <li class="lo-news-item">
-              <span class="lo-news-tag">New</span>
-              <div class="lo-news-title">Never play alone</div>
-              <div class="lo-news-desc">Bots fill every match up to three wizards, and you can press Enter to chat mid-fight.</div>
-            </li>
-          </ul>
+          <ul class="lo-news-list" id="news-list"></ul>
         </div>
       </aside>
     </div>
 
     <footer class="lo-footer" onclick="event.stopPropagation()">
       <div class="lo-footer-links">
-        <span class="lo-footer-version">V0.25.7</span>
+        <span class="lo-footer-version" id="footer-version"></span>
         <a href="/privacy.html" target="_blank" rel="noopener">PRIVACY POLICY</a>
         <a href="/terms.html" target="_blank" rel="noopener">TERMS OF SERVICE</a>
       </div>
