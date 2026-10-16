@@ -108,10 +108,30 @@ export class SoundManager {
   }
 
   // ── Hit confirmation ───────────────────────────────────────────────────────
-  hitConfirm() {
+  /** Short confirmation when your spell lands, flavoured by the spell so each wand sounds different. */
+  hitConfirm(spell = 'fire') {
     if (!this._ready) return;
-    this._tone('square', 2200, 0, 0.04, 0.07, 1500);
-    this._noiseBurst('highpass', 5000, 0, 0.03, 0.12);
+    switch (spell) {
+      case 'ice': // crystal chime
+        this._tone('sine', 2093, 0, 0.16, 0.12);
+        this._tone('sine', 3136, 0.015, 0.12, 0.07);
+        break;
+      case 'lightning': // electric zap
+        this._tone('sawtooth', 1900, 0, 0.07, 0.07, 320);
+        this._noiseBurst('highpass', 6000, 0, 0.05, 0.1);
+        break;
+      case 'air': // soft whoosh puff
+        this._noiseBurst('bandpass', 1400, 0, 0.12, 0.22);
+        this._tone('sine', 900, 0, 0.08, 0.06, 1400);
+        break;
+      case 'earth': // stony clack
+        this._tone('square', 240, 0, 0.07, 0.1, 130);
+        this._noiseBurst('lowpass', 900, 0, 0.06, 0.25);
+        break;
+      default: // fire: crackly pop
+        this._tone('triangle', 650, 0, 0.06, 0.12, 1250);
+        this._noiseBurst('bandpass', 2600, 0, 0.05, 0.18);
+    }
   }
 
   kill() {
