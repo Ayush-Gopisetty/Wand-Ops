@@ -44,6 +44,13 @@
     <div id="kill-feed"></div>
     <div id="damage-numbers"></div>
     <div id="fps-counter"></div>
+
+    <div id="hud-chat">
+      <div id="hud-chat-log" aria-live="polite"></div>
+      <form id="hud-chat-form" hidden>
+        <input id="hud-chat-input" type="text" maxlength="120" placeholder="Enter to send · Esc to cancel" autocomplete="off" />
+      </form>
+    </div>
   </div>
 
   <div id="scoreboard">
@@ -292,6 +299,7 @@
               <dt>Right click</dt><dd>Hold to aim down the scope</dd>
               <dt>Space</dt><dd>Jump</dd>
               <dt>Tab</dt><dd>Hold to see the scoreboard</dd>
+              <dt>Enter</dt><dd>Chat with the match</dd>
               <dt>Esc</dt><dd>Back to the menu</dd>
             </dl>
           </section>
