@@ -9,6 +9,7 @@ import {
   FIRST_PERSON_LAYER,
   WAND_SCOPE_HEIGHT,
   createWizardModel,
+  applySkinToModel,
   PLAYER_SKINS,
   DEFAULT_SKIN_ID,
   DEFAULT_UNLOCKED_SKIN_IDS,
@@ -363,6 +364,7 @@ function renderSkinShop() {
     btn.classList.toggle('active', equipped);
     btn.classList.toggle('owned', unlocked);
     btn.classList.toggle('locked', !unlocked);
+    btn.dataset.rarity = skin.rarity;
     if (priceEl) priceEl.textContent = skin.price > 0 ? `${skin.price} coins` : 'Free';
     if (actionEl) {
       actionEl.textContent = equipped ? 'Equipped' : unlocked ? 'Equip' : `Buy ${skin.price}`;
@@ -1079,12 +1081,7 @@ function applyHomepageSkinPreview(skinId) {
   if (pageTitle) {
     pageTitle.style.textShadow = `0 0 28px ${hexToRgba(skin.glow, 0.22)}`;
   }
-  if (previewModel?.userData?.bodyMat && previewModel?.userData?.trimMat) {
-    previewModel.userData.bodyMat.color.setHex(skin.body);
-    previewModel.userData.trimMat.color.setHex(darkenHex(skin.body, 0.4));
-    previewModel.userData.accentMat?.color.setHex(skin.accent);
-    previewModel.userData.accentMat?.emissive.setHex(skin.accent);
-  }
+  if (previewModel?.userData?.bodyMat) applySkinToModel(previewModel.userData, skinId);
 }
 
 function setLocalSkin(skinId, shouldBroadcast = true) {
@@ -1985,13 +1982,6 @@ function hexToRgba(hex, alpha) {
   const g = (hex >> 8) & 0xff;
   const b = hex & 0xff;
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
-function darkenHex(hex, amount) {
-  const r = Math.max(0, Math.round(((hex >> 16) & 0xff) * (1 - amount)));
-  const g = Math.max(0, Math.round(((hex >> 8) & 0xff) * (1 - amount)));
-  const b = Math.max(0, Math.round((hex & 0xff) * (1 - amount)));
-  return (r << 16) | (g << 8) | b;
 }
 
 init();
