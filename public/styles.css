@@ -1585,6 +1585,7 @@ body {
 }
 
 .lo-footer-links span,
+.lo-footer-links a,
 .lo-footer-right span {
   font-family: var(--font-label);
   font-size: 10px;
@@ -1593,9 +1594,13 @@ body {
   text-transform: uppercase;
   cursor: pointer;
   transition: color 0.12s;
+  text-decoration: none;
 }
 .lo-footer-links span:hover,
+.lo-footer-links a:hover,
 .lo-footer-right span:hover { color: var(--on-surface-dim); }
+.lo-footer-links .lo-footer-version { cursor: default; }
+.lo-footer-links .lo-footer-version:hover { color: var(--outline); }
 
 .lo-footer-copy {
   color: var(--outline) !important;
