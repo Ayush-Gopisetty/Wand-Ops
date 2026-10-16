@@ -1817,7 +1817,7 @@ function updateWorld(delta) {
       queueLifetimeStats({ damage_dealt: damage });
       progressDailyQuests('damage_dealt', damage);
       if (!dead) {
-        sound.hitConfirm();
+        sound.hitConfirm(spell);
         return;
       }
       sound.kill();
