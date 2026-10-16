@@ -344,7 +344,7 @@ function updateSkinSaveNote() {
   const noteEl = document.getElementById('shop-signedin-note');
   if (noteEl) {
     noteEl.textContent = authSession?.user
-      ? 'Purchases and equipped skins are saved to Firebase.'
+      ? 'Purchases and equipped skins are saved to your account.'
       : 'Guest purchases stay on this browser. Sign in to save them to your account.';
   }
 }
@@ -523,7 +523,7 @@ function updateLifetimeStatsUi() {
   if (damageEl) damageEl.textContent = String(Math.round(lifetimeStats.damage_dealt));
   if (noteEl) {
     noteEl.textContent = authSession?.user
-      ? 'Signed-in lifetime stats are saved to Firebase.'
+      ? 'Lifetime stats are saved to your account.'
       : 'Sign in with Google to save lifetime stats.';
   }
 }
@@ -917,7 +917,7 @@ async function setupFirebaseAuth() {
     firebaseServices = createFirebaseServices();
   } catch (error) {
     firebaseServices = null;
-    if (signInBtn) signInBtn.title = 'Firebase environment variables are missing';
+    if (signInBtn) signInBtn.title = "Sign-in isn't available right now";
   }
 
   signInBtn?.addEventListener('click', (e) => {
@@ -951,7 +951,7 @@ async function setupFirebaseAuth() {
     e.preventDefault();
     e.stopPropagation();
     if (!firebaseServices) {
-      setAuthStatus('Firebase auth is not configured in this environment.', 'error');
+      setAuthStatus("Sign-in isn't available right now. You can still play as a guest.", 'error');
       return;
     }
 
