@@ -51,6 +51,8 @@ const DEFAULT_SETTINGS = { sensitivity: 1, fov: DEFAULT_FOV, showFps: true };
 const CHAT_MAX_LEN = 120;
 const CHAT_HISTORY = 50;
 const CHAT_COOLDOWN_MS = 800;
+const HUD_CHAT_LINES = 8;
+const HUD_CHAT_FADE_MS = 8000;
 const SHOOT_COOLDOWN = 0.5;
 const NET_TICK = 1 / 13;
 const EYE_HEIGHT = 1.5;
@@ -683,15 +685,30 @@ function sanitizeChat(text) {
   return String(text ?? '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, CHAT_MAX_LEN);
 }
 
+function addHudChatLine(name, text, mine) {
+  const log = document.getElementById('hud-chat-log');
+  if (!log) return;
+  const line = document.createElement('div');
+  line.className = mine ? 'hud-chat-line mine' : 'hud-chat-line';
+  const nameEl = document.createElement('span');
+  nameEl.className = 'hud-chat-name';
+  nameEl.textContent = name;
+  line.append(nameEl, document.createTextNode(text));
+  log.appendChild(line);
+  while (log.children.length > HUD_CHAT_LINES) log.firstElementChild.remove();
+  setTimeout(() => line.classList.add('faded'), HUD_CHAT_FADE_MS);
+}
+
 function addChatMessage(actorNr, rawText) {
   const text = sanitizeChat(rawText);
   if (!text) return;
+  const mine = actorNr === localActorId;
+  const name = mine ? localPlayerName : getPlayerLabel(actorNr);
+  addHudChatLine(name, text, mine);
+
   const log = document.getElementById('chat-log');
   if (!log) return;
   log.querySelector('.lo-chat-empty')?.remove();
-
-  const mine = actorNr === localActorId;
-  const name = mine ? localPlayerName : getPlayerLabel(actorNr);
   const row = document.createElement('div');
   row.className = mine ? 'lo-chat-msg mine' : 'lo-chat-msg';
   const nameEl = document.createElement('span');
@@ -705,7 +722,43 @@ function addChatMessage(actorNr, rawText) {
   if (mine) return;
   const chatOpen = !document.getElementById('chat-modal')?.hidden;
   if (!chatOpen) document.getElementById('chat-unread')?.removeAttribute('hidden');
-  if (document.pointerLockElement) ui.addKillEntry(`💬 ${name}: ${text}`);
+}
+
+// Shared by the lobby panel and the in-game box so the cooldown applies to both
+let lastChatAt = 0;
+function sendChatMessage(rawText) {
+  const text = sanitizeChat(rawText);
+  const now = performance.now();
+  if (!text || now - lastChatAt < CHAT_COOLDOWN_MS) return false;
+  lastChatAt = now;
+  addChatMessage(localActorId, text);
+  network.sendChat(text);
+  return true;
+}
+
+function openHudChat() {
+  const form = document.getElementById('hud-chat-form');
+  if (!form || !form.hidden) return;
+  form.hidden = false;
+  document.getElementById('hud-chat')?.classList.add('open');
+  // Release held movement keys: their keyups will go to the input, not the game
+  controls.clearInput();
+  controls.typing = true;
+  document.getElementById('hud-chat-input')?.focus();
+}
+
+function closeHudChat() {
+  const form = document.getElementById('hud-chat-form');
+  if (!form || form.hidden) return;
+  form.hidden = true;
+  document.getElementById('hud-chat')?.classList.remove('open');
+  const input = document.getElementById('hud-chat-input');
+  if (input) {
+    input.value = '';
+    input.blur();
+  }
+  controls.typing = false;
+  controls.clearInput();
 }
 
 function updateChatNote() {
@@ -785,17 +838,29 @@ function setupTopBar() {
     applySettings();
   });
 
-  let lastChatAt = 0;
   document.getElementById('chat-form')?.addEventListener('submit', (e) => {
     e.preventDefault();
     const input = document.getElementById('chat-input');
-    const text = sanitizeChat(input?.value);
-    const now = performance.now();
-    if (!text || now - lastChatAt < CHAT_COOLDOWN_MS) return;
-    lastChatAt = now;
-    input.value = '';
-    addChatMessage(localActorId, text);
-    network.sendChat(text);
+    if (input && sendChatMessage(input.value)) input.value = '';
+  });
+
+  // In-game chat: Enter opens the box, Enter sends, Esc cancels
+  const hudInput = document.getElementById('hud-chat-input');
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || !document.pointerLockElement || controls.typing) return;
+    e.preventDefault();
+    openHudChat();
+  });
+  hudInput?.addEventListener('keydown', (e) => {
+    // Keep typed keys away from the game's movement, jump and scoreboard handlers
+    e.stopPropagation();
+    if (e.key === 'Escape') closeHudChat();
+  });
+  hudInput?.addEventListener('keyup', (e) => e.stopPropagation());
+  document.getElementById('hud-chat-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const empty = !sanitizeChat(hudInput?.value);
+    if (empty || sendChatMessage(hudInput?.value)) closeHudChat();
   });
 
   const log = document.getElementById('chat-log');
@@ -1543,6 +1608,7 @@ function init() {
     } else {
       ui.showOverlay(true);
       ui.hideScoreboard();
+      closeHudChat();
       ui.setOverlayStatus(localActorId >= 0 ? 'Paused — click to resume' : 'Connecting…');
     }
   });

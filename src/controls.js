@@ -8,6 +8,7 @@ export class Controls {
     this.keys    = {};
     this.isLocked = false;
     this.isAiming = false;
+    this.typing   = false; // set while the in-game chat box has focus
 
     // Accumulators — drained every frame
     this._dx = 0;
@@ -27,6 +28,7 @@ export class Controls {
       this._dy += e.movementY;
     };
     this._onMD  = (e) => {
+      if (this.typing) return;
       if (e.button === 0 && this.isLocked) this._click = true;
       if (e.button === 2 && this.isLocked) {
         e.preventDefault();
@@ -51,6 +53,14 @@ export class Controls {
     document.addEventListener('mouseup',          this._onMU);
     document.addEventListener('contextmenu',      this._onCM);
     document.addEventListener('pointerlockchange', this._onPLC);
+  }
+
+  /** Releases every held key and pending action, e.g. when focus moves to the chat box. */
+  clearInput() {
+    this.keys = {};
+    this._click = false;
+    this._jump = false;
+    this.isAiming = false;
   }
 
   /** True while a key is held. */

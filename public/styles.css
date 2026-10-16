@@ -252,6 +252,59 @@ body {
   gap: 4px;
 }
 
+/* ── In-game chat (bottom-left) ── */
+#hud-chat {
+  position: absolute;
+  left: 16px;
+  bottom: 24px;
+  width: min(360px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+}
+
+#hud-chat-log {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 190px;
+  overflow: hidden;
+  justify-content: flex-end;
+}
+
+.hud-chat-line {
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 4px 10px;
+  border-radius: 10px;
+  background: rgba(8, 9, 22, 0.55);
+  font-size: 13px;
+  line-height: 1.35;
+  color: #f2eefa;
+  text-shadow: 0 1px 2px #000;
+  overflow-wrap: anywhere;
+  transition: opacity 0.6s ease;
+}
+.hud-chat-line.faded { opacity: 0; }
+#hud-chat.open .hud-chat-line { opacity: 1; }
+.hud-chat-name { font-weight: 700; color: #d8b9ff; margin-right: 6px; }
+.hud-chat-line.mine .hud-chat-name { color: #f1ff3a; }
+
+#hud-chat-form { pointer-events: auto; }
+#hud-chat-form[hidden] { display: none; }
+#hud-chat-input {
+  width: 100%;
+  padding: 9px 14px;
+  border-radius: 999px;
+  border: 1.5px solid rgba(216, 185, 255, 0.6);
+  background: rgba(8, 9, 22, 0.85);
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
 #damage-numbers {
   position: absolute;
   inset: 0;
