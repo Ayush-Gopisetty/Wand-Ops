@@ -1573,6 +1573,8 @@ body {
 
 /* ── Right: news card ── */
 .lo-news-card { gap: 10px; }
+/* News takes whatever height the right column has left and scrolls inside it */
+.lo-right > .lo-news-card { flex: 1 1 0; min-height: 120px; }
 
 /* Right column cards run a little tighter so the column fits a laptop-height window */
 .lo-right { gap: 10px; }
@@ -1650,7 +1652,41 @@ body {
   opacity: 0.65;
 }
 
-.lo-news-body { display: flex; flex-direction: column; gap: 5px; }
+/* Newest first; the list scrolls inside the card so more entries don't stretch the column */
+.lo-news-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 4px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--outline-variant) transparent;
+}
+.lo-news-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--outline-variant);
+}
+.lo-news-item:last-child { border-bottom: none; padding-bottom: 0; }
+.lo-news-tag {
+  align-self: flex-start;
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 95, 210, 0.18);
+  color: #ff9fe4;
+  font-family: var(--font-label);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.lo-news-tag.update { background: rgba(96, 165, 250, 0.18); color: #9cc8ff; }
 
 .lo-news-title {
   font-size: 13px;
@@ -1661,9 +1697,9 @@ body {
 
 .lo-news-desc {
   font-family: var(--font-label);
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--on-surface-dim);
-  line-height: 1.5;
+  line-height: 1.45;
 }
 
 /* ── Footer ── */
