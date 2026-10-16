@@ -137,57 +137,85 @@ export function applyFirstPersonWandSkin(wandGroup, skinId) {
   }
 }
 
+// Low-poly wizard. Local frame: feet at y = -0.75 (the player's position sits 0.75 above the ground)
+// and the front faces -Z, the same way rotation is applied to players and bots.
 export function createWizardModel(color = getSkinConfig(DEFAULT_SKIN_ID).body, options = {}) {
-  const { includeNameTag = true, name = 'Wizard' } = options;
+  const {
+    includeNameTag = true,
+    name = 'Wizard',
+    accent = getSkinConfig(DEFAULT_SKIN_ID).accent,
+  } = options;
   const group = new THREE.Group();
+  const add = (geometry, material, x = 0, y = 0, z = 0) => {
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(x, y, z);
+    group.add(mesh);
+    return mesh;
+  };
 
-  const bodyGeo = new THREE.BoxGeometry(0.85, 1.4, 0.85);
-  const bodyMat = new THREE.MeshStandardMaterial({ color });
-  const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
-  group.add(bodyMesh);
+  const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.8 });
+  const trimMat = new THREE.MeshStandardMaterial({ color: darken(color, 0.4), roughness: 0.85 });
+  const accentMat = new THREE.MeshStandardMaterial({ color: accent, emissive: accent, emissiveIntensity: 0.25, roughness: 0.5 });
+  const hatMat = new THREE.MeshStandardMaterial({ color: 0x1a0033, roughness: 0.75 });
+  const faceMat = new THREE.MeshStandardMaterial({ color: 0x241a33, roughness: 0.9 });
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xfff3c4 });
+  const beardMat = new THREE.MeshStandardMaterial({ color: 0xe4e0ea, roughness: 0.95 });
+  const gloveMat = new THREE.MeshStandardMaterial({ color: 0x3a2a1e, roughness: 0.9 });
+  const woodMat = new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.8 });
+  const scopeMat = new THREE.MeshStandardMaterial({ color: 0x2b2f39, roughness: 0.42, metalness: 0.58 });
 
-  const trimGeo = new THREE.BoxGeometry(0.95, 0.6, 0.95);
-  const trimMat = new THREE.MeshStandardMaterial({ color: darken(color, 0.4) });
-  const trimMesh = new THREE.Mesh(trimGeo, trimMat);
-  trimMesh.position.y = -0.42;
-  group.add(trimMesh);
+  // Robe: flared toward the hem, with a darker hem band and an accent sash
+  const bodyMesh = add(new THREE.CylinderGeometry(0.27, 0.5, 1.3, 12), bodyMat, 0, -0.1, 0);
+  const trimMesh = add(new THREE.CylinderGeometry(0.515, 0.52, 0.14, 12), trimMat, 0, -0.68, 0);
+  add(new THREE.CylinderGeometry(0.345, 0.36, 0.1, 12), accentMat, 0, 0.12, 0);
+  add(new THREE.SphereGeometry(0.29, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), bodyMat, 0, 0.54, 0); // shoulders
 
-  const hatMat = new THREE.MeshStandardMaterial({ color: 0x1a0033 });
-  const hatGeo = new THREE.ConeGeometry(0.38, 0.82, 8);
-  const hatMesh = new THREE.Mesh(hatGeo, hatMat);
-  hatMesh.position.y = 1.11;
-  group.add(hatMesh);
+  // Head in the hat's shadow: dark face, glowing eyes, long beard
+  add(new THREE.SphereGeometry(0.22, 12, 10), faceMat, 0, 0.78, 0);
+  [-0.085, 0.085].forEach((x) => add(new THREE.SphereGeometry(0.045, 8, 6), eyeMat, x, 0.8, -0.19));
+  const beard = add(new THREE.ConeGeometry(0.16, 0.46, 10), beardMat, 0, 0.53, -0.24);
+  beard.rotation.x = Math.PI;
 
-  const brimGeo = new THREE.CylinderGeometry(0.54, 0.54, 0.08, 12);
-  const brimMesh = new THREE.Mesh(brimGeo, hatMat);
-  brimMesh.position.y = 0.74;
-  group.add(brimMesh);
+  // Hat: brim, accent band, then a crown whose tip bends backward
+  const brimMesh = add(new THREE.CylinderGeometry(0.5, 0.52, 0.06, 18), hatMat, 0, 0.97, 0);
+  add(new THREE.CylinderGeometry(0.315, 0.32, 0.09, 14), accentMat, 0, 1.04, 0);
+  const hatMesh = add(new THREE.CylinderGeometry(0.17, 0.31, 0.46, 14), hatMat, 0, 1.23, 0);
+  const tip = add(new THREE.ConeGeometry(0.17, 0.46, 14), hatMat, 0, 1.6, 0.07);
+  tip.rotation.x = 0.45;
 
-  const eyeGeo = new THREE.SphereGeometry(0.07, 6, 6);
-  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-  [-0.22, 0.22].forEach((x) => {
-    const eye = new THREE.Mesh(eyeGeo, eyeMat);
-    eye.position.set(x, 0.18, 0.44);
-    group.add(eye);
-  });
+  // Arms: the right reaches forward holding the wand, the left hangs slightly forward
+  const sleeveGeo = new THREE.CylinderGeometry(0.085, 0.12, 0.48, 8);
+  const handGeo = new THREE.SphereGeometry(0.075, 8, 6);
+  const addArm = (side, pitch, roll) => {
+    const shoulder = new THREE.Group();
+    shoulder.position.set(side * 0.3, 0.46, 0);
+    shoulder.rotation.set(pitch, 0, roll);
+    const sleeve = new THREE.Mesh(sleeveGeo, bodyMat);
+    sleeve.position.y = -0.24;
+    const hand = new THREE.Mesh(handGeo, gloveMat);
+    hand.position.y = -0.5;
+    shoulder.add(sleeve, hand);
+    group.add(shoulder);
+  };
+  addArm(1, 1.15, 0.12);
+  addArm(-1, 0.35, -0.18);
 
-  const wandGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.7, 6);
-  const wandMat = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
-  const wandMesh = new THREE.Mesh(wandGeo, wandMat);
-  wandMesh.rotation.z = Math.PI / 6;
-  wandMesh.position.set(0.56, 0.1, 0.0);
-  group.add(wandMesh);
-
-  const wandScopeMat = new THREE.MeshStandardMaterial({ color: 0x2b2f39, roughness: 0.42, metalness: 0.58 });
-  const wandScopeMount = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.09, 0.08), wandScopeMat);
-  wandScopeMount.position.set(0.5, 0.24, 0.0);
-  wandScopeMount.rotation.z = wandMesh.rotation.z;
-  group.add(wandScopeMount);
-
-  const wandScopeTube = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.26, 12), wandScopeMat);
-  wandScopeTube.position.set(0.57, 0.31, 0.0);
-  wandScopeTube.rotation.z = wandMesh.rotation.z;
-  group.add(wandScopeTube);
+  // Wand in the right hand pointing forward, with the small scope and an accent crystal at the tip
+  const wandGroup = new THREE.Group();
+  wandGroup.position.set(0.36, 0.25, -0.5);
+  wandGroup.rotation.x = -0.12;
+  group.add(wandGroup);
+  const wandMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.042, 0.72, 8), woodMat);
+  wandMesh.rotation.x = -Math.PI / 2;
+  wandMesh.position.z = -0.24;
+  const scopeTube = new THREE.Mesh(new THREE.CylinderGeometry(0.048, 0.048, 0.26, 12), scopeMat);
+  scopeTube.rotation.x = -Math.PI / 2;
+  scopeTube.position.set(0, 0.1, -0.2);
+  const scopeMount = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.07, 0.08), scopeMat);
+  scopeMount.position.set(0, 0.05, -0.2);
+  const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.065, 0), accentMat);
+  crystal.position.z = -0.64;
+  wandGroup.add(wandMesh, scopeTube, scopeMount, crystal);
 
   let nameTag = null;
   if (includeNameTag) {
@@ -198,6 +226,7 @@ export function createWizardModel(color = getSkinConfig(DEFAULT_SKIN_ID).body, o
   group.userData = {
     bodyMat,
     trimMat,
+    accentMat,
     hatMat,
     bodyMesh,
     trimMesh,
@@ -291,6 +320,7 @@ export class Player {
     this.group = createWizardModel(color, { includeNameTag: true, name: this.name });
     this._bodyMat = this.group.userData.bodyMat;
     this._trimMat = this.group.userData.trimMat;
+    this._accentMat = this.group.userData.accentMat;
     this._hatMat = this.group.userData.hatMat;
     this.bodyMesh = this.group.userData.bodyMesh;
     this.nameTag = this.group.userData.nameTag;
@@ -349,6 +379,8 @@ export class Player {
     this._bodyColor = skin.body;
     this._bodyMat.color.setHex(skin.body);
     this._trimMat.color.setHex(darken(skin.body, 0.4));
+    this._accentMat.color.setHex(skin.accent);
+    this._accentMat.emissive.setHex(skin.accent);
   }
 
   respawn(spawnPoint = null) {
