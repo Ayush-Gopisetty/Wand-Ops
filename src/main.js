@@ -22,6 +22,7 @@ import { UIManager } from './ui.js';
 import { SimpleBotController } from './bot.js';
 import { SoundManager } from './audio.js';
 import { WIZARD_NEWS } from './news.js';
+import { applySeasonalLogo } from './season.js';
 import { version as APP_VERSION } from '../package.json';
 import { GROUND_Y, getGroundY as groundYAt, isOverRamp, moveWithCollisions } from './collision.js';
 import { injectSpeedInsights } from '@vercel/speed-insights';
@@ -1652,6 +1653,7 @@ function init() {
   const footerVersion = document.getElementById('footer-version');
   if (footerVersion) footerVersion.textContent = `V${APP_VERSION}`;
   renderWizardNews();
+  applySeasonalLogo();
 
   const footerCopy = document.getElementById('footer-copy');
   if (footerCopy) footerCopy.textContent = `© ${new Date().getFullYear()} Blue Wizard Digital`;

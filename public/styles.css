@@ -1037,6 +1037,38 @@ body {
   0%, 100% { opacity: .3; transform: scale(.7) rotate(0deg); }
   50% { opacity: 1; transform: scale(1) rotate(20deg); }
 }
+/* Seasonal logos (see src/season.js): recolour the letters; the hat, O and decorations are swapped in JS */
+.lo-logo-o {
+  display: inline-block;
+  width: .78em;
+  height: .78em;
+  margin: 0 .02em .02em;
+  filter: drop-shadow(0 .06em 0 rgba(0, 0, 0, .45));
+}
+.lo-logo-o.lo-logo-egg { width: .62em; }
+#overlay h1.lo-logo[data-season="halloween"] {
+  --outline: #2a1206;
+  --fill: linear-gradient(180deg, #fff1c2 0%, #ffb347 50%, #ff6a00 100%);
+  --extrude: 0 .05em 0 #220d04, 0 .1em 0 #170802, 0 .15em .25em rgba(0, 0, 0, .6);
+}
+.lo-logo[data-season="halloween"] .lo-logo-o { filter: drop-shadow(0 .06em 0 #170802) drop-shadow(0 0 .25em rgba(255, 140, 0, .55)); }
+.lo-logo[data-season="halloween"] .lo-logo-star { width: .44em; height: .22em; animation: lo-bat-flap 1.2s ease-in-out infinite; }
+.lo-logo[data-season="halloween"] .lo-logo-star.s2 { width: .34em; height: .17em; animation-delay: .4s; }
+.lo-logo[data-season="halloween"] .lo-logo-star.s3 { width: .28em; height: .14em; animation-delay: .8s; }
+@keyframes lo-bat-flap { 50% { transform: translateY(-.06em) scaleX(.82); } }
+#overlay h1.lo-logo[data-season="christmas"] {
+  --outline: #0f3d1f;
+  --fill: linear-gradient(180deg, #ffffff 0%, #ffe3e3 32%, #e63946 68%, #b5172a 100%);
+  --extrude: 0 .05em 0 #0b2e17, 0 .1em 0 #082211, 0 .15em .25em rgba(0, 0, 0, .55);
+}
+.lo-logo[data-season="christmas"] .lo-logo-o { filter: drop-shadow(0 .06em 0 #082211) drop-shadow(0 0 .25em rgba(255, 120, 120, .5)); }
+#overlay h1.lo-logo[data-season="easter"] {
+  --outline: #5b3a8c;
+  --fill: linear-gradient(180deg, #fffbe0 0%, #ffe08a 45%, #ff9ecf 100%);
+  --extrude: 0 .05em 0 #4a2f73, 0 .1em 0 #3b2560, 0 .15em .25em rgba(0, 0, 0, .45);
+}
+.lo-logo[data-season="easter"] .lo-logo-o { filter: drop-shadow(0 .06em 0 #3b2560) drop-shadow(0 0 .25em rgba(159, 227, 255, .55)); }
+
 @media (prefers-reduced-motion: reduce) {
   .lo-logo-orb, .lo-logo-star { animation: none; }
 }
