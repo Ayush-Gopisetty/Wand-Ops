@@ -21,6 +21,8 @@ import { NetworkManager } from './network.js';
 import { UIManager } from './ui.js';
 import { SimpleBotController } from './bot.js';
 import { SoundManager } from './audio.js';
+import { WIZARD_NEWS } from './news.js';
+import { version as APP_VERSION } from '../package.json';
 import { GROUND_Y, getGroundY as groundYAt, isOverRamp, moveWithCollisions } from './collision.js';
 import { injectSpeedInsights } from '@vercel/speed-insights';
 import {
@@ -644,6 +646,26 @@ function toggleAuthModal(visible) {
   if (!backdrop) return;
   backdrop.style.display = visible ? 'flex' : 'none';
   if (!visible) setAuthStatus('');
+}
+
+function renderWizardNews() {
+  const list = document.getElementById('news-list');
+  if (!list) return;
+  list.replaceChildren(...WIZARD_NEWS.map(({ tag, title, body }) => {
+    const item = document.createElement('li');
+    item.className = 'lo-news-item';
+    const tagEl = document.createElement('span');
+    tagEl.className = tag === 'update' ? 'lo-news-tag update' : 'lo-news-tag';
+    tagEl.textContent = tag === 'update' ? 'Update' : 'New';
+    const titleEl = document.createElement('div');
+    titleEl.className = 'lo-news-title';
+    titleEl.textContent = title;
+    const bodyEl = document.createElement('div');
+    bodyEl.className = 'lo-news-desc';
+    bodyEl.textContent = body;
+    item.append(tagEl, titleEl, bodyEl);
+    return item;
+  }));
 }
 
 function closeAuthModal() {
@@ -1630,6 +1652,10 @@ function init() {
   });
 
   network.connect();
+
+  const footerVersion = document.getElementById('footer-version');
+  if (footerVersion) footerVersion.textContent = `V${APP_VERSION}`;
+  renderWizardNews();
 
   const footerCopy = document.getElementById('footer-copy');
   if (footerCopy) footerCopy.textContent = `© ${new Date().getFullYear()} Blue Wizard Digital`;
