@@ -1090,7 +1090,6 @@ function applyHomepageSkinPreview(skinId) {
   const skin = getSkinConfig(skinId);
   const avatar = document.querySelector('.lo-avatar-oval');
   const statusDot = document.querySelector('.lo-status-dot');
-  const pageTitle = document.querySelector('.lo-page-title');
 
   if (avatar) {
     avatar.style.borderColor = hexToRgba(skin.accent, 0.35);
@@ -1099,9 +1098,6 @@ function applyHomepageSkinPreview(skinId) {
   if (statusDot) {
     statusDot.style.background = `#${skin.accent.toString(16).padStart(6, '0')}`;
     statusDot.style.boxShadow = `0 0 10px ${hexToRgba(skin.glow, 0.85)}`;
-  }
-  if (pageTitle) {
-    pageTitle.style.textShadow = `0 0 28px ${hexToRgba(skin.glow, 0.22)}`;
   }
   if (previewModel?.userData?.bodyMat) applySkinToModel(previewModel.userData, skinId);
 }
