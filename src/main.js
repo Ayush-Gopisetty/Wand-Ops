@@ -19,6 +19,7 @@ import { FireballManager, SPELL_CONFIG } from './fireball.js';
 import { NetworkManager } from './network.js';
 import { UIManager } from './ui.js';
 import { SimpleBotController } from './bot.js';
+import { SoundManager } from './audio.js';
 import { GROUND_Y, getGroundY as groundYAt, isOverRamp, moveWithCollisions } from './collision.js';
 import { injectSpeedInsights } from '@vercel/speed-insights';
 import {
@@ -47,7 +48,8 @@ const PITCH_MAX = 1.4;
 const DEFAULT_FOV = 72;
 const ADS_FOV = 44;
 const SETTINGS_KEY = 'wand-ops-settings';
-const DEFAULT_SETTINGS = { sensitivity: 1, fov: DEFAULT_FOV, showFps: true };
+const DEFAULT_SETTINGS = { sensitivity: 1, fov: DEFAULT_FOV, showFps: true, volume: 0.7, muted: false };
+const sound = new SoundManager();
 const CHAT_MAX_LEN = 120;
 const CHAT_HISTORY = 50;
 const CHAT_COOLDOWN_MS = 800;
@@ -472,6 +474,7 @@ function claimDailyQuest(questId) {
 
   if (!changed) return;
   awardCoins(reward);
+  sound.questReward();
   renderDailyQuests();
   persistProfile();
 }
@@ -493,6 +496,7 @@ async function buySkin(skinId) {
       clearTimeout(buySkin.noteTimer);
       buySkin.noteTimer = setTimeout(updateSkinSaveNote, 3000);
     }
+    sound.cantAfford();
     return;
   }
 
@@ -503,6 +507,7 @@ async function buySkin(skinId) {
   ownedSkinIds.add(cleanSkin);
   setLocalSkin(cleanSkin);
   updateCoinUi();
+  sound.purchase();
   renderSkinShop();
   await persistProfile();
 }
@@ -651,6 +656,10 @@ function loadSettings() {
     sensitivity: clamp(Number(saved.sensitivity) || DEFAULT_SETTINGS.sensitivity, 0.2, 3),
     fov: clamp(Number(saved.fov) || DEFAULT_SETTINGS.fov, 60, 100),
     showFps: saved.showFps === undefined ? DEFAULT_SETTINGS.showFps : Boolean(saved.showFps),
+    volume: Number.isFinite(Number(saved.volume)) && saved.volume !== null && saved.volume !== undefined
+      ? clamp(Number(saved.volume), 0, 1)
+      : DEFAULT_SETTINGS.volume,
+    muted: Boolean(saved.muted),
   };
 }
 
@@ -658,6 +667,13 @@ function applySettings() {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   const fpsEl = document.getElementById('fps-counter');
   if (fpsEl) fpsEl.style.display = settings.showFps ? '' : 'none';
+  sound.setVolume(settings.volume, settings.muted);
+  const vol = document.getElementById('setting-volume');
+  const mute = document.getElementById('setting-mute');
+  const volOut = document.getElementById('setting-volume-value');
+  if (vol) vol.value = Math.round(settings.volume * 100);
+  if (mute) mute.checked = settings.muted;
+  if (volOut) volOut.textContent = settings.muted ? 'Muted' : `${Math.round(settings.volume * 100)}%`;
   const sens = document.getElementById('setting-sens');
   const fov = document.getElementById('setting-fov');
   const fps = document.getElementById('setting-fps');
@@ -836,6 +852,21 @@ function setupTopBar() {
     settings.showFps = e.target.checked;
     applySettings();
   });
+  document.getElementById('setting-volume')?.addEventListener('input', (e) => {
+    settings.volume = clamp(Number(e.target.value) / 100, 0, 1);
+    applySettings();
+  });
+  // Play a sample on release so the new level can be heard
+  document.getElementById('setting-volume')?.addEventListener('change', () => sound.uiClick());
+  document.getElementById('setting-mute')?.addEventListener('change', (e) => {
+    settings.muted = e.target.checked;
+    applySettings();
+  });
+
+  // Soft click for every lobby button; capture phase so handlers that stop propagation still get one
+  document.getElementById('overlay')?.addEventListener('click', (e) => {
+    if (e.target.closest('button, .lo-play-card')) sound.uiClick();
+  }, true);
   document.getElementById('settings-reset-btn')?.addEventListener('click', () => {
     settings = { ...DEFAULT_SETTINGS };
     applySettings();
@@ -1239,6 +1270,7 @@ function handleBotHit(botId, targetId, damage, spell, dir) {
   network.sendHit(targetId, damage, spell, spell === 'air' ? dir : null, botId);
   if (targetId === localActorId) {
     const dead = localPlayer.takeDamage(damage);
+    sound.hurt(damage);
     ui.addDamageNumber(damage, 'taken');
     queueLifetimeStats({ damage_taken: damage });
     localPlayer.applySpellEffect(spell);
@@ -1577,6 +1609,7 @@ function init() {
       const damage = clamp(Number(data.damage) || 0, 0, MAX_HIT_DAMAGE);
       if (data.targetId === localActorId) {
         const dead = localPlayer.takeDamage(damage);
+        sound.hurt(damage);
         ui.addDamageNumber(damage, 'taken');
         queueLifetimeStats({ damage_taken: damage });
         localPlayer.applySpellEffect(data.sp || 'fire');
@@ -1758,6 +1791,7 @@ function updateLocalPlayer(delta) {
 }
 
 function updateWorld(delta) {
+  sound.updateHeartbeat(localPlayer.health, controls.isLocked);
   bots.forEach((bot, id) => {
     if (!bot.ai) return;
     const botShot = bot.ai.update(delta, getNearestHuman(bot.player.position));
@@ -1780,7 +1814,11 @@ function updateWorld(delta) {
       ui.addDamageNumber(damage, 'dealt');
       queueLifetimeStats({ damage_dealt: damage });
       progressDailyQuests('damage_dealt', damage);
-      if (!dead) return;
+      if (!dead) {
+        sound.hitConfirm();
+        return;
+      }
+      sound.kill();
 
       // Only the simulating client moves a respawned body; mirrored copies just reset health
       if (target.isLocal) target.respawn(pickSpawnPoint(target));
