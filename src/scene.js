@@ -272,6 +272,14 @@ export function createScene(canvas) {
     }
   }
 
+  // Low walls around the raised platforms. Walls are ignored within 0.3 of their top, so they
+  // need to stand comfortably above a standing player's feet (platform height + 0.75) to block.
+  const parapetBoxes = [];
+  function addParapet(x, y, z, w, h, d) {
+    addBox(x, y, z, w, h, d);
+    parapetBoxes.push({ xMin: x - w / 2, xMax: x + w / 2, zMin: z - d / 2, zMax: z + d / 2, maxY: y + h / 2 });
+  }
+
   // ── Outer cardinal platforms (L1, height 3.5) ────────────────────────────
   const L1_H    = 3.5;
   const L1_RUN  = 7.0;
@@ -293,15 +301,16 @@ export function createScene(canvas) {
     addStaircase(axis, isZ ? cx : cz, isZ ? pw : pd, edgeG, edgeP, L1_H);
 
     // Parapets (3-sided cover)
-    const parY = L1_H + 0.6;
+    const parH = 1.4;
+    const parY = L1_H + parH / 2;
     if (isZ) {
-      addBox(cx,      parY, cz + sign * hd, pw,   1.2, 0.45);
-      addBox(cx - hw, parY, cz,             0.45, 1.2, pd);
-      addBox(cx + hw, parY, cz,             0.45, 1.2, pd);
+      addParapet(cx,      parY, cz + sign * hd, pw,   parH, 0.45);
+      addParapet(cx - hw, parY, cz,             0.45, parH, pd);
+      addParapet(cx + hw, parY, cz,             0.45, parH, pd);
     } else {
-      addBox(cx + sign * hw, parY, cz, 0.45, 1.2, pd);
-      addBox(cx, parY, cz - hd,        pw,   1.2, 0.45);
-      addBox(cx, parY, cz + hd,        pw,   1.2, 0.45);
+      addParapet(cx + sign * hw, parY, cz, 0.45, parH, pd);
+      addParapet(cx, parY, cz - hd,        pw,   parH, 0.45);
+      addParapet(cx, parY, cz + hd,        pw,   parH, 0.45);
     }
 
     elevPlatforms.push({ xMin: cx - hw, xMax: cx + hw, zMin: cz - hd, zMax: cz + hd, y: GRND_Y_ + L1_H });
@@ -326,10 +335,11 @@ export function createScene(canvas) {
     const edgeG = edgeP - signX * L2_RUN;
     addStaircase('x', cz, 9, edgeG, edgeP, L2_H);
 
-    const parY = L2_H + 0.55;
-    addBox(cx + signX * 4.5, parY, cz, 0.4, 1.1, 9);
-    addBox(cx, parY, cz - 4.5, 9, 1.1, 0.4);
-    addBox(cx, parY, cz + 4.5, 9, 1.1, 0.4);
+    const parH = 1.3;
+    const parY = L2_H + parH / 2;
+    addParapet(cx + signX * 4.5, parY, cz, 0.4, parH, 9);
+    addParapet(cx, parY, cz - 4.5, 9, parH, 0.4);
+    addParapet(cx, parY, cz + 4.5, 9, parH, 0.4);
 
     elevPlatforms.push({ xMin: cx - 4.5, xMax: cx + 4.5, zMin: cz - 4.5, zMax: cz + 4.5, y: GRND_Y_ + L2_H });
     elevBoxes.push({     xMin: cx - 4.5, xMax: cx + 4.5, zMin: cz - 4.5, zMax: cz + 4.5, maxY: GRND_Y_ + L2_H });
@@ -620,7 +630,7 @@ export function createScene(canvas) {
     trees: [...ringTowers, ...coverPillars, ...decorTrees],
     platforms: elevPlatforms,
     ramps:     elevRamps,
-    boxes:     [...elevBoxes, ...ringWallBoxes, ...coverBoxes],
+    boxes:     [...elevBoxes, ...ringWallBoxes, ...coverBoxes, ...parapetBoxes],
     spawnPoints,
   };
 
