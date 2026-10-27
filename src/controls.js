@@ -127,7 +127,10 @@ export class Controls {
       return;
     }
     // iPhone Safari has no element fullscreen; the game still works, just with the browser bars showing
-    document.documentElement.requestFullscreen?.({ navigationUI: 'hide' }).catch(() => {});
+    // Android can also lock to landscape once fullscreen; elsewhere the rotate prompt asks instead
+    document.documentElement.requestFullscreen?.({ navigationUI: 'hide' })
+      .then(() => screen.orientation?.lock?.('landscape'))
+      .catch(() => {});
     this._setLocked(true);
   }
 

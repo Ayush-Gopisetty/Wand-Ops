@@ -2322,3 +2322,72 @@ body.touch-controls #scoreboard-keys { display: none; }
   background: rgba(216,185,255,0.55);
   border: 2px solid rgba(255,255,255,0.6);
 }
+
+/* ── Touch mode HUD: compact layout for a landscape phone ── */
+body.touch-controls { touch-action: manipulation; }
+body.touch-controls #minimap-wrap {
+  top: max(10px, env(safe-area-inset-top));
+  left: max(10px, env(safe-area-inset-left));
+  width: 112px;
+  padding: 6px;
+  border-radius: 14px;
+}
+body.touch-controls #minimap-title { display: none; }
+body.touch-controls #minimap { border-radius: 10px; }
+body.touch-controls #fps-counter { top: 132px; left: max(10px, env(safe-area-inset-left)); font-size: 11px; padding: 2px 8px; }
+body.touch-controls #kill-feed { top: 160px; left: max(10px, env(safe-area-inset-left)); max-width: 40vw; }
+body.touch-controls .kill-entry { font-size: 11px; }
+body.touch-controls #player-count { top: 10px; right: max(10px, env(safe-area-inset-right)); font-size: 12px; padding: 4px 10px; }
+body.touch-controls #kda-tracker { top: 44px; right: max(10px, env(safe-area-inset-right)); font-size: 12px; padding: 5px 10px; }
+body.touch-controls .tc-scores { top: 82px; }
+/* Thumbs live at the bottom corners, so chat moves up under the pause button and stays short */
+body.touch-controls #hud-chat {
+  left: 50%;
+  bottom: auto;
+  top: 66px;
+  transform: translateX(-50%);
+  width: min(320px, 46vw);
+}
+body.touch-controls #hud-chat-log > :nth-last-child(n+4) { display: none; }
+body.touch-controls #health-wrap { bottom: 14px; }
+body.touch-controls #health-track { width: 180px; }
+body.touch-controls #spell-indicator { bottom: 52px; font-size: 12px; }
+body.touch-controls #scoreboard-inner { min-width: 0; width: min(420px, 90vw); max-height: 86vh; overflow-y: auto; padding: 16px 20px; }
+body.touch-controls .death-card { padding: 16px 26px 14px; }
+body.touch-controls #death-screen { padding-bottom: 8vh; }
+
+/* Rotate prompt: only in touch mode, mid-match, with the phone upright */
+#rotate-prompt { display: none; }
+@media (orientation: portrait) {
+  body.touch-controls:not(.lobby-open) #rotate-prompt {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 24px;
+    text-align: center;
+    background: radial-gradient(ellipse at 50% 40%, #2a1d5c 0%, var(--surface) 75%);
+    color: var(--on-surface);
+    font-family: var(--font-display);
+  }
+}
+.rotate-phone {
+  width: 54px;
+  height: 92px;
+  margin-bottom: 18px;
+  border: 4px solid var(--primary);
+  border-radius: 12px;
+  box-shadow: inset 0 -8px 0 -4px rgba(216,185,255,0.35);
+  animation: rotatePhone 2.4s ease-in-out infinite;
+}
+@keyframes rotatePhone {
+  0%, 25%   { transform: rotate(0deg); }
+  55%, 85%  { transform: rotate(-90deg); }
+  100%      { transform: rotate(0deg); }
+}
+.rotate-title { font-size: 22px; font-weight: 800; color: #fff; }
+.rotate-sub { font-size: 14px; color: var(--on-surface-dim); }

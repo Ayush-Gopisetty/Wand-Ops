@@ -1411,6 +1411,8 @@ function init() {
   scopeOverlayEl = document.getElementById('scope-overlay');
   const skinButtons = [...document.querySelectorAll('.lo-skin-btn')];
   ({ scene, camera, renderer, colliders } = createScene(canvas));
+  // Phone GPUs drive very dense screens; 1.5x keeps it sharp without halving the frame rate
+  if (TOUCH_MODE) renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
   scene.add(camera);
   // Three.js layers filter lights too, so the wand pass needs the scene's lights
   scene.traverse((obj) => { if (obj.isLight) obj.layers.enable(FIRST_PERSON_LAYER); });
