@@ -180,6 +180,12 @@ const _moveDir = new THREE.Vector3();
 const _yAxis = new THREE.Vector3(0, 1, 0);
 const _forward = new THREE.Vector3();
 const _lookAt = new THREE.Vector3();
+const _killCamTarget = new THREE.Vector3();
+// Head height on another wizard's model, measured from their position
+const KILL_CAM_HEAD_Y = 0.9;
+const KILL_CAM_FOV = 55;
+// Set while the death screen holds the camera where you fell, turned toward whoever got you
+let killCam = null; // { pos, look, targetId }
 const _knockbackVel = new THREE.Vector3();
 const _stepDelta = new THREE.Vector3();
 const _wandBasePos = new THREE.Vector3(0.3, -0.34, -0.64);
@@ -1322,6 +1328,13 @@ function handleLocalDeath(killerId = null, spell = null, verb = 'by') {
   lastHitOnMe = null;
   sound.death();
 
+  // Freeze the view where you fell, still facing the way you were looking; updateCamera turns it to the killer
+  killCam = killer ? {
+    pos: camera.position.clone(),
+    look: camera.position.clone().add(camera.getWorldDirection(new THREE.Vector3())),
+    targetId: killerId,
+  } : null;
+
   localPlayer.respawn(pickSpawnPoint(localPlayer));
   localPlayer.respawnTimer = RESPAWN_DELAY;
   _knockbackVel.set(0, 0, 0);
@@ -1803,7 +1816,7 @@ function loop() {
     _fpsAccum = 0;
   }
   update(delta);
-  updateCamera();
+  updateCamera(delta);
   if (ui && colliders) ui.renderMinimap(getMinimapPlayers(), colliders.arenaSize, localPlayer?.rotation || 0);
   renderer.render(scene, camera);
   renderFirstPersonPass();
@@ -1833,13 +1846,16 @@ function update(delta) {
 
 function updateLocalPlayer(delta) {
   const { dx, dy } = controls.consumeMouseDelta();
-  const sens = MOUSE_SENS * settings.sensitivity;
-  cameraYaw -= dx * sens;
-  cameraPitch = clamp(cameraPitch - dy * sens, PITCH_MIN, PITCH_MAX);
+  // The kill cam owns the view; mouse movement then is dropped so you respawn facing where you were
+  if (!killCam) {
+    const sens = MOUSE_SENS * settings.sensitivity;
+    cameraYaw -= dx * sens;
+    cameraPitch = clamp(cameraPitch - dy * sens, PITCH_MIN, PITCH_MAX);
+  }
 
   localPlayer.rotation = cameraYaw;
 
-  // On the death screen you can look around but not move or cast
+  // On the death screen you can't move or cast (and can only look around if there's no kill cam)
   if (localPlayer.isRespawning) {
     controls.consumeClick();
     controls.consumeJump();
@@ -2035,7 +2051,42 @@ function smoothedEyeY() {
   return _eyeY;
 }
 
-function updateCamera() {
+function updateKillCam(delta) {
+  const killer = getCombatTarget(killCam.targetId);
+  if (killer) {
+    _killCamTarget.copy(killer.position);
+    _killCamTarget.y += KILL_CAM_HEAD_Y;
+    killCam.look.lerp(_killCamTarget, 1 - Math.exp(-delta * 5));
+  }
+  camera.position.copy(killCam.pos);
+  camera.lookAt(killCam.look);
+  camera.fov = THREE.MathUtils.lerp(camera.fov, KILL_CAM_FOV, 1 - Math.exp(-delta * 3));
+  camera.updateProjectionMatrix();
+  camera.updateMatrixWorld();
+  if (killer) {
+    // Marker above the killer's name tag, drawn on top so it shows even when they're behind a wall
+    _killCamTarget.y += 1.45;
+    _killCamTarget.project(camera);
+    ui.setKillCamMarker(_killCamTarget.z < 1 ? _killCamTarget : null);
+  } else {
+    ui.setKillCamMarker(null);
+  }
+  if (firstPersonWand) firstPersonWand.visible = false;
+  if (scopeOverlayEl) scopeOverlayEl.style.opacity = '0';
+  if (crosshairEl) crosshairEl.style.opacity = '0';
+}
+
+function updateCamera(delta = 0) {
+  if (killCam && !localPlayer.isRespawning) {
+    killCam = null;
+    ui.setKillCamMarker(null);
+  }
+  if (killCam) {
+    updateKillCam(delta);
+    return;
+  }
+  if (firstPersonWand) firstPersonWand.visible = true;
+
   camera.position.set(
     localPlayer.position.x,
     smoothedEyeY(),

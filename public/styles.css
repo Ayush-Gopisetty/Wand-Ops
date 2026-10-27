@@ -361,14 +361,49 @@ body {
   100% { opacity: 0; transform: translateX(-50%) translateY(-14px) scale(1); }
 }
 
+/* ── Kill cam marker over your killer ── */
+#killcam-marker {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  pointer-events: none;
+  z-index: 31;
+  animation: killcamBob 1s ease-in-out infinite alternate;
+}
+#killcam-marker[hidden] { display: none; }
+.killcam-name {
+  font-family: var(--font-label);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #fff;
+  background: rgba(200,30,40,0.88);
+  padding: 2px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+}
+.killcam-arrow {
+  color: #ff3b47;
+  font-size: 14px;
+  line-height: 1;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.6);
+}
+@keyframes killcamBob { from { margin-top: 0; } to { margin-top: -5px; } }
+
 /* ── Death screen ── */
 #death-screen {
   position: absolute;
   inset: 0;
   display: flex;
-  align-items: center;
+  /* Card sits low so the kill cam's view of your killer stays clear in the middle */
+  align-items: flex-end;
   justify-content: center;
-  background: radial-gradient(ellipse at center, rgba(40,4,10,0.45) 0%, rgba(30,2,8,0.82) 75%);
+  padding-bottom: 14vh;
+  background: radial-gradient(ellipse at 50% 42%, rgba(40,4,10,0.08) 0%, rgba(40,4,10,0.3) 45%, rgba(30,2,8,0.8) 85%);
   animation: deathIn 0.35s ease-out;
   pointer-events: none;
   z-index: 30;
