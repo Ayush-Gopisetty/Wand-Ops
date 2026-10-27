@@ -50,14 +50,14 @@ export function normalizePlayerProfile(row) {
   };
 }
 
-export async function fetchLifetimeStats(db, userId) {
+/** Stats and profile live in the same document, so one read loads both. */
+export async function fetchPlayerData(db, userId) {
   const snapshot = await getDoc(doc(db, 'player_lifetime_stats', userId));
-  return snapshot.exists() ? normalizeLifetimeStats(snapshot.data()) : { ...EMPTY_LIFETIME_STATS };
-}
-
-export async function fetchPlayerProfile(db, userId) {
-  const snapshot = await getDoc(doc(db, 'player_lifetime_stats', userId));
-  return snapshot.exists() ? normalizePlayerProfile(snapshot.data()) : { ...EMPTY_PLAYER_PROFILE };
+  const row = snapshot.exists() ? snapshot.data() : null;
+  return {
+    stats: row ? normalizeLifetimeStats(row) : { ...EMPTY_LIFETIME_STATS },
+    profile: row ? normalizePlayerProfile(row) : { ...EMPTY_PLAYER_PROFILE },
+  };
 }
 
 export async function incrementLifetimeStats(db, userId, delta) {
@@ -73,9 +73,6 @@ export async function incrementLifetimeStats(db, userId, delta) {
     coins: increment(delta.coins || 0),
     updated_at: serverTimestamp(),
   }, { merge: true });
-
-  const snapshot = await getDoc(ref);
-  return snapshot.exists() ? normalizeLifetimeStats(snapshot.data()) : { ...EMPTY_LIFETIME_STATS };
 }
 
 export async function savePlayerProfile(db, userId, profile) {

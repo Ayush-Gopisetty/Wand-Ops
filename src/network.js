@@ -164,8 +164,8 @@ export class NetworkManager {
         case EV_POSITION: this.callbacks.onPosition(actorNr, content); break;
         case EV_FIREBALL: this.callbacks.onFireball(actorNr, content); break;
         case EV_HIT:      this.callbacks.onHit(actorNr, content);      break;
-        case EV_KILL:         this.callbacks.onKill(content);        break;
-        case EV_SCORE_UPDATE: this.callbacks.onScoreUpdate(content);  break;
+        case EV_KILL:         this.callbacks.onKill(actorNr, content); break;
+        case EV_SCORE_UPDATE: this.callbacks.onScoreUpdate(actorNr, content); break;
         case EV_RESPAWN:      this.callbacks.onRespawn(actorNr);     break;
         case EV_PLAYER_NAME:  this.callbacks.onPlayerName(actorNr, content); break;
         case EV_PLAYER_SKIN:  this.callbacks.onPlayerSkin(actorNr, content); break;

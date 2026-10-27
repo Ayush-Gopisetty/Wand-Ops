@@ -118,7 +118,11 @@ export class SimpleBotController {
     const maxStep = BOT_CLIMB_SPEED * delta;
     this.player.position.y += clamp(targetY - this.player.position.y, -maxStep, maxStep);
 
-    if (this.player.slowTimer > 0 || this.player.silenceTimer > 0) return null;
+    if (this.player.slowTimer > 0 || this.player.silenceTimer > 0) {
+      // No sight check runs while it can't shoot, so don't keep acting on the last one
+      this._blocked = false;
+      return null;
+    }
     if (dist > 18) this._blocked = false;
     if (this._cooldown > 0 || dist > 18) return null;
 
