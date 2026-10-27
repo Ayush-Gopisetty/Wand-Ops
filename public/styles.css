@@ -517,11 +517,6 @@ body {
   filter: drop-shadow(0 0 24px rgba(168,85,247,0.55));
 }
 
-#overlay-status {
-  font-size: 1.15rem;
-  opacity: 0.9;
-}
-
 #player-name-wrap {
   display: flex;
   flex-direction: column;
@@ -1309,16 +1304,6 @@ body.lobby-open #ui { visibility: hidden; }
   pointer-events: none;
 }
 
-.lo-play-status {
-  font-family: var(--font-label);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  color: rgba(255,255,255,0.65);
-  text-transform: uppercase;
-  min-height: 1em;
-}
-
 .lo-play-label {
   font-size: 56px;
   font-weight: 800;
@@ -1336,12 +1321,6 @@ body.lobby-open #ui { visibility: hidden; }
   letter-spacing: 0.1em;
   color: rgba(255,255,255,0.75);
   text-transform: uppercase;
-}
-
-/* The legacy #overlay-status rule (large text) would otherwise win on specificity */
-#overlay-status.lo-play-status {
-  font-size: 11px;
-  opacity: 1;
 }
 
 .lo-play-meta {

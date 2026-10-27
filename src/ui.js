@@ -17,7 +17,6 @@ export class UIManager {
     this._playerCnt = document.getElementById('player-count');
     this._kdaTracker = document.getElementById('kda-tracker');
     this._overlay = document.getElementById('overlay');
-    this._status = document.getElementById('overlay-status');
     this._killFeed = document.getElementById('kill-feed');
     this._damageNumbers = document.getElementById('damage-numbers');
     this._spellIndicator = document.getElementById('spell-indicator');
@@ -48,10 +47,6 @@ export class UIManager {
 
   setKDA(kills = 0, deaths = 0, assists = 0) {
     this._kdaTracker.textContent = `K/D/A: ${kills} / ${deaths} / ${assists}`;
-  }
-
-  setOverlayStatus(text) {
-    this._status.textContent = text;
   }
 
   showOverlay(visible) {
