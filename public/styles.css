@@ -2247,10 +2247,11 @@ body.touch-controls #scoreboard-keys { display: none; }
 }
 .tc-cast.is-held { background: rgba(174,0,131,0.7); transform: scale(0.95); }
 .tc-jump { right: calc(max(28px, env(safe-area-inset-right)) + 104px); bottom: 26px; }
-.tc-aim { right: calc(max(28px, env(safe-area-inset-right)) + 14px); bottom: 138px; font-size: 22px; }
+.tc-aim { right: calc(max(28px, env(safe-area-inset-right)) + 14px); bottom: 138px; }
+.lo-keys-icon { width: 1.25em; height: 1.25em; vertical-align: -0.25em; }
 .tc-aim.is-on { background: rgba(194,208,0,0.4); border-color: rgba(194,208,0,0.9); }
 .tc-scores { right: max(16px, env(safe-area-inset-right)); top: 96px; width: 46px; height: 46px; font-size: 20px; }
-.tc-pause { left: 50%; top: 12px; transform: translateX(-50%); width: 46px; height: 46px; font-size: 15px; letter-spacing: -2px; }
+.tc-pause { left: 50%; top: 12px; transform: translateX(-50%); width: 46px; height: 46px; }
 
 .tc-stick {
   position: absolute;

@@ -10,11 +10,17 @@ const STICK_DEAD_ZONE = 0.15;
 const STICK_ZONE = 0.42;     // share of the screen width (from the left) that starts the joystick
 const LOOK_SCALE = 3;        // touch drags turn ~3x more per pixel than the mouse does
 
+// Button icons are drawn as SVG: font glyphs like ⤒ and ❚❚ render as plain boxes on some phones
+const icon = (size, body) => `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+const SCOPE_ICON = icon(26, '<circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/>');
+const HOME_ICON = icon(22, '<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5h4.5v-5.5h4v5.5h4.5V10"/>');
+const JUMP_ICON = icon(28, '<path d="M6 14l6-6 6 6"/><path d="M6 19l6-6 6 6" opacity=".55"/>');
+
 const BUTTONS = [
-  { key: 'pause', label: '❚❚', title: 'Pause' },
+  { key: 'pause', label: HOME_ICON, title: 'Back to the menu' },
   { key: 'scores', label: '🏆', title: 'Scores' },
-  { key: 'aim', label: '🎯', title: 'Aim' },
-  { key: 'jump', label: '⤒', title: 'Jump' },
+  { key: 'aim', label: SCOPE_ICON, title: 'Aim' },
+  { key: 'jump', label: JUMP_ICON, title: 'Jump' },
   { key: 'cast', label: '🪄', title: 'Cast' },
 ];
 
