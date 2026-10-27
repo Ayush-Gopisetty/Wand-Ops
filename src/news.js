@@ -3,6 +3,11 @@
 export const WIZARD_NEWS = [
   {
     tag: 'new',
+    title: 'Ultimates are here',
+    body: 'Deal damage to fill your ultimate meter, then press Q (or tap ✦ on your phone). Every spell has its own: Meteor, Frost Nova, Chain Lightning, Cyclone and Stone Wall.',
+  },
+  {
+    tag: 'new',
     title: 'Play on your phone',
     body: 'Wand Ops now works on phones and tablets: a joystick under your left thumb, drag to look, and hold the 🔥 button to keep casting. Turn your phone sideways to play.',
   },
