@@ -153,6 +153,22 @@ export class SoundManager {
     this._noiseBurst('highpass', 7000, notes.length * 0.065 - 0.065, 0.3, 0.05);
   }
 
+  /** Shimmering chime when the ultimate meter fills. */
+  ultReady() {
+    if (!this._ready) return;
+    [784, 988, 1175, 1568].forEach((freq, i) => this._tone('sine', freq, i * 0.05, 0.5, 0.09));
+    this._noiseBurst('highpass', 8000, 0.15, 0.4, 0.04);
+  }
+
+  /** Deep boom with a bright crack on top, for casting an ultimate (or a meteor landing). */
+  ultBlast() {
+    if (!this._ready) return;
+    this._tone('sine', 110, 0, 0.7, 0.5, 38);
+    this._tone('sawtooth', 220, 0, 0.25, 0.08, 70);
+    this._noiseBurst('lowpass', 1200, 0, 0.5, 0.4);
+    this._noiseBurst('highpass', 5000, 0, 0.12, 0.12);
+  }
+
   /** Low descending tone when you go down. */
   death() {
     if (!this._ready) return;

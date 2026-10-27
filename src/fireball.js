@@ -266,6 +266,11 @@ export class FireballManager {
     }
   }
 
+  /** The impact burst on its own, for effects that aren't projectiles (ultimates). */
+  burst(position, spell) {
+    this._impact(position, spell);
+  }
+
   _impact(position, spell) {
     const vfx = SPELL_VFX[spell];
     for (let i = 0; i < IMPACT_SPARKS; i++) {

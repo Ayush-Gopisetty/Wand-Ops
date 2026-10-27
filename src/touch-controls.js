@@ -14,6 +14,7 @@ const LOOK_SCALE = 3;        // touch drags turn ~3x more per pixel than the mou
 const icon = (size, body) => `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
 const SCOPE_ICON = icon(26, '<circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/>');
 const HOME_ICON = icon(22, '<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5h4.5v-5.5h4v5.5h4.5V10"/>');
+const ULT_ICON = icon(28, '<path d="M12 2.5l2.3 7.2 7.2 2.3-7.2 2.3L12 21.5l-2.3-7.2-7.2-2.3 7.2-2.3z" fill="currentColor" stroke="none"/>');
 const JUMP_ICON = icon(28, '<path d="M6 14l6-6 6 6"/><path d="M6 19l6-6 6 6" opacity=".55"/>');
 
 const BUTTONS = [
@@ -21,6 +22,7 @@ const BUTTONS = [
   { key: 'scores', label: '🏆', title: 'Scores' },
   { key: 'aim', label: SCOPE_ICON, title: 'Aim' },
   { key: 'jump', label: JUMP_ICON, title: 'Jump' },
+  { key: 'ult', label: ULT_ICON, title: 'Ultimate' },
   { key: 'cast', label: '🪄', title: 'Cast' },
 ];
 
@@ -36,6 +38,7 @@ export function attachTouchControls(controls, { onScores, onPause }) {
   const knobEl = root.querySelector('.tc-stick-knob');
   const aimBtn = root.querySelector('.tc-aim');
   const castBtn = root.querySelector('.tc-cast');
+  const ultBtn = root.querySelector('.tc-ult');
 
   let stickId = null;
   let stickOrigin = { x: 0, y: 0 };
@@ -76,6 +79,8 @@ export function attachTouchControls(controls, { onScores, onPause }) {
       lookTouches.set(e.pointerId, point);
     } else if (btn === 'jump') {
       controls.pressJump();
+    } else if (btn === 'ult') {
+      controls.pressUlt();
     } else if (btn === 'aim') {
       controls.isAiming = !controls.isAiming;
       aimBtn.classList.toggle('is-on', controls.isAiming);
@@ -142,6 +147,11 @@ export function attachTouchControls(controls, { onScores, onPause }) {
   return {
     setSpellIcon(icon) {
       castBtn.textContent = icon;
+    },
+    /** Fill the ultimate button's ring to `charge` (0..1); it lights up when full. */
+    setUlt(charge) {
+      ultBtn.style.setProperty('--charge', String(charge));
+      ultBtn.classList.toggle('is-ready', charge >= 1);
     },
   };
 }
