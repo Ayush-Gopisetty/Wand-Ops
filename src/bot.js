@@ -9,6 +9,10 @@ const BOT_FIRE_COOLDOWN_MAX = 1.45;
 const BOT_DESIRED_MIN_DIST = 8;
 const BOT_DESIRED_MAX_DIST = 15;
 const BOT_CLIMB_SPEED = 6;
+// A target crouched behind low cover still shows its head; fireballs hit within 1.1 of the body centre
+const BOT_HEAD_AIM = 0.7;
+// Shot still blocked this long at close range: stop strafing in place and step around the cover
+const BOT_BLOCKED_REPOSITION = 0.75;
 
 const _toTarget = new THREE.Vector3();
 const _forward = new THREE.Vector3();
@@ -16,6 +20,7 @@ const _strafe = new THREE.Vector3();
 const _move = new THREE.Vector3();
 const _probe = new THREE.Vector3();
 const _stepDelta = new THREE.Vector3();
+const _aim = new THREE.Vector3();
 
 // Samples the shot path against the same solids fireballs collide with
 function hasLineOfSight(from, to, colliders) {
@@ -39,6 +44,7 @@ export class SimpleBotController {
     this._detourTimer = 0;
     this._detourDir = 1;
     this._blocked = false;
+    this._blockedFor = 0;
     // Height the bot is really standing at; its visible y eases up toward this, so stairs are judged against it
     this._supportY = player.position.y;
   }
@@ -68,6 +74,18 @@ export class SimpleBotController {
       _move.addScaledVector(_forward, 1.05);
     } else if (dist < BOT_DESIRED_MIN_DIST) {
       _move.addScaledVector(_forward, -0.9);
+    }
+
+    // Strafing alone rarely clears low cover at close range, so after a moment sidestep around it
+    if (this._blocked && dist <= BOT_DESIRED_MIN_DIST + 1) {
+      this._blockedFor += delta;
+      if (this._blockedFor > BOT_BLOCKED_REPOSITION && this._detourTimer <= 0) {
+        this._detourTimer = 0.9;
+        this._detourDir = Math.random() > 0.5 ? 1 : -1;
+        this._blockedFor = 0;
+      }
+    } else {
+      this._blockedFor = 0;
     }
 
     // Frozen by a Frost Nova: no walking (the bot still turns to face you and settles on the floor)
@@ -107,17 +125,23 @@ export class SimpleBotController {
     const spawnPos = this.player.position.clone()
       .add(new THREE.Vector3(0, BOT_EYE_HEIGHT, 0))
       .addScaledVector(_forward, 0.65);
-    this._blocked = !hasLineOfSight(spawnPos, target.position, this.colliders);
+    // Aim at the body; if low cover hides it, try the head poking over the top
+    _aim.copy(target.position);
+    this._blocked = !hasLineOfSight(spawnPos, _aim, this.colliders);
+    if (this._blocked) {
+      _aim.y += BOT_HEAD_AIM;
+      this._blocked = !hasLineOfSight(spawnPos, _aim, this.colliders);
+    }
     if (this._blocked) {
       this._cooldown = 0.25;
       return null;
     }
     this._cooldown = BOT_FIRE_COOLDOWN_MIN + Math.random() * (BOT_FIRE_COOLDOWN_MAX - BOT_FIRE_COOLDOWN_MIN);
 
-    // Aim from the eye at the target's body centre; a level shot from eye height passes overhead
+    // Aim from the eye at the clear point (body centre, or head over cover); a level shot from eye height passes overhead
     return {
       position: spawnPos,
-      direction: target.position.clone().sub(spawnPos).normalize(),
+      direction: _aim.clone().sub(spawnPos).normalize(),
       spell: 'fire',
     };
   }
