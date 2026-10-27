@@ -419,6 +419,8 @@ export class Player {
     this.slowTimer = 0;
     this.silenceTimer = 0;
     this.groundedTimer = 0;
+    // Seconds until a defeated player is back in play; while it runs they are hidden and can't be hit
+    this.respawnTimer = 0;
 
     this._buildMesh(color);
     scene.add(this.group);
@@ -434,7 +436,13 @@ export class Player {
     this.group.position.copy(this.position);
   }
 
+  get isRespawning() {
+    return this.respawnTimer > 0;
+  }
+
   update(delta) {
+    if (this.respawnTimer > 0) this.respawnTimer = Math.max(0, this.respawnTimer - delta);
+    if (!this.isLocal) this.group.visible = this.respawnTimer <= 0;
     if (this.isLocal) {
       if (this.burnTimer > 0) this.burnTimer -= delta;
       if (this.slowTimer > 0) this.slowTimer -= delta;

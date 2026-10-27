@@ -67,6 +67,12 @@ const NAME_SEND_DELAY_MS = 400;
 const EYE_HEIGHT = 1.5;
 const JUMP_VELOCITY = 8;
 const GRAVITY = 22;
+// Seconds a defeated human spends on the death screen before re-entering play
+const RESPAWN_DELAY = 3;
+// Kills this close together chain into a multi-kill
+const MULTI_KILL_WINDOW_MS = 4000;
+const MULTI_KILL_TITLES = ['', '', 'Double Kill', 'Triple Kill', 'Quad Kill'];
+const STREAK_TITLES = { 3: 'Wizard Spree', 5: 'Arcane Rampage', 7: 'Unstoppable Sorcery', 10: 'Archmage' };
 const BOT_IDS = [9001, 9002];
 const BOT_SPAWNS = [[0, 20], [0, -20]];
 const WEAPON_STATS = {
@@ -143,6 +149,10 @@ let firebaseServices = null;
 let controls, fireballs, network, ui, colliders;
 let settings = { ...DEFAULT_SETTINGS };
 const scores = new Map();
+const killStreaks = new Map(); // actorNr -> kills since their last death
+let localMultiKills = 0;
+let localLastKillAt = 0;
+let lastHitOnMe = null; // { id, spell, at } so a burn-out can still name who lit you up
 const playerNames = new Map();
 const playerSkins = new Map();
 
@@ -1195,9 +1205,10 @@ function sendBotState() {
 
 // Bots leave the local player alone while they're in the menu
 function getNearestHuman(position) {
-  let nearest = controls.isLocked ? localPlayer : null;
+  let nearest = controls.isLocked && !localPlayer.isRespawning ? localPlayer : null;
   let best = nearest ? localPlayer.position.distanceToSquared(position) : Infinity;
   for (const player of remotePlayers.values()) {
+    if (player.isRespawning) continue;
     const d = player.position.distanceToSquared(position);
     if (d < best) { best = d; nearest = player; }
   }
@@ -1222,9 +1233,11 @@ function getCombatTarget(id) {
   return remotePlayers.get(id) || bots.get(id)?.player || null;
 }
 
+// Players waiting out a respawn are left out, so spells pass straight through them
 function getCombatTargets() {
-  const targets = new Map(remotePlayers);
-  targets.set(localActorId, localPlayer);
+  const targets = new Map();
+  remotePlayers.forEach((player, id) => { if (!player.isRespawning) targets.set(id, player); });
+  if (!localPlayer.isRespawning) targets.set(localActorId, localPlayer);
   bots.forEach((bot, id) => targets.set(id, bot.player));
   return targets;
 }
@@ -1246,6 +1259,7 @@ function getMinimapPlayers() {
   }
 
   remotePlayers.forEach((player) => {
+    if (player.isRespawning) return;
     const skin = getSkinConfig(player.skinId);
     players.push({
       x: player.position.x,
@@ -1266,9 +1280,60 @@ function getMinimapPlayers() {
   return players;
 }
 
+// Tracks kill streaks and multi-kills for everyone, and announces the ones worth shouting about
+function recordStreak(killerId, victimId) {
+  const ended = killStreaks.get(victimId) || 0;
+  killStreaks.set(victimId, 0);
+  const streak = (killStreaks.get(killerId) || 0) + 1;
+  killStreaks.set(killerId, streak);
+
+  if (ended >= 3 && victimId !== localActorId) {
+    const who = killerId === localActorId ? 'You' : getPlayerLabel(killerId);
+    ui.addKillEntry(`${who} ended ${getPlayerLabel(victimId)}'s ${ended}-kill streak!`, 'streak');
+  }
+
+  if (killerId !== localActorId) {
+    if (STREAK_TITLES[streak]) ui.addKillEntry(`${getPlayerLabel(killerId)} is on a ${STREAK_TITLES[streak]}!`, 'streak');
+    return;
+  }
+
+  const now = performance.now();
+  localMultiKills = now - localLastKillAt <= MULTI_KILL_WINDOW_MS ? localMultiKills + 1 : 1;
+  localLastKillAt = now;
+  const multiTitle = localMultiKills >= 2 ? MULTI_KILL_TITLES[Math.min(localMultiKills, 4)] : '';
+  const streakTitle = STREAK_TITLES[streak] || '';
+  if (!multiTitle && !streakTitle) return;
+  ui.showStreakCallout(multiTitle || streakTitle, multiTitle && streakTitle ? streakTitle : `${streak} kill streak`);
+  sound.streak(Math.max(localMultiKills - 1, streakTitle ? Math.ceil(streak / 3) : 0));
+}
+
+// Every way the local player can go down ends here: the death screen covers the respawn wait
+function handleLocalDeath(killerId = null, spell = null, verb = 'by') {
+  const killer = killerId != null ? getCombatTarget(killerId) : null;
+  ui.showDeathScreen({
+    killer: killerId != null ? getPlayerLabel(killerId) : null,
+    verb,
+    spell,
+    killerHp: killer?.health,
+    streakEnded: killStreaks.get(localActorId) || 0,
+  });
+  killStreaks.set(localActorId, 0);
+  localMultiKills = 0;
+  lastHitOnMe = null;
+  sound.death();
+
+  localPlayer.respawn(pickSpawnPoint(localPlayer));
+  localPlayer.respawnTimer = RESPAWN_DELAY;
+  _knockbackVel.set(0, 0, 0);
+  playerVelocityY = 0;
+  network.sendRespawn();
+  ui.setHealth(localPlayer.health);
+}
+
 function handleDefeat(killerId, victimId, killerLabel, victimLabel) {
   ensureScoreEntry(killerId).kills++;
   ensureScoreEntry(victimId).deaths++;
+  recordStreak(killerId, victimId);
   if (killerId === localActorId) queueLifetimeStats({ kills: 1 });
   if (killerId === localActorId) awardCoins(1);
   if (killerId === localActorId) progressDailyQuests('kills', 1);
@@ -1287,29 +1352,28 @@ function handleBotHit(botId, targetId, damage, spell, dir) {
   if (isBotId(targetId)) return;
   network.sendHit(targetId, damage, spell, spell === 'air' ? dir : null, botId);
   if (targetId === localActorId) {
+    if (localPlayer.isRespawning) return;
     const dead = localPlayer.takeDamage(damage);
     sound.hurt(damage);
     ui.addDamageNumber(damage, 'taken');
     queueLifetimeStats({ damage_taken: damage });
     localPlayer.applySpellEffect(spell);
+    lastHitOnMe = { id: botId, spell, at: performance.now() };
     ui.setHealth(localPlayer.health);
     if (!dead) return;
-    localPlayer.respawn(pickSpawnPoint(localPlayer));
-    network.sendRespawn();
-    ui.setHealth(localPlayer.health);
+    handleLocalDeath(botId, spell);
   } else {
     const target = remotePlayers.get(targetId);
-    if (!target || !target.takeDamage(damage)) return;
+    if (!target || target.isRespawning || !target.takeDamage(damage)) return;
     target.health = 100;
+    target.respawnTimer = RESPAWN_DELAY;
   }
   handleDefeat(botId, targetId, getPlayerLabel(botId), getPlayerLabel(targetId));
   network.sendKill(botId, targetId);
 }
 
-function handleRemoteHitDefeat(actorNr) {
-  localPlayer.respawn(pickSpawnPoint(localPlayer));
-  network.sendRespawn();
-  ui.setHealth(localPlayer.health);
+function handleRemoteHitDefeat(actorNr, spell) {
+  handleLocalDeath(actorNr, spell);
   queueLifetimeStats({ deaths: 1 });
   ui.addKillEntry(`${getPlayerLabel(actorNr)} defeated you!`);
 }
@@ -1532,6 +1596,7 @@ function init() {
     onKill({ killerId, victimId }) {
       ensureScoreEntry(killerId).kills++;
       ensureScoreEntry(victimId).deaths++;
+      recordStreak(killerId, victimId);
       const bot = bots.get(victimId);
       if (bot) {
         if (bot.ai) bot.player.respawn(pickSpawnPoint(bot.player));
@@ -1608,6 +1673,7 @@ function init() {
         p.slowTimer = 0;
         p.silenceTimer = 0;
         p.hitFlashTimer = 0;
+        p.respawnTimer = RESPAWN_DELAY;
       }
     },
 
@@ -1626,21 +1692,24 @@ function init() {
     onHit(actorNr, data) {
       const damage = clamp(Number(data.damage) || 0, 0, MAX_HIT_DAMAGE);
       if (data.targetId === localActorId) {
+        // A hit already in flight when we went down shouldn't kill us twice
+        if (localPlayer.isRespawning) return;
         const dead = localPlayer.takeDamage(damage);
         sound.hurt(damage);
         ui.addDamageNumber(damage, 'taken');
         queueLifetimeStats({ damage_taken: damage });
         localPlayer.applySpellEffect(data.sp || 'fire');
+        lastHitOnMe = { id: isBotId(data.by) ? data.by : actorNr, spell: data.sp || 'fire', at: performance.now() };
 
         if (data.sp === 'air' && Number.isFinite(data.kx) && Number.isFinite(data.kz)) {
           _knockbackVel.set(data.kx, 0, data.kz).normalize().multiplyScalar(30);
         }
 
         ui.setHealth(localPlayer.health);
-        if (dead) handleRemoteHitDefeat(isBotId(data.by) ? data.by : actorNr);
+        if (dead) handleRemoteHitDefeat(isBotId(data.by) ? data.by : actorNr, data.sp || 'fire');
       } else {
         const target = getCombatTarget(data.targetId);
-        if (target) {
+        if (target && !target.isRespawning) {
           target.takeDamage(damage);
           if (actorNr === localActorId) ui.addDamageNumber(damage, 'dealt');
         }
@@ -1770,6 +1839,13 @@ function updateLocalPlayer(delta) {
 
   localPlayer.rotation = cameraYaw;
 
+  // On the death screen you can look around but not move or cast
+  if (localPlayer.isRespawning) {
+    controls.consumeClick();
+    controls.consumeJump();
+    return;
+  }
+
   _moveDir.set(0, 0, 0);
   if (controls.isDown('KeyW') || controls.isDown('ArrowUp')) _moveDir.z -= 1;
   if (controls.isDown('KeyS') || controls.isDown('ArrowDown')) _moveDir.z += 1;
@@ -1808,8 +1884,8 @@ function updateLocalPlayer(delta) {
     ui.setHealth(localPlayer.health);
     if (dead) {
       queueLifetimeStats({ deaths: 1 });
-      localPlayer.respawn(pickSpawnPoint(localPlayer));
-      ui.setHealth(localPlayer.health);
+      const burner = lastHitOnMe?.spell === 'fire' && performance.now() - lastHitOnMe.at < 6000 ? lastHitOnMe.id : null;
+      handleLocalDeath(burner, burner != null ? 'fire' : null, 'Burned by');
     }
   }
 
@@ -1839,6 +1915,7 @@ function updateWorld(delta) {
   });
 
   localPlayer.update(delta);
+  ui.updateDeathScreen(localPlayer.respawnTimer);
   bots.forEach((bot) => bot.player.update(delta));
   remotePlayers.forEach((p) => p.update(delta));
 
@@ -1861,6 +1938,8 @@ function updateWorld(delta) {
       // Only the simulating client moves a respawned body; mirrored copies just reset health
       if (target.isLocal) target.respawn(pickSpawnPoint(target));
       else target.health = 100;
+      // Remote humans sit out the respawn wait; hide them now rather than when their respawn event lands
+      if (remotePlayers.has(targetId)) target.respawnTimer = RESPAWN_DELAY;
       handleDefeat(localActorId, targetId, 'You', getPlayerLabel(targetId));
       network.sendKill(localActorId, targetId);
       const mine = scores.get(localActorId);

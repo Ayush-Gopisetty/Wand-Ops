@@ -141,6 +141,25 @@ export class SoundManager {
     this._tone('triangle', 220, 0, 0.2, 0.12, 110);
   }
 
+  /** Fanfare for multi-kills and streaks: a rising arpeggio that climbs higher with `level` (1–4). */
+  streak(level = 1) {
+    if (!this._ready) return;
+    const notes = [523, 659, 784, 1047, 1319, 1568].slice(0, 2 + Math.min(4, Math.max(1, level)));
+    notes.forEach((freq, i) => {
+      const last = i === notes.length - 1;
+      this._tone('square', freq, i * 0.065, last ? 0.42 : 0.1, 0.07);
+      this._tone('triangle', freq * 2, i * 0.065, last ? 0.36 : 0.08, 0.05);
+    });
+    this._noiseBurst('highpass', 7000, notes.length * 0.065 - 0.065, 0.3, 0.05);
+  }
+
+  /** Low descending tone when you go down. */
+  death() {
+    if (!this._ready) return;
+    this._tone('triangle', 392, 0, 0.3, 0.16, 196);
+    this._tone('sine', 196, 0.18, 0.55, 0.2, 98);
+  }
+
   // ── Taking damage ──────────────────────────────────────────────────────────
   hurt(damage = 15) {
     if (!this._ready) return;
