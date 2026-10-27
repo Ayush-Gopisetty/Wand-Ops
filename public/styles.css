@@ -796,7 +796,7 @@ body {
   overflow: hidden;
   /* The arena flyover shows through the middle; edges stay dark behind the side cards */
   background:
-    radial-gradient(ellipse at 50% 45%, rgba(15,16,47,0.25) 0%, rgba(15,16,47,0.62) 60%, rgba(15,16,47,0.88) 100%);
+    radial-gradient(ellipse at 50% 45%, rgba(15,16,47,0.42) 0%, rgba(15,16,47,0.72) 60%, rgba(15,16,47,0.92) 100%);
   backdrop-filter: blur(1.5px) saturate(0.9);
 }
 /* The in-game HUD would otherwise show through the see-through lobby */
