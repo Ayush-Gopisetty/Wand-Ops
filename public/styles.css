@@ -2251,3 +2251,74 @@ body.touch-only #overlay > .lo-footer { order: 1; }
   letter-spacing: 0.08em;
   color: var(--outline);
 }
+
+/* ── Touch controls (in-game, touch mode only) ── */
+#touch-controls { display: none; }
+body.touch-controls #touch-controls {
+  display: block;
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+/* Keyboard hints mean nothing on a touchscreen */
+body.touch-controls #controls-card,
+body.touch-controls #scoreboard-keys { display: none; }
+
+.tc-btn {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.28);
+  background: rgba(12,8,24,0.42);
+  color: #fff;
+  font-size: 24px;
+  line-height: 1;
+  backdrop-filter: blur(4px);
+  touch-action: none;
+}
+.tc-btn:active, .tc-btn.is-held { background: rgba(174,114,255,0.45); border-color: rgba(216,185,255,0.8); }
+.tc-cast {
+  right: max(28px, env(safe-area-inset-right));
+  bottom: 34px;
+  width: 88px;
+  height: 88px;
+  font-size: 38px;
+  border-color: rgba(255,174,219,0.55);
+  background: rgba(174,0,131,0.38);
+}
+.tc-cast.is-held { background: rgba(174,0,131,0.7); transform: scale(0.95); }
+.tc-jump { right: calc(max(28px, env(safe-area-inset-right)) + 104px); bottom: 26px; }
+.tc-aim { right: calc(max(28px, env(safe-area-inset-right)) + 14px); bottom: 138px; font-size: 22px; }
+.tc-aim.is-on { background: rgba(194,208,0,0.4); border-color: rgba(194,208,0,0.9); }
+.tc-scores { right: max(16px, env(safe-area-inset-right)); top: 96px; width: 46px; height: 46px; font-size: 20px; }
+.tc-pause { left: 50%; top: 12px; transform: translateX(-50%); width: 46px; height: 46px; font-size: 15px; letter-spacing: -2px; }
+
+.tc-stick {
+  position: absolute;
+  width: 116px;
+  height: 116px;
+  margin: -58px 0 0 -58px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.25);
+  background: rgba(12,8,24,0.3);
+  pointer-events: none;
+}
+.tc-stick[hidden] { display: none; }
+.tc-stick-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: rgba(216,185,255,0.55);
+  border: 2px solid rgba(255,255,255,0.6);
+}
