@@ -1554,7 +1554,6 @@ function init() {
       refreshScoreboard();
       network.sendPlayerName(actorNr, localPlayerName);
       network.sendPlayerSkin(actorNr, localSkinId);
-      ui.setOverlayStatus('Ready');
     },
 
     onPlayerJoin(actorNr) {
@@ -1697,7 +1696,8 @@ function init() {
     },
 
     onConnectionFailed(reason) {
-      ui.setOverlayStatus(`Solo mode · ${reason}`);
+      // Not shown in the lobby any more; keep the reason somewhere for debugging
+      console.warn(`Multiplayer unavailable, playing solo: ${reason}`);
       localActorId = 1;
       localPlayer.id = 1;
       playerNames.set(1, localPlayerName);
@@ -1778,7 +1778,6 @@ function init() {
       ui.showOverlay(true);
       ui.hideScoreboard();
       closeHudChat();
-      ui.setOverlayStatus(localActorId >= 0 ? 'Paused — click to resume' : 'Connecting…');
     }
   });
 
