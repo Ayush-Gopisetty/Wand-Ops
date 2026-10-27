@@ -29,6 +29,7 @@ export class UIManager {
     this._streak = document.getElementById('streak-callout');
     this._death = document.getElementById('death-screen');
     this._deathSeconds = this._death?.querySelector('.death-seconds');
+    this._killCamMarker = document.getElementById('killcam-marker');
   }
 
   setHealth(hp) {
@@ -130,6 +131,19 @@ export class UIManager {
     set('.death-hp', info.killerHp > 0 ? `They had ${Math.ceil(info.killerHp)} HP left` : '');
     set('.death-streak', info.streakEnded >= 2 ? `Your ${info.streakEnded}-kill streak ended` : '');
     this._death.hidden = false;
+  }
+
+  /** `ndc`: the killer's head in normalised device coords (-1..1), or null to hide the marker. */
+  setKillCamMarker(ndc) {
+    const el = this._killCamMarker;
+    if (!el) return;
+    if (!ndc) {
+      el.hidden = true;
+      return;
+    }
+    el.style.left = `${(ndc.x + 1) * 50}%`;
+    el.style.top = `${(1 - ndc.y) * 50}%`;
+    el.hidden = false;
   }
 
   /** Call every frame with the seconds left; hides the screen once it reaches zero. */
