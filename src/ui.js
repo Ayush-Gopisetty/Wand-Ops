@@ -4,6 +4,7 @@ export const SPELL_LABELS = {
   lightning: '⚡ Lightning',
   air: '💨 Air',
   earth: '🪨 Earth',
+  freeze: '❄️ Frost Nova', // the ultimate's effect, e.g. on the death screen
 };
 
 /**
@@ -41,6 +42,7 @@ export class UIManager {
     this._ultFill.style.width = `${Math.round(charge * 100)}%`;
     this._ult.classList.toggle('is-ready', ready);
     const label = ready ? `${name} ready` : name;
+    this._ultLabel = label;
     if (this._ultName.textContent !== label) this._ultName.textContent = label;
   }
 
@@ -50,7 +52,10 @@ export class UIManager {
     this._ultName.textContent = text;
     this._ult.classList.add('is-warning');
     clearTimeout(this._ultMsgTimer);
-    this._ultMsgTimer = setTimeout(() => this._ult.classList.remove('is-warning'), 900);
+    this._ultMsgTimer = setTimeout(() => {
+      this._ult.classList.remove('is-warning');
+      this._ultName.textContent = this._ultLabel ?? '';
+    }, 900);
   }
 
   setHealth(hp) {

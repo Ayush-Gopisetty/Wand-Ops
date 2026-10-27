@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { pointInSolid } from './collision.js';
 
 const SPEED     = 22;
 const LIFETIME  = 2.4;
@@ -328,19 +329,8 @@ export class FireballManager {
             Math.abs(p.z) >= colliders.arenaSize - 0.4) {
           this._remove(i, true, true); continue;
         }
-        // Tree trunks (cylinder check in XZ plane)
-        let hitTree = false;
-        for (const tree of colliders.trees) {
-          if (tree.maxY !== undefined && p.y >= tree.maxY) continue;
-          const dx = p.x - tree.x, dz = p.z - tree.z;
-          if (dx * dx + dz * dz < tree.radius * tree.radius) { hitTree = true; break; }
-        }
-        if (hitTree) { this._remove(i, true, true); continue; }
-        let hitBox = false;
-        for (const box of colliders.boxes || []) {
-          if (p.y < box.maxY && p.x > box.xMin && p.x < box.xMax && p.z > box.zMin && p.z < box.zMax) { hitBox = true; break; }
-        }
-        if (hitBox) { this._remove(i, true, true); continue; }
+        // Walls, cover and tree trunks
+        if (pointInSolid(p, colliders)) { this._remove(i, true, true); continue; }
       }
 
       // Only the owner's client decides damage; everyone else just shows the projectile stopping on contact
