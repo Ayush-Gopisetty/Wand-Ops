@@ -2195,9 +2195,14 @@ function hexToRgba(hex, alpha) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-// Phones and tablets without a mouse play with on-screen controls; ?touch=1 forces them on any device
-const TOUCH_ONLY = window.matchMedia('(hover: none) and (pointer: coarse)').matches
+// Phones, and tablets without a mouse, play with on-screen controls. The browser's phone flag comes first:
+// Samsung Galaxy phones in Chrome report a hovering fine pointer as if a mouse were plugged in, so pointer
+// media queries alone miss them. ?touch=1 forces touch mode on any device, ?touch=0 forces desktop controls.
+const touchParam = new URLSearchParams(location.search).get('touch');
+const IS_PHONE = navigator.userAgentData?.mobile || /Android.+Mobile|iPhone|iPod/i.test(navigator.userAgent);
+const IS_TOUCH_TABLET = navigator.maxTouchPoints > 0
+  && window.matchMedia('(pointer: coarse)').matches
   && !window.matchMedia('(any-pointer: fine)').matches;
-const TOUCH_MODE = TOUCH_ONLY || new URLSearchParams(location.search).has('touch');
+const TOUCH_MODE = touchParam !== null ? touchParam !== '0' : IS_PHONE || IS_TOUCH_TABLET;
 
 init();
