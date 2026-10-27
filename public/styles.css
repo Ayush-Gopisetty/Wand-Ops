@@ -790,7 +790,6 @@ body {
 #overlay {
   position: fixed;
   inset: 0;
-  background: var(--surface);
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -800,7 +799,13 @@ body {
   font-family: var(--font-display);
   color: var(--on-surface);
   overflow: hidden;
+  /* The arena flyover shows through the middle; edges stay dark behind the side cards */
+  background:
+    radial-gradient(ellipse at 50% 45%, rgba(15,16,47,0.25) 0%, rgba(15,16,47,0.62) 60%, rgba(15,16,47,0.88) 100%);
+  backdrop-filter: blur(1.5px) saturate(0.9);
 }
+/* The in-game HUD would otherwise show through the see-through lobby */
+body.lobby-open #ui { visibility: hidden; }
 
 /* ── Nav ── */
 .lo-nav {
@@ -810,7 +815,8 @@ body {
   width: 100%;
   padding: 0 20px;
   height: 58px;
-  background: var(--surface-container);
+  background: rgba(27, 28, 59, 0.82);
+  backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--outline-variant);
   flex-shrink: 0;
   cursor: default;
@@ -2014,7 +2020,8 @@ body {
   width: 100%;
   padding: 0 20px;
   height: 36px;
-  background: var(--surface-container);
+  background: rgba(27, 28, 59, 0.82);
+  backdrop-filter: blur(8px);
   border-top: 1px solid var(--outline-variant);
   flex-shrink: 0;
   cursor: default;

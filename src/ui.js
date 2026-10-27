@@ -56,6 +56,7 @@ export class UIManager {
 
   showOverlay(visible) {
     this._overlay.style.display = visible ? 'flex' : 'none';
+    document.body.classList.toggle('lobby-open', visible);
   }
 
   setSpell(spell) {
