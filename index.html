@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Wand Ops</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
@@ -85,6 +85,13 @@
         <input id="hud-chat-input" type="text" maxlength="120" placeholder="Enter to send · Esc to cancel" autocomplete="off" />
       </form>
     </div>
+  </div>
+
+  <!-- Touch mode, mid-match, phone held upright -->
+  <div id="rotate-prompt" aria-live="polite">
+    <div class="rotate-phone" aria-hidden="true"></div>
+    <p class="rotate-title">Turn your phone sideways</p>
+    <p class="rotate-sub">Wand Ops plays in landscape</p>
   </div>
 
   <div id="scoreboard">
