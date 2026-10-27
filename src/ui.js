@@ -1,3 +1,11 @@
+export const SPELL_LABELS = {
+  fire: '🔥 Fire',
+  ice: '❄️ Ice',
+  lightning: '⚡ Lightning',
+  air: '💨 Air',
+  earth: '🪨 Earth',
+};
+
 /**
  * Minimal HUD manager.
  * All DOM queries happen once at construction - no per-frame querySelector calls.
@@ -18,6 +26,9 @@ export class UIManager {
     this._scoreBody = document.getElementById('scoreboard-body');
     this._minimap = document.getElementById('minimap');
     this._minimapCtx = this._minimap?.getContext('2d') || null;
+    this._streak = document.getElementById('streak-callout');
+    this._death = document.getElementById('death-screen');
+    this._deathSeconds = this._death?.querySelector('.death-seconds');
   }
 
   setHealth(hp) {
@@ -47,14 +58,7 @@ export class UIManager {
   }
 
   setSpell(spell) {
-    const labels = {
-      fire: '🔥 Fire',
-      ice: '❄️ Ice',
-      lightning: '⚡ Lightning',
-      air: '💨 Air',
-      earth: '🪨 Earth',
-    };
-    this._spellIndicator.textContent = labels[spell] || spell;
+    this._spellIndicator.textContent = SPELL_LABELS[spell] || spell;
     this._spellIndicator.dataset.spell = spell;
   }
 
@@ -95,12 +99,47 @@ export class UIManager {
     });
   }
 
-  addKillEntry(msg) {
+  addKillEntry(msg, variant = '') {
     const el = document.createElement('div');
-    el.className = 'kill-entry';
+    el.className = variant ? `kill-entry kill-entry-${variant}` : 'kill-entry';
     el.textContent = msg;
     this._killFeed.prepend(el);
     setTimeout(() => el.remove(), 3200);
+  }
+
+  /** Big centre-screen banner for multi-kills and streaks; restarts its animation if one is already showing. */
+  showStreakCallout(title, sub = '') {
+    if (!this._streak) return;
+    this._streak.querySelector('.streak-title').textContent = title;
+    this._streak.querySelector('.streak-sub').textContent = sub;
+    this._streak.classList.remove('is-showing');
+    void this._streak.offsetWidth;
+    this._streak.classList.add('is-showing');
+  }
+
+  /** `info`: { killer, verb, spell, killerHp, streakEnded } — any of them may be missing. */
+  showDeathScreen(info) {
+    if (!this._death) return;
+    const set = (cls, text) => {
+      const el = this._death.querySelector(cls);
+      el.textContent = text || '';
+      el.hidden = !text;
+    };
+    set('.death-killer', info.killer ? `${info.verb || 'by'} ${info.killer}` : 'You burned out');
+    set('.death-spell', info.spell ? `with ${SPELL_LABELS[info.spell] || info.spell}` : '');
+    set('.death-hp', info.killerHp > 0 ? `They had ${Math.ceil(info.killerHp)} HP left` : '');
+    set('.death-streak', info.streakEnded >= 2 ? `Your ${info.streakEnded}-kill streak ended` : '');
+    this._death.hidden = false;
+  }
+
+  /** Call every frame with the seconds left; hides the screen once it reaches zero. */
+  updateDeathScreen(secondsLeft) {
+    if (!this._death || this._death.hidden) return;
+    if (secondsLeft <= 0) {
+      this._death.hidden = true;
+      return;
+    }
+    this._deathSeconds.textContent = String(Math.ceil(secondsLeft));
   }
 
   addDamageNumber(amount, variant = 'dealt') {
