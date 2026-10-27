@@ -51,6 +51,12 @@ const PITCH_MIN = -1.4;
 const PITCH_MAX = 1.4;
 const DEFAULT_FOV = 72;
 const ADS_FOV = 44;
+// Lobby backdrop: the camera circles the arena behind the menu
+const LOBBY_CAM_RADIUS = 36;
+const LOBBY_CAM_HEIGHT = 17;
+const LOBBY_CAM_SPEED = 0.06; // radians per second, about one lap every 100s
+const LOBBY_CAM_FOV = 60;
+const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
 const SETTINGS_KEY = 'wand-ops-settings';
 const DEFAULT_SETTINGS = { sensitivity: 1, fov: DEFAULT_FOV, showFps: true, volume: 0.7, muted: false };
 const sound = new SoundManager();
@@ -2076,7 +2082,23 @@ function updateKillCam(delta) {
   if (crosshairEl) crosshairEl.style.opacity = '0';
 }
 
+// Slow orbit around the arena while the lobby is up; holds still for players who prefer reduced motion
+function updateLobbyCamera() {
+  const angle = 0.8 + (reducedMotion?.matches ? 0 : clock.elapsedTime * LOBBY_CAM_SPEED);
+  camera.position.set(Math.cos(angle) * LOBBY_CAM_RADIUS, LOBBY_CAM_HEIGHT, Math.sin(angle) * LOBBY_CAM_RADIUS);
+  camera.lookAt(0, 2, 0);
+  if (camera.fov !== LOBBY_CAM_FOV) {
+    camera.fov = LOBBY_CAM_FOV;
+    camera.updateProjectionMatrix();
+  }
+  if (firstPersonWand) firstPersonWand.visible = false;
+}
+
 function updateCamera(delta = 0) {
+  if (!controls.isLocked) {
+    updateLobbyCamera();
+    return;
+  }
   if (killCam && !localPlayer.isRespawning) {
     killCam = null;
     ui.setKillCamMarker(null);
