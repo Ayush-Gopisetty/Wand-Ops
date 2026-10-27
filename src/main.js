@@ -1669,9 +1669,23 @@ function init() {
     controls.requestLock();
   });
 
+  // Show the controls card for the first few seconds of each match; Tab brings the strip back later
+  const controlsCard = document.getElementById('controls-card');
+  let controlsCardShown = false;
+  let controlsCardTimer = 0;
+  const hideControlsCard = () => {
+    clearTimeout(controlsCardTimer);
+    controlsCard?.classList.remove('is-visible');
+  };
+
   document.addEventListener('pointerlockchange', () => {
     if (document.pointerLockElement) {
       ui.showOverlay(false);
+      if (controlsCard && !controlsCardShown) {
+        controlsCardShown = true;
+        controlsCard.classList.add('is-visible');
+        controlsCardTimer = setTimeout(hideControlsCard, 9000);
+      }
     } else {
       ui.showOverlay(true);
       ui.hideScoreboard();
@@ -1685,6 +1699,7 @@ function init() {
       // Only claim Tab in-game, so it still moves focus between lobby fields
       if (!document.pointerLockElement) return;
       e.preventDefault();
+      hideControlsCard();
       ui.showScoreboard();
     }
   });
