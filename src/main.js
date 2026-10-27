@@ -18,7 +18,8 @@ import {
 import { Controls } from './controls.js';
 import { FireballManager, SPELL_CONFIG } from './fireball.js';
 import { NetworkManager } from './network.js';
-import { UIManager } from './ui.js';
+import { UIManager, SPELL_LABELS } from './ui.js';
+import { attachTouchControls } from './touch-controls.js';
 import { SimpleBotController } from './bot.js';
 import { SoundManager } from './audio.js';
 import { WIZARD_NEWS } from './news.js';
@@ -153,6 +154,7 @@ const isBotId = (id) => BOT_IDS.includes(id);
 let firebaseServices = null;
 
 let controls, fireballs, network, ui, colliders;
+let touchUi = null; // on-screen controls, only in touch mode
 let settings = { ...DEFAULT_SETTINGS };
 const scores = new Map();
 const killStreaks = new Map(); // actorNr -> kills since their last death
@@ -878,7 +880,7 @@ function setupTopBar() {
     });
   });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !document.pointerLockElement) closeModals();
+    if (e.key === 'Escape' && !controls.isLocked) closeModals();
   });
   document.querySelectorAll('[data-close-modal]').forEach((btn) => {
     btn.addEventListener('click', (e) => {
@@ -928,7 +930,7 @@ function setupTopBar() {
   // In-game chat: Enter opens the box, Enter sends, Esc cancels
   const hudInput = document.getElementById('hud-chat-input');
   document.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter' || !document.pointerLockElement || controls.typing) return;
+    if (e.key !== 'Enter' || !controls.isLocked || controls.typing) return;
     e.preventDefault();
     openHudChat();
   });
@@ -1428,8 +1430,15 @@ function init() {
   coinCount = readGuestCoins();
   playerNameInput.value = localPlayerName;
 
-  controls = new Controls();
+  controls = new Controls({ touch: TOUCH_MODE });
   ui = new UIManager();
+  if (TOUCH_MODE) {
+    document.body.classList.add('touch-controls');
+    touchUi = attachTouchControls(controls, {
+      onScores: (show) => (show ? ui.showScoreboard() : ui.hideScoreboard()),
+      onPause: () => controls.exitLock(),
+    });
+  }
   fireballs = new FireballManager(scene);
   toggleAuthModal(false);
   setupFirebaseAuth();
@@ -1536,10 +1545,12 @@ function init() {
       document.querySelectorAll('.spell-btn').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       ui.setSpell(selectedSpell);
+      touchUi?.setSpellIcon(SPELL_LABELS[selectedSpell].split(' ')[0]);
       updateWeaponStats(selectedSpell);
     });
   });
   ui.setSpell(selectedSpell);
+  touchUi?.setSpellIcon(SPELL_LABELS[selectedSpell].split(' ')[0]);
   updateWeaponStats(selectedSpell);
 
   network = new NetworkManager({
@@ -1766,8 +1777,8 @@ function init() {
     controlsCard?.classList.remove('is-visible');
   };
 
-  document.addEventListener('pointerlockchange', () => {
-    if (document.pointerLockElement) {
+  controls.onLockChange = (locked) => {
+    if (locked) {
       ui.showOverlay(false);
       if (controlsCard && !controlsCardShown) {
         controlsCardShown = true;
@@ -1779,12 +1790,12 @@ function init() {
       ui.hideScoreboard();
       closeHudChat();
     }
-  });
+  };
 
   document.addEventListener('keydown', (e) => {
     if (e.code === 'Tab') {
       // Only claim Tab in-game, so it still moves focus between lobby fields
-      if (!document.pointerLockElement) return;
+      if (!controls.isLocked) return;
       e.preventDefault();
       hideControlsCard();
       ui.showScoreboard();
@@ -1872,6 +1883,12 @@ function updateLocalPlayer(delta) {
   if (controls.isDown('KeyS') || controls.isDown('ArrowDown')) _moveDir.z += 1;
   if (controls.isDown('KeyA') || controls.isDown('ArrowLeft')) _moveDir.x -= 1;
   if (controls.isDown('KeyD') || controls.isDown('ArrowRight')) _moveDir.x += 1;
+  // The touch joystick is analog: a half push walks at half speed
+  let moveScale = 1;
+  if (_moveDir.lengthSq() === 0 && (controls.stick.x || controls.stick.y)) {
+    _moveDir.set(controls.stick.x, 0, controls.stick.y);
+    moveScale = Math.min(1, _moveDir.length());
+  }
 
   // Walking and knockback share one displacement, applied in collision-checked sub-steps so a
   // fast frame or an air-spell shove can't carry the player through a thin wall
@@ -1879,7 +1896,7 @@ function updateLocalPlayer(delta) {
   if (_moveDir.lengthSq() > 0) {
     _moveDir.normalize().applyAxisAngle(_yAxis, cameraYaw);
     const speed = localPlayer.slowTimer > 0 ? MOVE_SPEED * SLOW_FACTOR : MOVE_SPEED;
-    _stepDelta.addScaledVector(_moveDir, speed * delta);
+    _stepDelta.addScaledVector(_moveDir, speed * moveScale * delta);
   }
   if (_knockbackVel.lengthSq() > 0.01) {
     _stepDelta.addScaledVector(_knockbackVel, delta);
@@ -2204,6 +2221,8 @@ function showDesktopOnlyScreen() {
 
 const TOUCH_ONLY = window.matchMedia('(hover: none) and (pointer: coarse)').matches
   && !window.matchMedia('(any-pointer: fine)').matches;
+// Touch controls are still being built; ?touch=1 turns them on (on any device) for testing
+const TOUCH_MODE = new URLSearchParams(location.search).has('touch');
 
-if (TOUCH_ONLY) showDesktopOnlyScreen();
+if (TOUCH_ONLY && !TOUCH_MODE) showDesktopOnlyScreen();
 else init();
