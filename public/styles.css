@@ -2208,6 +2208,8 @@ body.touch-controls #touch-controls {
   position: absolute;
   inset: 0;
   z-index: 20;
+  /* #ui ignores pointers so the HUD never blocks the mouse; this layer has to opt back in */
+  pointer-events: auto;
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
