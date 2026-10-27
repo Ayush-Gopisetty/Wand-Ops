@@ -28,6 +28,7 @@ function dispose(object) {
 
 const _up = new THREE.Vector3(0, 1, 0);
 const _segDir = new THREE.Vector3();
+const _jitter = new THREE.Vector3();
 
 const glowMaterial = (color, opacity = 0.9) => new THREE.MeshBasicMaterial({
   color, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide,
@@ -95,10 +96,10 @@ export class UltimateFx {
     rock.add(new THREE.Mesh(new THREE.IcosahedronGeometry(1.6, 1), glowMaterial(0xff7a1a, 0.45)));
     const start = new THREE.Vector3(point.x + 6, point.y + 34, point.z + 4);
     rock.position.copy(start);
-    this._add(rock, delay, (t) => {
+    this._add(rock, delay, (t, delta) => {
       rock.position.lerpVectors(start, point, t * t);
-      rock.rotation.x += 0.2;
-      rock.rotation.y += 0.13;
+      rock.rotation.x += 12 * delta;
+      rock.rotation.y += 8 * delta;
     }, () => {
       this.shockwave(point, radius, 0xff7a1a, 0.5);
       this.shockwave(point, radius * 0.6, 0xffd27a, 0.35);
@@ -131,17 +132,19 @@ export class UltimateFx {
     const jitter = () => {
       corners.forEach((c, i) => {
         pts[i].lerpVectors(c.a, c.b, c.f);
-        if (!c.still) pts[i].add(_segDir.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(0.5));
+        if (!c.still) pts[i].add(_jitter.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(0.5));
       });
       pieces.forEach(({ core, glow }, i) => {
         const from = pts[i], to = pts[i + 1];
         _segDir.subVectors(to, from);
         const len = _segDir.length() || 0.001;
-        for (const [mesh, r] of [[core, 0.035], [glow, 0.13]]) {
-          mesh.position.addVectors(from, to).multiplyScalar(0.5);
-          mesh.quaternion.setFromUnitVectors(_up, _segDir.clone().divideScalar(len));
-          mesh.scale.set(r, len, r);
-        }
+        _segDir.divideScalar(len);
+        core.position.addVectors(from, to).multiplyScalar(0.5);
+        core.quaternion.setFromUnitVectors(_up, _segDir);
+        core.scale.set(0.035, len, 0.035);
+        glow.position.copy(core.position);
+        glow.quaternion.copy(core.quaternion);
+        glow.scale.set(0.13, len, 0.13);
       });
     };
     jitter();
@@ -162,16 +165,19 @@ export class UltimateFx {
       torus.position.y = i * 0.9;
       group.add(torus);
     }
-    this._add(group, 0.8, (t) => {
-      group.rotation.y += 0.35;
+    this._add(group, 0.8, (t, delta) => {
+      group.rotation.y += 21 * delta;
       group.scale.set(1 + t * 1.5, 1 + t * 2, 1 + t * 1.5);
       group.children.forEach((c) => { c.material.opacity = 0.7 * (1 - t); });
     });
     this.shockwave(center, radius, 0x9fefff, 0.45);
   }
 
-  /** A stone slab that rises out of the ground, stands for `duration` seconds, then sinks. */
-  wall(box, floorY, height, duration, onEnd) {
+  /**
+   * A stone slab that rises out of the ground, stands for `duration` seconds, then sinks.
+   * `onRisen` fires once it's fully up, `onSinking` as it starts going down, `onEnd` when it's gone.
+   */
+  wall(box, floorY, height, duration, { onRisen, onSinking, onEnd } = {}) {
     const w = box.xMax - box.xMin;
     const d = box.zMax - box.zMin;
     // Same stone as the castle walls, so it reads as part of the arena
@@ -183,9 +189,12 @@ export class UltimateFx {
     const rise = 0.25 / duration;
     const sink = 1 - 0.4 / duration;
     slab.position.set(x, up - height, z);
+    let phase = 'rising';
     this._add(slab, duration, (t) => {
       const k = t < rise ? t / rise : t > sink ? 1 - (t - sink) / (1 - sink) : 1;
       slab.position.y = up - height * (1 - k);
+      if (phase === 'rising' && t >= rise) { phase = 'up'; onRisen?.(); }
+      if (phase === 'up' && t > sink) { phase = 'sinking'; onSinking?.(); }
     }, onEnd);
     this.shockwave({ x, y: floorY + 0.7, z }, 4, 0xb08a5a, 0.4);
   }

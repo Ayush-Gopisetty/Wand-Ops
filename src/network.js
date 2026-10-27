@@ -229,12 +229,13 @@ export class NetworkManager {
     this.client.raiseEvent(EV_FIREBALL, data);
   }
 
-  // attackerId is set when the bot host reports a hit by a bot
-  sendHit(targetId, damage, spell = 'fire', dir = null, attackerId = null) {
+  // attackerId is set when the bot host reports a hit by a bot; ult marks a hit from an ultimate
+  sendHit(targetId, damage, spell = 'fire', dir = null, attackerId = null, ult = false) {
     if (!this.connected || !this.client) return;
     const data = { targetId, damage, sp: spell };
     if (dir) { data.kx = +dir.x.toFixed(3); data.ky = +dir.y.toFixed(3); data.kz = +dir.z.toFixed(3); }
     if (attackerId !== null) data.by = attackerId;
+    if (ult) data.u = 1;
     this.client.raiseEvent(EV_HIT, data);
   }
 

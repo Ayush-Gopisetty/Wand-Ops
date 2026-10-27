@@ -26,7 +26,7 @@ import { SoundManager } from './audio.js';
 import { WIZARD_NEWS } from './news.js';
 import { applySeasonalLogo } from './season.js';
 import { version as APP_VERSION } from '../package.json';
-import { GROUND_Y, getGroundY as groundYAt, isOverRamp, moveWithCollisions } from './collision.js';
+import { GROUND_Y, getGroundY as groundYAt, isOverRamp, moveWithCollisions, pointInSolid } from './collision.js';
 import { injectSpeedInsights } from '@vercel/speed-insights';
 import {
   onAuthStateChanged,
@@ -69,8 +69,10 @@ const HUD_CHAT_LINES = 8;
 const HUD_CHAT_FADE_MS = 8000;
 const SHOOT_COOLDOWN = 0.5;
 const NET_TICK = 1 / 13;
-// Incoming hits can't claim more than the strongest spell does
-const MAX_HIT_DAMAGE = Math.max(ULT_MAX_DAMAGE, ...Object.values(SPELL_CONFIG).map((s) => s.damage));
+// Incoming hits can't claim more than the strongest spell does. A hit flagged as an ultimate may claim up
+// to the strongest ultimate, but only from a player whose ultimate event arrived in the last few seconds
+const MAX_SPELL_HIT_DAMAGE = Math.max(...Object.values(SPELL_CONFIG).map((s) => s.damage));
+const ULT_HIT_WINDOW_MS = 3000; // a meteor lands a second after its cast event
 const NAME_SEND_DELAY_MS = 400;
 const EYE_HEIGHT = 1.5;
 const JUMP_VELOCITY = 8;
@@ -164,6 +166,7 @@ let localLastKillAt = 0;
 let lastHitOnMe = null; // { id, spell, at } so a burn-out can still name who lit you up
 let ultFx = null;
 let ultCharge = 0; // 0..1; a full meter unlocks the selected spell's ultimate (kept through deaths)
+const lastUltAt = new Map(); // actorNr -> when their last ultimate event arrived
 const playerNames = new Map();
 const playerSkins = new Map();
 
@@ -1368,7 +1371,7 @@ function addUltCharge(amount) {
 
 // The caster's client applies every hit it scores, from spells and ultimates alike
 function applyLocalHit(targetId, damage, spell, dir = null, fromUlt = false) {
-  network.sendHit(targetId, damage, spell, spell === 'air' ? dir : null);
+  network.sendHit(targetId, damage, spell, spell === 'air' ? dir : null, null, fromUlt);
   const target = getCombatTarget(targetId);
   if (!target) return;
   // Ultimates also put their effect on bots this client runs, so a Frost Nova really stops them
@@ -1694,6 +1697,7 @@ function init() {
     onUlt(actorNr, data) {
       const ult = ULTIMATES[data.k];
       if (!ult) return;
+      lastUltAt.set(actorNr, performance.now());
       const ok = (v) => Number.isFinite(v) && Math.abs(v) < 200;
       ui.addKillEntry(`${getPlayerLabel(actorNr)} unleashed ${ult.name}!`, 'streak');
       if (data.k === 'lightning') {
@@ -1804,7 +1808,10 @@ function init() {
     },
 
     onHit(actorNr, data) {
-      const damage = clamp(Number(data.damage) || 0, 0, MAX_HIT_DAMAGE);
+      const ultHit = data.u === 1 && performance.now() - (lastUltAt.get(actorNr) ?? -Infinity) < ULT_HIT_WINDOW_MS;
+      const damage = clamp(Number(data.damage) || 0, 0, ultHit ? ULT_MAX_DAMAGE : MAX_SPELL_HIT_DAMAGE);
+      // Only a genuine ultimate hit may freeze; anything else claiming to counts as plain ice
+      const effect = data.sp === 'freeze' && !ultHit ? 'ice' : (data.sp || 'fire');
       if (data.targetId === localActorId) {
         // A hit already in flight when we went down shouldn't kill us twice
         if (localPlayer.isRespawning) return;
@@ -1813,18 +1820,19 @@ function init() {
         ui.addDamageNumber(damage, 'taken');
         queueLifetimeStats({ damage_taken: damage });
         addUltCharge(damage * ULT_CHARGE.perDamageTaken);
-        localPlayer.applySpellEffect(data.sp || 'fire');
-        lastHitOnMe = { id: isBotId(data.by) ? data.by : actorNr, spell: data.sp || 'fire', at: performance.now() };
+        localPlayer.applySpellEffect(effect);
+        lastHitOnMe = { id: isBotId(data.by) ? data.by : actorNr, spell: effect, at: performance.now() };
 
         if (data.sp === 'air' && Number.isFinite(data.kx) && Number.isFinite(data.kz)) {
           _knockbackVel.set(data.kx, 0, data.kz).normalize().multiplyScalar(30);
         }
 
         ui.setHealth(localPlayer.health);
-        if (dead) handleRemoteHitDefeat(isBotId(data.by) ? data.by : actorNr, data.sp || 'fire');
+        if (dead) handleRemoteHitDefeat(isBotId(data.by) ? data.by : actorNr, effect);
       } else {
         const target = getCombatTarget(data.targetId);
         if (target && !target.isRespawning) {
+          if (ultHit && bots.get(data.targetId)?.ai) target.applySpellEffect(effect);
           target.takeDamage(damage);
           if (actorNr === localActorId) ui.addDamageNumber(damage, 'dealt');
         }
@@ -2084,21 +2092,10 @@ function floorBelow(x, z, y) {
   return getGroundY(x, z, y + GROUND_Y) - GROUND_Y;
 }
 
-function insideSolid(p) {
-  for (const box of colliders.boxes) {
-    if (p.y < box.maxY && p.x > box.xMin && p.x < box.xMax && p.z > box.zMin && p.z < box.zMax) return true;
-  }
-  for (const tree of colliders.trees) {
-    if (tree.maxY !== undefined && p.y >= tree.maxY) continue;
-    if ((p.x - tree.x) ** 2 + (p.z - tree.z) ** 2 < tree.radius ** 2) return true;
-  }
-  return false;
-}
-
 function lineOfSight(a, b) {
   const steps = Math.ceil(a.distanceTo(b) / 0.5);
   for (let i = 1; i < steps; i++) {
-    if (insideSolid(_ultTmp.lerpVectors(a, b, i / steps))) return false;
+    if (pointInSolid(_ultTmp.lerpVectors(a, b, i / steps), colliders)) return false;
   }
   return true;
 }
@@ -2118,7 +2115,7 @@ function meteorPoint(range) {
   for (let d = 0.5; d <= range; d += 0.5) {
     p.copy(_ultEye).addScaledVector(_ultFwd, d);
     if (Math.abs(p.x) > colliders.arenaSize || Math.abs(p.z) > colliders.arenaSize) break;
-    if (insideSolid(p) || p.y <= floorBelow(p.x, p.z, p.y)) break;
+    if (pointInSolid(p, colliders) || p.y <= floorBelow(p.x, p.z, p.y)) break;
   }
   p.x = clamp(p.x, -colliders.arenaSize + 1, colliders.arenaSize - 1);
   p.z = clamp(p.z, -colliders.arenaSize + 1, colliders.arenaSize - 1);
@@ -2168,10 +2165,15 @@ function stoneWallBox(cx, cz, axis) {
 function addStoneWall(box, floorY) {
   const { height, duration } = ULTIMATES.earth;
   box.maxY = floorY + height;
-  colliders.boxes.push(box);
-  ultFx.wall(box, floorY, height, duration, () => {
+  const remove = () => {
     const i = colliders.boxes.indexOf(box);
     if (i >= 0) colliders.boxes.splice(i, 1);
+  };
+  // Solid only while it stands fully raised, so what blocks you matches what you see
+  ultFx.wall(box, floorY, height, duration, {
+    onRisen: () => colliders.boxes.push(box),
+    onSinking: remove,
+    onEnd: remove,
   });
 }
 
@@ -2184,6 +2186,9 @@ function castUltimate() {
   _ultEye.set(me.x, me.y + EYE_HEIGHT, me.z);
   const round = (v) => +v.toFixed(2);
   let payload;
+  // Hits land after the cast event goes out: receivers only accept ultimate-sized hits from a
+  // player whose ultimate they've just seen
+  let strike = () => {};
 
   if (spell === 'fire') {
     const point = meteorPoint(ult.range);
@@ -2200,9 +2205,11 @@ function castUltimate() {
     });
     payload = { k: spell, x: round(point.x), y: round(point.y), z: round(point.z) };
   } else if (spell === 'ice') {
-    for (const [id, player] of ultTargets()) {
-      if (player.position.distanceTo(me) <= ult.radius) applyLocalHit(id, ult.damage, 'freeze', null, true);
-    }
+    strike = () => {
+      for (const [id, player] of ultTargets()) {
+        if (player.position.distanceTo(me) <= ult.radius) applyLocalHit(id, ult.damage, 'freeze', null, true);
+      }
+    };
     ultFx.nova(me, ult.radius);
     payload = { k: spell, x: round(me.x), y: round(me.y), z: round(me.z) };
   } else if (spell === 'lightning') {
@@ -2214,19 +2221,26 @@ function castUltimate() {
     // From the wand tip (ahead, a little right and down), not the camera, so the first stretch isn't a blur
     const start = _ultEye.clone().addScaledVector(_ultFwd, 1.6)
       .add(new THREE.Vector3(Math.cos(cameraYaw) * 0.3, -0.35, -Math.sin(cameraYaw) * 0.3));
-    for (const hit of hits) applyLocalHit(hit.id, ult.damage, 'lightning', null, true);
+    strike = () => {
+      for (const hit of hits) applyLocalHit(hit.id, ult.damage, 'lightning', null, true);
+    };
     const points = [start, ...hits.map((h) => h.at)];
     ultFx.chain(points);
     payload = { k: spell, p: points.map((v) => [round(v.x), round(v.y), round(v.z)]) };
   } else if (spell === 'air') {
-    playerVelocityY = ult.launch;
-    isGrounded = false;
-    for (const [id, player] of ultTargets()) {
-      if (player.position.distanceTo(me) > ult.radius) continue;
-      const away = player.position.clone().sub(me).setY(0);
-      if (away.lengthSq() < 0.01) away.set(_ultFwd.x, 0, _ultFwd.z);
-      applyLocalHit(id, ult.damage, 'air', away.normalize(), true);
+    // Grounded (Earth) keeps you down: the blast still goes off, you just don't take off
+    if (localPlayer.groundedTimer <= 0) {
+      playerVelocityY = ult.launch;
+      isGrounded = false;
     }
+    strike = () => {
+      for (const [id, player] of ultTargets()) {
+        if (player.position.distanceTo(me) > ult.radius) continue;
+        const away = player.position.clone().sub(me).setY(0);
+        if (away.lengthSq() < 0.01) away.set(_ultFwd.x, 0, _ultFwd.z);
+        applyLocalHit(id, ult.damage, 'air', away.normalize(), true);
+      }
+    };
     ultFx.cyclone(me, ult.radius);
     payload = { k: spell, x: round(me.x), y: round(me.y), z: round(me.z) };
   } else {
@@ -2244,15 +2258,12 @@ function castUltimate() {
   ultCharge = 0;
   refreshUltUi();
   network.sendUlt(payload);
+  strike();
   ui.addKillEntry(`You unleashed ${ult.name}!`, 'streak');
 }
 
 function castFireball() {
-  _forward.set(
-    -Math.sin(cameraYaw) * Math.cos(cameraPitch),
-    Math.sin(cameraPitch),
-    -Math.cos(cameraYaw) * Math.cos(cameraPitch)
-  );
+  aimDirection(_forward);
 
   const spawnPos = localPlayer.position.clone()
     .add(new THREE.Vector3(0, EYE_HEIGHT, 0))

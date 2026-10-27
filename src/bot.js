@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { getGroundY, moveWithCollisions } from './collision.js';
+import { getGroundY, moveWithCollisions, pointInSolid } from './collision.js';
 
 const BOT_MOVE_SPEED = 5.8;
 const BOT_STRAFE_SPEED = 0.9;
@@ -22,15 +22,7 @@ function hasLineOfSight(from, to, colliders) {
   if (!colliders) return true;
   const steps = Math.ceil(from.distanceTo(to) / 0.4);
   for (let i = 1; i < steps; i++) {
-    _probe.lerpVectors(from, to, i / steps);
-    for (const box of colliders.boxes || []) {
-      if (_probe.y < box.maxY && _probe.x > box.xMin && _probe.x < box.xMax && _probe.z > box.zMin && _probe.z < box.zMax) return false;
-    }
-    for (const tree of colliders.trees) {
-      if (tree.maxY !== undefined && _probe.y >= tree.maxY) continue;
-      const dx = _probe.x - tree.x, dz = _probe.z - tree.z;
-      if (dx * dx + dz * dz < tree.radius * tree.radius) return false;
-    }
+    if (pointInSolid(_probe.lerpVectors(from, to, i / steps), colliders)) return false;
   }
   return true;
 }
@@ -78,6 +70,8 @@ export class SimpleBotController {
       _move.addScaledVector(_forward, -0.9);
     }
 
+    // Frozen by a Frost Nova: no walking (the bot still turns to face you and settles on the floor)
+    if (this.player.freezeTimer > 0) _move.set(0, 0, 0);
     if (_move.lengthSq() > 0.0001) {
       if (this._detourTimer > 0) {
         this._detourTimer -= delta;

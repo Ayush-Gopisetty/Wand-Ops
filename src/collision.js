@@ -57,6 +57,22 @@ export function getGroundY(x, z, currentY, colliders, rampFeetY = currentY) {
   return y;
 }
 
+/**
+ * True when point p is inside a wall/cover box or a tree trunk: the solids that stop spells
+ * and block line of sight. Boxes have no bottom, so anything below their top counts.
+ */
+export function pointInSolid(p, colliders) {
+  for (const box of colliders.boxes || []) {
+    if (p.y < box.maxY && p.x > box.xMin && p.x < box.xMax && p.z > box.zMin && p.z < box.zMax) return true;
+  }
+  for (const tree of colliders.trees || []) {
+    if (tree.maxY !== undefined && p.y >= tree.maxY) continue;
+    const dx = p.x - tree.x, dz = p.z - tree.z;
+    if (dx * dx + dz * dz < tree.radius * tree.radius) return true;
+  }
+  return false;
+}
+
 /** True when (x, z) is over a staircase or ramp. */
 export function isOverRamp(x, z, colliders) {
   if (!colliders) return false;
