@@ -2200,3 +2200,54 @@ body.lobby-open #ui { visibility: hidden; }
   .lo-skin-btn { gap: 2px; padding: 6px 4px 5px; }
   .lo-skin-swatch { width: 24px; height: 24px; }
 }
+
+/* ── Phones & tablets: "play on a computer" screen instead of the lobby ── */
+body.touch-only #overlay {
+  background: radial-gradient(ellipse at 50% 30%, #2a1d5c 0%, var(--surface) 70%);
+  cursor: default;
+}
+body.touch-only #overlay > .lo-nav,
+body.touch-only #overlay > .lo-body,
+body.touch-only #ui { display: none; }
+/* The screen sits after the footer in the markup; keep the footer at the bottom */
+body.touch-only #overlay > .lo-footer { order: 1; }
+#desktop-only {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  overflow-y: auto;
+}
+#desktop-only[hidden] { display: none; }
+.do-card {
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+}
+#desktop-only h1.lo-logo { font-size: clamp(56px, 18vw, 84px); margin-bottom: 6px; }
+.do-title { font-size: 24px; font-weight: 800; color: #fff; }
+.do-text { font-size: 15px; line-height: 1.5; color: var(--on-surface-dim); }
+.do-keys { margin: 4px 0 6px; font-size: 0.85rem; }
+.do-share {
+  padding: 13px 28px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--secondary-container);
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 800;
+  box-shadow: 0 6px 0 var(--secondary-dark), 0 10px 24px rgba(174,0,131,0.35);
+  cursor: pointer;
+}
+.do-share:active { transform: translateY(3px); box-shadow: 0 3px 0 var(--secondary-dark); }
+.do-url {
+  font-family: var(--font-label);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--outline);
+}

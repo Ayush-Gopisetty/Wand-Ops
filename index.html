@@ -321,6 +321,22 @@
       </div>
     </footer>
 
+    <!-- Shown instead of the lobby on phones and tablets (see the end of main.js) -->
+    <div id="desktop-only" hidden>
+      <div class="do-card">
+        <div class="do-logo-slot"></div>
+        <h2 class="do-title">Grab a computer to play</h2>
+        <p class="do-text">Wand Ops is a keyboard-and-mouse game. Open it on a laptop or desktop to duel other wizards.</p>
+        <ul class="hud-keys do-keys" aria-label="Controls">
+          <li><kbd>WASD</kbd>Move</li>
+          <li><kbd>Mouse</kbd>Aim</li>
+          <li><kbd>Click</kbd>Cast</li>
+        </ul>
+        <button class="do-share" id="desktop-only-share" type="button">Copy link</button>
+        <p class="do-url" id="desktop-only-url"></p>
+      </div>
+    </div>
+
     <div class="lo-auth-modal-backdrop" id="auth-modal-backdrop" hidden>
       <div class="lo-auth-modal" onclick="event.stopPropagation()">
         <div class="lo-auth-modal-head">
