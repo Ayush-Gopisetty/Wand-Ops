@@ -5,6 +5,8 @@ const SPEED     = 22;
 const LIFETIME  = 2.4;
 const HIT_DIST  = 1.1;
 const MAX_COUNT = 40;
+// Longest move between collision checks: thinner than the 0.6 cover walls, so a slow frame can't skip through them
+const MAX_STEP  = 0.25;
 
 const PARTICLE_COUNT = 1500;
 const FLASH_COUNT    = 8;
@@ -317,40 +319,53 @@ export class FireballManager {
       fb.lifetime -= delta;
       if (fb.lifetime <= 0) { this._remove(i); continue; }
 
-      fb.mesh.position.addScaledVector(fb.dir, SPEED * delta);
+      // A frame can carry a projectile over a metre, so check for contact along the way, not just where it ends up
+      const travel = SPEED * delta;
+      const steps = Math.max(1, Math.ceil(travel / MAX_STEP));
+      let removed = false;
+      for (let s = 0; s < steps && !removed; s++) {
+        fb.mesh.position.addScaledVector(fb.dir, travel / steps);
+        removed = this._collide(i, fb, targets, simulatedOwners, onHit, colliders);
+      }
+      if (removed) continue;
       this._animate(fb, delta);
       this._emitTrail(fb, delta);
-      const p = fb.mesh.position;
+    }
+  }
 
-      // ── World collision ────────────────────────────────────────────────────
-      if (colliders) {
-        // Arena walls
-        if (Math.abs(p.x) >= colliders.arenaSize - 0.4 ||
-            Math.abs(p.z) >= colliders.arenaSize - 0.4) {
-          this._remove(i, true, true); continue;
-        }
-        // Walls, cover and tree trunks
-        if (pointInSolid(p, colliders)) { this._remove(i, true, true); continue; }
+  /** Stops projectile `i` if it's touching a solid or a target; returns true when it was removed. */
+  _collide(i, fb, targets, simulatedOwners, onHit, colliders) {
+    const p = fb.mesh.position;
+
+    // ── World collision ────────────────────────────────────────────────────
+    if (colliders) {
+      // Arena walls
+      if (Math.abs(p.x) >= colliders.arenaSize - 0.4 ||
+          Math.abs(p.z) >= colliders.arenaSize - 0.4) {
+        this._remove(i, true, true); return true;
       }
+      // Walls, cover and tree trunks
+      if (pointInSolid(p, colliders)) { this._remove(i, true, true); return true; }
+    }
 
-      // Only the owner's client decides damage; everyone else just shows the projectile stopping on contact
-      const simulated = simulatedOwners.has(fb.ownerId);
-      for (const [id, player] of targets) {
-        if (id === fb.ownerId) continue;
-        if (p.distanceTo(player.position) < HIT_DIST) {
-          if (simulated) onHit(fb.ownerId, id, fb.cfg.damage, fb.spell, fb.dir);
-          this._remove(i, true);
-          break;
-        }
+    // Only the owner's client decides damage; everyone else just shows the projectile stopping on contact
+    const simulated = simulatedOwners.has(fb.ownerId);
+    for (const [id, player] of targets) {
+      if (id === fb.ownerId) continue;
+      if (p.distanceTo(player.position) < HIT_DIST) {
+        if (simulated) onHit(fb.ownerId, id, fb.cfg.damage, fb.spell, fb.dir);
+        this._remove(i, true);
+        return true;
       }
     }
+    return false;
   }
 
   _remove(index, impact = false, hitSolid = false) {
     const fb = this.fireballs[index];
     if (impact) {
       // Solids are only detected once the projectile is inside them; back the burst out to the surface
-      const at = hitSolid ? fb.mesh.position.clone().addScaledVector(fb.dir, -0.4) : fb.mesh.position;
+      const at = hitSolid ? fb.mesh.position.clone().addScaledVector(fb.dir, -MAX_STEP) : fb.mesh.position;
       this._impact(at, fb.spell);
     }
     this.scene.remove(fb.mesh);

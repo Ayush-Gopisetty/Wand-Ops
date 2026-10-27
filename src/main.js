@@ -37,10 +37,8 @@ import { createFirebaseServices } from './lib/firebase.js';
 import {
   EMPTY_LIFETIME_STATS,
   EMPTY_PLAYER_PROFILE,
-  fetchLifetimeStats,
-  fetchPlayerProfile,
+  fetchPlayerData,
   incrementLifetimeStats,
-  normalizeLifetimeStats,
   savePlayerProfile,
 } from './lib/lifetime-stats.js';
 
@@ -74,6 +72,9 @@ const NET_TICK = 1 / 13;
 const MAX_SPELL_HIT_DAMAGE = Math.max(...Object.values(SPELL_CONFIG).map((s) => s.damage));
 const ULT_HIT_WINDOW_MS = 3000; // a meteor lands a second after its cast event
 const NAME_SEND_DELAY_MS = 400;
+const LIFETIME_FLUSH_DELAY_MS = 2000; // batch stat changes into one write
+const LIFETIME_RETRY_MAX_MS = 60000;
+const PROFILE_SAVE_DELAY_MS = 3000; // quest progress ticks on every hit; save it once things settle
 const EYE_HEIGHT = 1.5;
 const JUMP_VELOCITY = 8;
 const GRAVITY = 22;
@@ -187,6 +188,9 @@ let coinCount = 0;
 let lifetimeStats = { ...EMPTY_LIFETIME_STATS };
 let pendingLifetimeDelta = { ...EMPTY_LIFETIME_STATS };
 let lifetimeFlushPromise = null;
+let lifetimeFlushTimer = null;
+let lifetimeRetryDelay = 0; // grows after each failed write so an outage doesn't become a request storm
+let profileSaveTimer = null;
 let ownedSkinIds = new Set(DEFAULT_UNLOCKED_SKIN_IDS);
 let dailyQuestState = createDailyQuestState();
 
@@ -345,6 +349,18 @@ function isBotHost() {
   return true;
 }
 
+// Whether remote player `actorNr` is the one running the bots (nobody lower-numbered is here)
+function runsBots(actorNr) {
+  if (localActorId >= 0 && localActorId < actorNr) return false;
+  for (const id of remotePlayers.keys()) if (id < actorNr) return false;
+  return true;
+}
+
+// Scores are reported by the player themselves, or by the bot host for its bots
+function mayReportFor(sender, actorNr) {
+  return actorNr === sender || (isBotId(actorNr) && runsBots(sender));
+}
+
 function updateDisplayedPlayerCount() {
   const baseCount = network ? network.getPlayerCount() : 1;
   ui.setPlayerCount(baseCount + bots.size);
@@ -449,6 +465,9 @@ function awardCoins(amount) {
 }
 
 async function persistProfile() {
+  // A full save covers any batched quest progress
+  clearTimeout(profileSaveTimer);
+  profileSaveTimer = null;
   const profile = {
     owned_skins: [...ownedSkinIds],
     selected_skin_id: localSkinId,
@@ -489,7 +508,15 @@ function progressDailyQuests(metric, amount = 1) {
 
   if (!changed) return;
   renderDailyQuests();
-  persistProfile();
+  // Not pushed back by later progress, so steady fighting still saves every few seconds
+  if (!profileSaveTimer) profileSaveTimer = setTimeout(flushProfileSave, PROFILE_SAVE_DELAY_MS);
+}
+
+function flushProfileSave() {
+  if (!profileSaveTimer) return;
+  clearTimeout(profileSaveTimer);
+  profileSaveTimer = null;
+  return persistProfile();
 }
 
 function claimDailyQuest(questId) {
@@ -536,7 +563,10 @@ async function buySkin(skinId) {
   }
 
   coinCount -= skin.price;
-  if (authSession?.user) queueLifetimeStats({ coins: -skin.price });
+  if (authSession?.user) {
+    queueLifetimeStats({ coins: -skin.price });
+    flushLifetimeStats();
+  }
   else writeGuestCoins(coinCount);
 
   ownedSkinIds.add(cleanSkin);
@@ -579,30 +609,41 @@ function isZeroLifetimeDelta(delta) {
   return Object.keys(EMPTY_LIFETIME_STATS).every((key) => !delta[key]);
 }
 
+function scheduleLifetimeFlush(delay) {
+  if (lifetimeFlushTimer) return;
+  lifetimeFlushTimer = setTimeout(() => {
+    lifetimeFlushTimer = null;
+    flushLifetimeStats();
+  }, delay);
+}
+
 async function flushLifetimeStats() {
+  clearTimeout(lifetimeFlushTimer);
+  lifetimeFlushTimer = null;
+  if (lifetimeFlushPromise) return lifetimeFlushPromise;
   const userId = getCurrentUserId();
-  if (lifetimeFlushPromise || !firebaseServices?.db || !userId) return;
+  if (!firebaseServices?.db || !userId) return;
   if (isZeroLifetimeDelta(pendingLifetimeDelta)) return;
 
   const delta = { ...pendingLifetimeDelta };
   pendingLifetimeDelta = { ...EMPTY_LIFETIME_STATS };
 
+  // The local totals already include this delta (and anything queued meanwhile), so the write's
+  // result isn't read back: replacing them with the stored row would undo a purchase made mid-write
   lifetimeFlushPromise = incrementLifetimeStats(firebaseServices.db, userId, delta)
-    .then((row) => {
-      lifetimeStats = normalizeLifetimeStats(row);
-      coinCount = lifetimeStats.coins;
-      updateCoinUi();
-      updateLifetimeStatsUi();
+    .then(() => {
+      lifetimeRetryDelay = 0;
     })
     .catch((error) => {
       console.warn('Failed to persist lifetime stats:', error);
       Object.keys(EMPTY_LIFETIME_STATS).forEach((key) => {
         pendingLifetimeDelta[key] += Number(delta[key] || 0);
       });
+      lifetimeRetryDelay = Math.min(LIFETIME_RETRY_MAX_MS, (lifetimeRetryDelay || LIFETIME_FLUSH_DELAY_MS) * 2);
     })
     .finally(() => {
       lifetimeFlushPromise = null;
-      if (!isZeroLifetimeDelta(pendingLifetimeDelta)) flushLifetimeStats();
+      if (!isZeroLifetimeDelta(pendingLifetimeDelta)) scheduleLifetimeFlush(lifetimeRetryDelay || LIFETIME_FLUSH_DELAY_MS);
     });
 
   await lifetimeFlushPromise;
@@ -615,7 +656,7 @@ function queueLifetimeStats(delta) {
   Object.keys(EMPTY_LIFETIME_STATS).forEach((key) => {
     pendingLifetimeDelta[key] += Number(delta[key] || 0);
   });
-  flushLifetimeStats();
+  scheduleLifetimeFlush(lifetimeRetryDelay || LIFETIME_FLUSH_DELAY_MS);
 }
 
 async function loadLifetimeStats(session) {
@@ -632,15 +673,13 @@ async function loadLifetimeStats(session) {
     updateLifetimeStatsUi();
     renderDailyQuests();
     renderSkinShop();
+    if (localPlayer && firstPersonWand) setLocalSkin(localSkinId);
     return;
   }
 
   try {
     const userId = getCurrentUserId(session);
-    const [stats, profile] = await Promise.all([
-      fetchLifetimeStats(firebaseServices.db, userId),
-      fetchPlayerProfile(firebaseServices.db, userId),
-    ]);
+    const { stats, profile } = await fetchPlayerData(firebaseServices.db, userId);
     lifetimeStats = stats;
     ownedSkinIds = new Set([...DEFAULT_UNLOCKED_SKIN_IDS, ...profile.owned_skins.map(sanitizeSkinId)]);
     dailyQuestState = normalizeDailyQuestState(profile.daily_quests);
@@ -1013,7 +1052,7 @@ async function setupFirebaseAuth() {
 
   signOutBtn?.addEventListener('click', async (e) => {
     e.stopPropagation();
-    await flushLifetimeStats();
+    await Promise.all([flushLifetimeStats(), flushProfileSave()]);
     if (!firebaseServices) return;
     try {
       await signOut(firebaseServices.auth);
@@ -1568,8 +1607,8 @@ function init() {
   playerNameInput.addEventListener('keydown', (e) => e.stopPropagation());
   let nameSendTimer = null;
   playerNameInput.addEventListener('input', () => {
+    // Cleaned for the game only: writing it back here would eat the space you're about to type after
     localPlayerName = sanitizePlayerName(playerNameInput.value);
-    if (playerNameInput.value !== localPlayerName) playerNameInput.value = localPlayerName;
     localStorage.setItem('wand-ops-player-name', localPlayerName);
     localPlayer.setName(localPlayerName);
     if (localActorId >= 0) {
@@ -1579,6 +1618,10 @@ function init() {
       clearTimeout(nameSendTimer);
       nameSendTimer = setTimeout(() => network.sendPlayerName(localActorId, localPlayerName), NAME_SEND_DELAY_MS);
     }
+  });
+
+  playerNameInput.addEventListener('change', () => {
+    playerNameInput.value = localPlayerName;
   });
 
   skinButtons.forEach((btn) => {
@@ -1681,10 +1724,25 @@ function init() {
       fireballs.spawn(pos, dir, isBotId(data.o) ? data.o : actorNr, data.sp || 'fire');
     },
 
-    onKill({ killerId, victimId }) {
-      ensureScoreEntry(killerId).kills++;
-      ensureScoreEntry(victimId).deaths++;
-      recordStreak(killerId, victimId);
+    onKill(sender, { killerId, victimId }) {
+      if (!Number.isInteger(killerId) || !Number.isInteger(victimId) || killerId === victimId) return;
+      // The killer reports a kill (the bot host for its bots); a victim may report its own burn-out
+      if (!mayReportFor(sender, killerId) && victimId !== sender) return;
+      if (victimId === localActorId) {
+        // This client already showed the death when the hit landed
+        ensureScoreEntry(killerId).kills++;
+        ensureScoreEntry(victimId).deaths++;
+        recordStreak(killerId, victimId);
+      } else {
+        handleDefeat(killerId, victimId, getPlayerLabel(killerId), getPlayerLabel(victimId));
+      }
+      // Only a burn-out reports a kill on our behalf; our other kills are counted when they land
+      if (killerId === localActorId) {
+        sound.kill();
+        addUltCharge(ULT_CHARGE.perKill);
+        const victim = remotePlayers.get(victimId);
+        if (victim) victim.health = 100;
+      }
       const bot = bots.get(victimId);
       if (bot) {
         if (bot.ai) bot.player.respawn(pickSpawnPoint(bot.player));
@@ -1759,8 +1817,10 @@ function init() {
       }
     },
 
-    onScoreUpdate({ actorNr, kills, deaths }) {
-      if (actorNr === localActorId) return;
+    onScoreUpdate(sender, { actorNr, kills, deaths }) {
+      if (actorNr === localActorId || !mayReportFor(sender, actorNr)) return;
+      const count = (v) => Number.isInteger(v) && v >= 0;
+      if (!count(kills) || !count(deaths)) return;
       scores.set(actorNr, { kills, deaths, assists: scores.get(actorNr)?.assists ?? 0 });
       refreshScoreboard();
     },
@@ -2012,16 +2072,6 @@ function updateLocalPlayer(delta) {
     isGrounded = true;
   }
 
-  if (localPlayer.burnTimer > 0) {
-    const dead = localPlayer.takeDamage(localPlayer.burnDps * delta);
-    ui.setHealth(localPlayer.health);
-    if (dead) {
-      queueLifetimeStats({ deaths: 1 });
-      const burner = lastHitOnMe?.spell === 'fire' && performance.now() - lastHitOnMe.at < 6000 ? lastHitOnMe.id : null;
-      handleLocalDeath(burner, burner != null ? 'fire' : null, 'Burned by');
-    }
-  }
-
   ui.setEffect(
     localPlayer.freezeTimer > 0 ? 'freeze'
       : localPlayer.burnTimer > 0 ? 'burn'
@@ -2039,8 +2089,31 @@ function updateLocalPlayer(delta) {
   if (controls.consumeUlt()) castUltimate();
 }
 
+// Runs in the menu too, so pausing can't put the fire out
+function updateBurn(delta) {
+  if (localPlayer.burnTimer <= 0 || localPlayer.isRespawning) return;
+  const dead = localPlayer.takeDamage(localPlayer.burnDps * delta);
+  ui.setHealth(localPlayer.health);
+  if (!dead) return;
+  const burner = lastHitOnMe?.spell === 'fire' && performance.now() - lastHitOnMe.at < 6000 ? lastHitOnMe.id : null;
+  handleLocalDeath(burner, burner != null ? 'fire' : null, 'Burned by');
+  // Only this client saw the burn finish, so it reports the kill for the burner
+  if (burner != null) {
+    handleDefeat(burner, localActorId, getPlayerLabel(burner), getPlayerLabel(localActorId));
+    network.sendKill(burner, localActorId);
+  } else {
+    ensureScoreEntry(localActorId).deaths++;
+    queueLifetimeStats({ deaths: 1 });
+    refreshScoreboard();
+    updateLocalKDA();
+  }
+  const mine = scores.get(localActorId);
+  if (mine) network.sendScoreUpdate(localActorId, mine.kills, mine.deaths);
+}
+
 function updateWorld(delta) {
   sound.updateHeartbeat(localPlayer.health, controls.isLocked);
+  updateBurn(delta);
   bots.forEach((bot, id) => {
     if (!bot.ai) return;
     const botShot = bot.ai.update(delta, getNearestHuman(bot.player.position));
