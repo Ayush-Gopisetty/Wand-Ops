@@ -45,6 +45,20 @@
     <div id="damage-numbers"></div>
     <div id="fps-counter"></div>
 
+    <div id="controls-card" aria-hidden="true">
+      <div class="controls-card-title">Controls</div>
+      <ul class="hud-keys hud-keys-stack">
+        <li><kbd>WASD</kbd>Move</li>
+        <li><kbd>Click</kbd>Cast spell</li>
+        <li><kbd>Shift</kbd>Hold to aim</li>
+        <li><kbd>Space</kbd>Jump</li>
+        <li><kbd>Tab</kbd>Hold for scores</li>
+        <li><kbd>Enter</kbd>Chat</li>
+        <li><kbd>Esc</kbd>Menu</li>
+      </ul>
+      <div class="controls-card-foot">Hold Tab to see these again</div>
+    </div>
+
     <div id="hud-chat">
       <div id="hud-chat-log" aria-live="polite"></div>
       <form id="hud-chat-form" hidden>
@@ -67,7 +81,14 @@
         </thead>
         <tbody id="scoreboard-body"></tbody>
       </table>
-      <p id="scoreboard-hint">Tab to close</p>
+      <ul class="hud-keys" id="scoreboard-keys" aria-label="Controls">
+        <li><kbd>WASD</kbd>Move</li>
+        <li><kbd>Click</kbd>Cast</li>
+        <li><kbd>Shift</kbd>Aim</li>
+        <li><kbd>Space</kbd>Jump</li>
+        <li><kbd>Enter</kbd>Chat</li>
+        <li><kbd>Esc</kbd>Menu</li>
+      </ul>
     </div>
   </div>
 
@@ -232,7 +253,7 @@
           <div class="lo-shop-note" id="shop-signedin-note">Sign in to save purchased skins to your account.</div>
         </div>
 
-        <p id="overlay-hint" class="lo-hint">WASD · Click cast · Shift aim · Enter chat</p>
+        <p id="overlay-hint" class="lo-hint">WASD move · Click cast · Shift aim · Space jump · Tab scores · Enter chat</p>
       </section>
 
       <aside class="lo-right">
