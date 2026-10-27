@@ -13,8 +13,8 @@ export const ULTIMATES = {
   earth:     { name: 'Stone Wall',      icon: '🪨', width: 7, depth: 0.9, height: 3.2, distance: 3.5, duration: 6 },
 };
 
-// Meter fill: dealing 300 damage fills it, a kill adds a chunk, and taking hits fills it slowly
-export const ULT_CHARGE = { perDamage: 1 / 300, perKill: 0.15, perDamageTaken: 0.3 / 300 };
+// Meter fill: dealing 200 damage fills it, a kill adds a chunk, and taking hits fills it slowly
+export const ULT_CHARGE = { perDamage: 1 / 200, perKill: 0.15, perDamageTaken: 0.3 / 200 };
 
 export const ULT_MAX_DAMAGE = Math.max(...Object.values(ULTIMATES).map((u) => u.damage || 0));
 
