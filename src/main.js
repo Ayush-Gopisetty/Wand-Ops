@@ -17,6 +17,7 @@ import {
 } from './player.js';
 import { Controls } from './controls.js';
 import { FireballManager, SPELL_CONFIG } from './fireball.js';
+import { ULTIMATES, ULT_CHARGE, ULT_MAX_DAMAGE, UltimateFx } from './ultimates.js';
 import { NetworkManager } from './network.js';
 import { UIManager, SPELL_LABELS } from './ui.js';
 import { attachTouchControls } from './touch-controls.js';
@@ -69,7 +70,7 @@ const HUD_CHAT_FADE_MS = 8000;
 const SHOOT_COOLDOWN = 0.5;
 const NET_TICK = 1 / 13;
 // Incoming hits can't claim more than the strongest spell does
-const MAX_HIT_DAMAGE = Math.max(...Object.values(SPELL_CONFIG).map((s) => s.damage));
+const MAX_HIT_DAMAGE = Math.max(ULT_MAX_DAMAGE, ...Object.values(SPELL_CONFIG).map((s) => s.damage));
 const NAME_SEND_DELAY_MS = 400;
 const EYE_HEIGHT = 1.5;
 const JUMP_VELOCITY = 8;
@@ -161,6 +162,8 @@ const killStreaks = new Map(); // actorNr -> kills since their last death
 let localMultiKills = 0;
 let localLastKillAt = 0;
 let lastHitOnMe = null; // { id, spell, at } so a burn-out can still name who lit you up
+let ultFx = null;
+let ultCharge = 0; // 0..1; a full meter unlocks the selected spell's ultimate (kept through deaths)
 const playerNames = new Map();
 const playerSkins = new Map();
 
@@ -1351,6 +1354,50 @@ function handleLocalDeath(killerId = null, spell = null, verb = 'by') {
   ui.setHealth(localPlayer.health);
 }
 
+function refreshUltUi() {
+  ui.setUlt(ultCharge, ULTIMATES[selectedSpell].name);
+  touchUi?.setUlt(ultCharge);
+}
+
+function addUltCharge(amount) {
+  if (ultCharge >= 1 || !(amount > 0)) return;
+  ultCharge = Math.min(1, ultCharge + amount);
+  if (ultCharge >= 1) sound.ultReady();
+  refreshUltUi();
+}
+
+// The caster's client applies every hit it scores, from spells and ultimates alike
+function applyLocalHit(targetId, damage, spell, dir = null, fromUlt = false) {
+  network.sendHit(targetId, damage, spell, spell === 'air' ? dir : null);
+  const target = getCombatTarget(targetId);
+  if (!target) return;
+  // Ultimates also put their effect on bots this client runs, so a Frost Nova really stops them
+  if (fromUlt && bots.get(targetId)?.ai) target.applySpellEffect(spell);
+
+  const dead = target.takeDamage(damage);
+  ui.addDamageNumber(damage, 'dealt');
+  queueLifetimeStats({ damage_dealt: damage });
+  progressDailyQuests('damage_dealt', damage);
+  // Ultimate damage doesn't refill the meter, or one ultimate could chain straight into the next
+  if (!fromUlt) addUltCharge(damage * ULT_CHARGE.perDamage);
+  if (!dead) {
+    sound.hitConfirm(spell === 'freeze' ? 'ice' : spell);
+    return;
+  }
+  sound.kill();
+  if (!fromUlt) addUltCharge(ULT_CHARGE.perKill);
+
+  // Only the simulating client moves a respawned body; mirrored copies just reset health
+  if (target.isLocal) target.respawn(pickSpawnPoint(target));
+  else target.health = 100;
+  // Remote humans sit out the respawn wait; hide them now rather than when their respawn event lands
+  if (remotePlayers.has(targetId)) target.respawnTimer = RESPAWN_DELAY;
+  handleDefeat(localActorId, targetId, 'You', getPlayerLabel(targetId));
+  network.sendKill(localActorId, targetId);
+  const mine = scores.get(localActorId);
+  if (mine) network.sendScoreUpdate(localActorId, mine.kills, mine.deaths);
+}
+
 function handleDefeat(killerId, victimId, killerLabel, victimLabel) {
   ensureScoreEntry(killerId).kills++;
   ensureScoreEntry(victimId).deaths++;
@@ -1378,6 +1425,7 @@ function handleBotHit(botId, targetId, damage, spell, dir) {
     sound.hurt(damage);
     ui.addDamageNumber(damage, 'taken');
     queueLifetimeStats({ damage_taken: damage });
+    addUltCharge(damage * ULT_CHARGE.perDamageTaken);
     localPlayer.applySpellEffect(spell);
     lastHitOnMe = { id: botId, spell, at: performance.now() };
     ui.setHealth(localPlayer.health);
@@ -1410,7 +1458,8 @@ function init() {
   crosshairEl = document.getElementById('crosshair');
   scopeOverlayEl = document.getElementById('scope-overlay');
   const skinButtons = [...document.querySelectorAll('.lo-skin-btn')];
-  ({ scene, camera, renderer, colliders } = createScene(canvas));
+  let stoneMat;
+  ({ scene, camera, renderer, colliders, stoneMat } = createScene(canvas));
   // Phone GPUs drive very dense screens; 1.5x keeps it sharp without halving the frame rate
   if (TOUCH_MODE) renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
   scene.add(camera);
@@ -1442,6 +1491,7 @@ function init() {
     });
   }
   fireballs = new FireballManager(scene);
+  ultFx = new UltimateFx(scene, stoneMat);
   toggleAuthModal(false);
   setupFirebaseAuth();
   setupTopBar();
@@ -1550,11 +1600,13 @@ function init() {
       btn.classList.add('active');
       ui.setSpell(selectedSpell);
       touchUi?.setSpellIcon(SPELL_LABELS[selectedSpell].split(' ')[0]);
+      refreshUltUi();
       updateWeaponStats(selectedSpell);
     });
   });
   ui.setSpell(selectedSpell);
   touchUi?.setSpellIcon(SPELL_LABELS[selectedSpell].split(' ')[0]);
+  refreshUltUi();
   updateWeaponStats(selectedSpell);
 
   network = new NetworkManager({
@@ -1637,6 +1689,34 @@ function init() {
       }
       refreshScoreboard();
       updateLocalKDA();
+    },
+
+    onUlt(actorNr, data) {
+      const ult = ULTIMATES[data.k];
+      if (!ult) return;
+      const ok = (v) => Number.isFinite(v) && Math.abs(v) < 200;
+      ui.addKillEntry(`${getPlayerLabel(actorNr)} unleashed ${ult.name}!`, 'streak');
+      if (data.k === 'lightning') {
+        const pts = Array.isArray(data.p) ? data.p : [];
+        if (pts.length < 2 || pts.length > ult.maxTargets + 1) return;
+        if (!pts.every((p) => Array.isArray(p) && p.length === 3 && p.every(ok))) return;
+        ultFx.chain(pts.map(([x, y, z]) => new THREE.Vector3(x, y, z)));
+        sound.ultBlast();
+        return;
+      }
+      if (![data.x, data.y, data.z].every(ok)) return;
+      const at = new THREE.Vector3(data.x, data.y, data.z);
+      if (data.k === 'fire') {
+        ultFx.meteor(at, ult.delay, ult.radius, () => {
+          fireballs.burst(at.clone().setY(at.y + 0.6), 'fire');
+          sound.ultBlast();
+        });
+        return;
+      }
+      sound.ultBlast();
+      if (data.k === 'ice') ultFx.nova(at, ult.radius);
+      else if (data.k === 'air') ultFx.cyclone(at, ult.radius);
+      else if (data.k === 'earth') addStoneWall(stoneWallBox(at.x, at.z, data.a === 'x' ? 'x' : 'z'), at.y);
     },
 
     onChat(actorNr, { m }) {
@@ -1732,6 +1812,7 @@ function init() {
         sound.hurt(damage);
         ui.addDamageNumber(damage, 'taken');
         queueLifetimeStats({ damage_taken: damage });
+        addUltCharge(damage * ULT_CHARGE.perDamageTaken);
         localPlayer.applySpellEffect(data.sp || 'fire');
         lastHitOnMe = { id: isBotId(data.by) ? data.by : actorNr, spell: data.sp || 'fire', at: performance.now() };
 
@@ -1879,6 +1960,7 @@ function updateLocalPlayer(delta) {
   if (localPlayer.isRespawning) {
     controls.consumeClick();
     controls.consumeJump();
+    controls.consumeUlt();
     return;
   }
 
@@ -1897,7 +1979,8 @@ function updateLocalPlayer(delta) {
   // Walking and knockback share one displacement, applied in collision-checked sub-steps so a
   // fast frame or an air-spell shove can't carry the player through a thin wall
   _stepDelta.set(0, 0, 0);
-  if (_moveDir.lengthSq() > 0) {
+  // Frozen by a Frost Nova: rooted in place (knockback still carries you)
+  if (_moveDir.lengthSq() > 0 && localPlayer.freezeTimer <= 0) {
     _moveDir.normalize().applyAxisAngle(_yAxis, cameraYaw);
     const speed = localPlayer.slowTimer > 0 ? MOVE_SPEED * SLOW_FACTOR : MOVE_SPEED;
     _stepDelta.addScaledVector(_moveDir, speed * moveScale * delta);
@@ -1908,7 +1991,7 @@ function updateLocalPlayer(delta) {
   }
   moveWithCollisions(localPlayer.position, _stepDelta, colliders);
 
-  if (controls.consumeJump() && isGrounded && localPlayer.groundedTimer <= 0) {
+  if (controls.consumeJump() && isGrounded && localPlayer.groundedTimer <= 0 && localPlayer.freezeTimer <= 0) {
     playerVelocityY = JUMP_VELOCITY;
     isGrounded = false;
   }
@@ -1932,7 +2015,8 @@ function updateLocalPlayer(delta) {
   }
 
   ui.setEffect(
-    localPlayer.burnTimer > 0 ? 'burn'
+    localPlayer.freezeTimer > 0 ? 'freeze'
+      : localPlayer.burnTimer > 0 ? 'burn'
       : localPlayer.slowTimer > 0 ? 'slow'
         : localPlayer.silenceTimer > 0 ? 'silence'
           : localPlayer.groundedTimer > 0 ? 'ground'
@@ -1944,6 +2028,7 @@ function updateLocalPlayer(delta) {
     shootTimer = SHOOT_COOLDOWN;
     castFireball();
   }
+  if (controls.consumeUlt()) castUltimate();
 }
 
 function updateWorld(delta) {
@@ -1958,34 +2043,13 @@ function updateWorld(delta) {
 
   localPlayer.update(delta);
   ui.updateDeathScreen(localPlayer.respawnTimer);
+  ultFx.update(delta);
   bots.forEach((bot) => bot.player.update(delta));
   remotePlayers.forEach((p) => p.update(delta));
 
   fireballs.update(delta, getCombatTargets(), getSimulatedOwners(), (ownerId, targetId, damage, spell, dir) => {
     if (ownerId === localActorId) {
-      network.sendHit(targetId, damage, spell, spell === 'air' ? dir : null);
-      const target = getCombatTarget(targetId);
-      if (!target) return;
-
-      const dead = target.takeDamage(damage);
-      ui.addDamageNumber(damage, 'dealt');
-      queueLifetimeStats({ damage_dealt: damage });
-      progressDailyQuests('damage_dealt', damage);
-      if (!dead) {
-        sound.hitConfirm(spell);
-        return;
-      }
-      sound.kill();
-
-      // Only the simulating client moves a respawned body; mirrored copies just reset health
-      if (target.isLocal) target.respawn(pickSpawnPoint(target));
-      else target.health = 100;
-      // Remote humans sit out the respawn wait; hide them now rather than when their respawn event lands
-      if (remotePlayers.has(targetId)) target.respawnTimer = RESPAWN_DELAY;
-      handleDefeat(localActorId, targetId, 'You', getPlayerLabel(targetId));
-      network.sendKill(localActorId, targetId);
-      const mine = scores.get(localActorId);
-      if (mine) network.sendScoreUpdate(localActorId, mine.kills, mine.deaths);
+      applyLocalHit(targetId, damage, spell, dir);
       return;
     }
 
@@ -2000,6 +2064,187 @@ function updateWorld(delta) {
     if (remotePlayers.size && isBotHost()) sendBotState();
     updateDisplayedPlayerCount();
   }
+}
+
+// ── Ultimates ──────────────────────────────────────────────────────────────
+const _ultFwd = new THREE.Vector3();
+const _ultEye = new THREE.Vector3();
+const _ultTmp = new THREE.Vector3();
+
+function aimDirection(out) {
+  return out.set(
+    -Math.sin(cameraYaw) * Math.cos(cameraPitch),
+    Math.sin(cameraPitch),
+    -Math.cos(cameraYaw) * Math.cos(cameraPitch)
+  );
+}
+
+// Floor surface under (x, z) for something at height y: overhead ledges like the gate arch don't count
+function floorBelow(x, z, y) {
+  return getGroundY(x, z, y + GROUND_Y) - GROUND_Y;
+}
+
+function insideSolid(p) {
+  for (const box of colliders.boxes) {
+    if (p.y < box.maxY && p.x > box.xMin && p.x < box.xMax && p.z > box.zMin && p.z < box.zMax) return true;
+  }
+  for (const tree of colliders.trees) {
+    if (tree.maxY !== undefined && p.y >= tree.maxY) continue;
+    if ((p.x - tree.x) ** 2 + (p.z - tree.z) ** 2 < tree.radius ** 2) return true;
+  }
+  return false;
+}
+
+function lineOfSight(a, b) {
+  const steps = Math.ceil(a.distanceTo(b) / 0.5);
+  for (let i = 1; i < steps; i++) {
+    if (insideSolid(_ultTmp.lerpVectors(a, b, i / steps))) return false;
+  }
+  return true;
+}
+
+const chestOf = (player) => player.position.clone().setY(player.position.y + 0.6);
+
+// Everyone an ultimate can hit: the match minus you (respawning players are already left out)
+function ultTargets() {
+  const targets = getCombatTargets();
+  targets.delete(localActorId);
+  return targets;
+}
+
+// Where the meteor lands: march along the aim ray until it meets a floor, a wall or a tree
+function meteorPoint(range) {
+  const p = new THREE.Vector3();
+  for (let d = 0.5; d <= range; d += 0.5) {
+    p.copy(_ultEye).addScaledVector(_ultFwd, d);
+    if (Math.abs(p.x) > colliders.arenaSize || Math.abs(p.z) > colliders.arenaSize) break;
+    if (insideSolid(p) || p.y <= floorBelow(p.x, p.z, p.y)) break;
+  }
+  p.x = clamp(p.x, -colliders.arenaSize + 1, colliders.arenaSize - 1);
+  p.z = clamp(p.z, -colliders.arenaSize + 1, colliders.arenaSize - 1);
+  return p.setY(floorBelow(p.x, p.z, p.y + 0.5));
+}
+
+// The enemy nearest your crosshair in sight, then up to two more, each jumping from the last
+function chainTargets(ult) {
+  const pool = ultTargets();
+  const hits = [];
+  let best = null;
+  let bestDot = ult.cone;
+  for (const [id, player] of pool) {
+    const chest = chestOf(player);
+    const to = chest.clone().sub(_ultEye);
+    const dist = to.length();
+    if (dist > ult.range) continue;
+    const dot = to.divideScalar(dist).dot(_ultFwd);
+    if (dot > bestDot && lineOfSight(_ultEye, chest)) { best = { id, at: chest }; bestDot = dot; }
+  }
+  if (!best) return hits;
+  hits.push(best);
+  pool.delete(best.id);
+  while (hits.length < ult.maxTargets) {
+    const from = hits[hits.length - 1].at;
+    let next = null;
+    let nextDist = ult.jump;
+    for (const [id, player] of pool) {
+      const chest = chestOf(player);
+      const dist = chest.distanceTo(from);
+      if (dist < nextDist && lineOfSight(from, chest)) { next = { id, at: chest }; nextDist = dist; }
+    }
+    if (!next) break;
+    hits.push(next);
+    pool.delete(next.id);
+  }
+  return hits;
+}
+
+// A wall across your line of sight, snapped to the arena's grid so it lines up with the castle
+function stoneWallBox(cx, cz, axis) {
+  const { width, depth } = ULTIMATES.earth;
+  const [w, d] = axis === 'x' ? [width, depth] : [depth, width];
+  return { xMin: cx - w / 2, xMax: cx + w / 2, zMin: cz - d / 2, zMax: cz + d / 2 };
+}
+
+function addStoneWall(box, floorY) {
+  const { height, duration } = ULTIMATES.earth;
+  box.maxY = floorY + height;
+  colliders.boxes.push(box);
+  ultFx.wall(box, floorY, height, duration, () => {
+    const i = colliders.boxes.indexOf(box);
+    if (i >= 0) colliders.boxes.splice(i, 1);
+  });
+}
+
+function castUltimate() {
+  if (ultCharge < 1 || localPlayer.isRespawning || localPlayer.silenceTimer > 0) return;
+  const spell = selectedSpell;
+  const ult = ULTIMATES[spell];
+  const me = localPlayer.position;
+  aimDirection(_ultFwd);
+  _ultEye.set(me.x, me.y + EYE_HEIGHT, me.z);
+  const round = (v) => +v.toFixed(2);
+  let payload;
+
+  if (spell === 'fire') {
+    const point = meteorPoint(ult.range);
+    ultFx.meteor(point, ult.delay, ult.radius, () => {
+      fireballs.burst(point.clone().setY(point.y + 0.6), 'fire');
+      sound.ultBlast();
+      for (const [id, player] of ultTargets()) {
+        const dx = player.position.x - point.x;
+        const dz = player.position.z - point.z;
+        if (dx * dx + dz * dz <= ult.radius ** 2 && Math.abs(player.position.y - point.y) < 4) {
+          applyLocalHit(id, ult.damage, 'fire', null, true);
+        }
+      }
+    });
+    payload = { k: spell, x: round(point.x), y: round(point.y), z: round(point.z) };
+  } else if (spell === 'ice') {
+    for (const [id, player] of ultTargets()) {
+      if (player.position.distanceTo(me) <= ult.radius) applyLocalHit(id, ult.damage, 'freeze', null, true);
+    }
+    ultFx.nova(me, ult.radius);
+    payload = { k: spell, x: round(me.x), y: round(me.y), z: round(me.z) };
+  } else if (spell === 'lightning') {
+    const hits = chainTargets(ult);
+    if (!hits.length) {
+      ui.flashUltMessage('No target in sight');
+      return;
+    }
+    // From the wand tip (ahead, a little right and down), not the camera, so the first stretch isn't a blur
+    const start = _ultEye.clone().addScaledVector(_ultFwd, 1.6)
+      .add(new THREE.Vector3(Math.cos(cameraYaw) * 0.3, -0.35, -Math.sin(cameraYaw) * 0.3));
+    for (const hit of hits) applyLocalHit(hit.id, ult.damage, 'lightning', null, true);
+    const points = [start, ...hits.map((h) => h.at)];
+    ultFx.chain(points);
+    payload = { k: spell, p: points.map((v) => [round(v.x), round(v.y), round(v.z)]) };
+  } else if (spell === 'air') {
+    playerVelocityY = ult.launch;
+    isGrounded = false;
+    for (const [id, player] of ultTargets()) {
+      if (player.position.distanceTo(me) > ult.radius) continue;
+      const away = player.position.clone().sub(me).setY(0);
+      if (away.lengthSq() < 0.01) away.set(_ultFwd.x, 0, _ultFwd.z);
+      applyLocalHit(id, ult.damage, 'air', away.normalize(), true);
+    }
+    ultFx.cyclone(me, ult.radius);
+    payload = { k: spell, x: round(me.x), y: round(me.y), z: round(me.z) };
+  } else {
+    // Wall faces you: aiming mostly along z means it spans x, and vice versa
+    const axis = Math.abs(_ultFwd.z) >= Math.abs(_ultFwd.x) ? 'x' : 'z';
+    const flat = _ultTmp.set(_ultFwd.x, 0, _ultFwd.z).normalize();
+    const cx = clamp(me.x + flat.x * ult.distance, -colliders.arenaSize + 1, colliders.arenaSize - 1);
+    const cz = clamp(me.z + flat.z * ult.distance, -colliders.arenaSize + 1, colliders.arenaSize - 1);
+    const floorY = getGroundY(cx, cz, me.y) - GROUND_Y;
+    addStoneWall(stoneWallBox(cx, cz, axis), floorY);
+    payload = { k: spell, x: round(cx), y: round(floorY), z: round(cz), a: axis };
+  }
+
+  if (spell !== 'fire') sound.ultBlast();
+  ultCharge = 0;
+  refreshUltUi();
+  network.sendUlt(payload);
+  ui.addKillEntry(`You unleashed ${ult.name}!`, 'streak');
 }
 
 function castFireball() {

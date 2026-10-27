@@ -29,6 +29,28 @@ export class UIManager {
     this._death = document.getElementById('death-screen');
     this._deathSeconds = this._death?.querySelector('.death-seconds');
     this._killCamMarker = document.getElementById('killcam-marker');
+    this._ult = document.getElementById('ult-meter');
+    this._ultFill = this._ult?.querySelector('.ult-fill');
+    this._ultName = this._ult?.querySelector('.ult-name');
+  }
+
+  /** Ultimate meter: `charge` 0..1 and the name of the ultimate the current spell unlocks. */
+  setUlt(charge, name) {
+    if (!this._ult) return;
+    const ready = charge >= 1;
+    this._ultFill.style.width = `${Math.round(charge * 100)}%`;
+    this._ult.classList.toggle('is-ready', ready);
+    const label = ready ? `${name} ready` : name;
+    if (this._ultName.textContent !== label) this._ultName.textContent = label;
+  }
+
+  /** Briefly swaps the meter label for a message (e.g. no target in sight). */
+  flashUltMessage(text) {
+    if (!this._ultName) return;
+    this._ultName.textContent = text;
+    this._ult.classList.add('is-warning');
+    clearTimeout(this._ultMsgTimer);
+    this._ultMsgTimer = setTimeout(() => this._ult.classList.remove('is-warning'), 900);
   }
 
   setHealth(hp) {
@@ -65,6 +87,7 @@ export class UIManager {
       slow: '❄️ Slowed!',
       silence: '⚡ Silenced!',
       ground: '🪨 Grounded!',
+      freeze: '🧊 Frozen!',
     };
     this._effectStatus.textContent = effect ? labels[effect] : '';
     this._effectStatus.dataset.effect = effect || '';

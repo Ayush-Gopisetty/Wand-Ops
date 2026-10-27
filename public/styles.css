@@ -2410,3 +2410,79 @@ body.touch-controls .lo-keys-touch { display: grid; }
   body.touch-controls .lo-body h1.lo-logo,
   body.touch-controls .lo-avatar-wrap { width: auto; }
 }
+
+/* ── Ultimate meter ── */
+#ult-meter {
+  position: absolute;
+  bottom: 112px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+}
+.ult-track {
+  width: 170px;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(0,0,0,0.55);
+  border: 1px solid rgba(255,255,255,0.18);
+  overflow: hidden;
+}
+.ult-fill {
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #ae72ff, #ffc94d);
+  transition: width 0.2s ease;
+}
+.ult-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-label);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.55);
+  text-shadow: 0 1px 3px #000;
+}
+.ult-label kbd {
+  font-family: inherit;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,0.3);
+  background: rgba(0,0,0,0.4);
+  color: #fff;
+}
+#ult-meter.is-ready .ult-track { box-shadow: 0 0 12px rgba(255,201,77,0.8); border-color: rgba(255,201,77,0.8); }
+#ult-meter.is-ready .ult-label { color: #ffd75e; animation: ultPulse 1s ease-in-out infinite alternate; }
+#ult-meter.is-warning .ult-label { color: #ff8a8a; animation: none; }
+@keyframes ultPulse { from { opacity: 0.7; } to { opacity: 1; } }
+
+/* Help: the Ultimates section spans both columns */
+.lo-help-wide { grid-column: 1 / -1; }
+.lo-help-wide b { color: var(--on-surface); }
+
+/* Touch: meter sits lower, the button replaces the Q hint */
+body.touch-controls #ult-meter { bottom: 76px; }
+body.touch-controls .ult-label kbd { display: none; }
+.tc-ult {
+  right: calc(max(28px, env(safe-area-inset-right)) + 104px);
+  bottom: 118px;
+  --charge: 0;
+  background:
+    radial-gradient(circle, rgba(12,8,24,0.55) 58%, transparent 60%),
+    conic-gradient(#ffc94d calc(var(--charge) * 360deg), rgba(255,255,255,0.12) 0);
+  color: rgba(255,255,255,0.45);
+}
+.tc-ult.is-ready {
+  color: #ffd75e;
+  border-color: #ffd75e;
+  box-shadow: 0 0 16px rgba(255,201,77,0.7);
+  animation: ultPulse 0.9s ease-in-out infinite alternate;
+}

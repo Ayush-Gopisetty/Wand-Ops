@@ -38,6 +38,10 @@
     <div id="player-count">Players: 1</div>
     <div id="kda-tracker">K/D/A: 0 / 0 / 0</div>
 
+    <div id="ult-meter">
+      <div class="ult-track"><div class="ult-fill"></div></div>
+      <div class="ult-label"><kbd>Q</kbd><span class="ult-name">Meteor</span></div>
+    </div>
     <div id="spell-indicator" data-spell="fire">🔥 Fire</div>
     <div id="effect-status"></div>
 
@@ -71,6 +75,7 @@
         <li><kbd>WASD</kbd>Move</li>
         <li><kbd>Click</kbd>Cast spell</li>
         <li><kbd>Shift</kbd>Hold to aim</li>
+        <li><kbd>Q</kbd>Ultimate</li>
         <li><kbd>Space</kbd>Jump</li>
         <li><kbd>Tab</kbd>Hold for scores</li>
         <li><kbd>Enter</kbd>Chat</li>
@@ -112,6 +117,7 @@
         <li><kbd>WASD</kbd>Move</li>
         <li><kbd>Click</kbd>Cast</li>
         <li><kbd>Shift</kbd>Aim</li>
+        <li><kbd>Q</kbd>Ult</li>
         <li><kbd>Space</kbd>Jump</li>
         <li><kbd>Enter</kbd>Chat</li>
         <li><kbd>Esc</kbd>Menu</li>
@@ -279,7 +285,7 @@
           <div class="lo-shop-note" id="shop-signedin-note">Sign in to save purchased skins to your account.</div>
         </div>
 
-        <p id="overlay-hint" class="lo-hint">WASD move · Click cast · Shift aim · Space jump · Tab scores · Enter chat</p>
+        <p id="overlay-hint" class="lo-hint">WASD move · Click cast · Shift aim · Q ultimate · Space jump · Tab scores · Enter chat</p>
       </section>
 
       <aside class="lo-right">
@@ -372,6 +378,7 @@
               <dt>Mouse</dt><dd>Look around</dd>
               <dt>Left click</dt><dd>Cast your spell</dd>
               <dt>Shift</dt><dd>Hold to aim down the scope</dd>
+              <dt>Q</dt><dd>Unleash your ultimate when the meter is full</dd>
               <dt>Space</dt><dd>Jump</dd>
               <dt>Tab</dt><dd>Hold to see the scoreboard</dd>
               <dt>Enter</dt><dd>Chat with the match</dd>
@@ -383,6 +390,7 @@
               <dt>🔥 button</dt><dd>Hold to cast; drag it to aim at the same time</dd>
               <dt><svg class="lo-keys-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-label="Jump button"><path d="M6 14l6-6 6 6"/><path d="M6 19l6-6 6 6" opacity=".55"/></svg></dt><dd>Jump</dd>
               <dt><svg class="lo-keys-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-label="Scope button"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/></svg></dt><dd>Tap to aim down the scope</dd>
+              <dt><svg class="lo-keys-icon" viewBox="0 0 24 24" aria-label="Ultimate button"><path d="M12 2.5l2.3 7.2 7.2 2.3-7.2 2.3L12 21.5l-2.3-7.2-7.2-2.3 7.2-2.3z" fill="currentColor"/></svg></dt><dd>Ultimate: tap when it lights up</dd>
               <dt>🏆</dt><dd>Hold to see the scoreboard</dd>
               <dt><svg class="lo-keys-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-label="Home button"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5h4.5v-5.5h4v5.5h4.5V10"/></svg></dt><dd>Back to the menu</dd>
             </dl>
@@ -404,6 +412,10 @@
           <section>
             <h3 class="lo-help-head">Coins &amp; Skins</h3>
             <p class="lo-modal-copy">Every kill earns a coin, and daily quests pay out more. Spend coins on skins with the 🛒 button. Sign in to keep your coins and stats across devices.</p>
+          </section>
+          <section class="lo-help-wide">
+            <h3 class="lo-help-head">Ultimates</h3>
+            <p class="lo-modal-copy">Dealing damage fills your ultimate meter (kills fill it faster). When it's full, press Q. Each spell has its own: ☄️ <b>Meteor</b> (Fire) crashes down where you aim, ❄️ <b>Frost Nova</b> (Ice) freezes everyone near you, ⚡ <b>Chain Lightning</b> jumps between three enemies, 🌪️ <b>Cyclone</b> (Air) launches you up and blasts everyone away, and 🪨 <b>Stone Wall</b> (Earth) raises instant cover.</p>
           </section>
         </div>
       </div>

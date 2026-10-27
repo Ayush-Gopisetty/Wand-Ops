@@ -421,6 +421,7 @@ export class Player {
     this.groundedTimer = 0;
     // Seconds until a defeated player is back in play; while it runs they are hidden and can't be hit
     this.respawnTimer = 0;
+    this.freezeTimer = 0; // Frost Nova: can't move or cast
 
     this._buildMesh(color);
     scene.add(this.group);
@@ -448,6 +449,7 @@ export class Player {
       if (this.slowTimer > 0) this.slowTimer -= delta;
       if (this.silenceTimer > 0) this.silenceTimer -= delta;
       if (this.groundedTimer > 0) this.groundedTimer -= delta;
+      if (this.freezeTimer > 0) this.freezeTimer -= delta;
     } else {
       this.position.lerp(this.targetPosition, LERP_SPEED);
       // Turn the short way round: a raw difference across ±π (or an unwrapped yaw) spins nearly a full circle
@@ -474,6 +476,9 @@ export class Player {
       this.silenceTimer = 2;
     } else if (spell === 'earth') {
       this.groundedTimer = 3;
+    } else if (spell === 'freeze') {
+      this.freezeTimer = 1.5;
+      this.silenceTimer = Math.max(this.silenceTimer, 1.5);
     }
   }
 
@@ -506,6 +511,7 @@ export class Player {
     this.slowTimer = 0;
     this.silenceTimer = 0;
     this.groundedTimer = 0;
+    this.freezeTimer = 0;
     this._bodyMat.color.setHex(this._bodyColor);
   }
 

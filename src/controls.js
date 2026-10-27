@@ -24,11 +24,13 @@ export class Controls {
     this._dy = 0;
     this._click = false;
     this._jump  = false;
+    this._ult   = false;
 
     // Bound handlers (kept so we can remove them)
     this._onKD  = (e) => {
       this.keys[e.code] = true;
       if (e.code === 'Space') { e.preventDefault(); this._jump = true; }
+      if (e.code === 'KeyQ' && this.isLocked && !this.typing) this._ult = true;
       if (isShift(e.code) && this.isLocked && !this.typing) this.isAiming = true;
     };
     this._onKU  = (e) => {
@@ -87,11 +89,24 @@ export class Controls {
     this._jump = true;
   }
 
+  /** Queues an ultimate, as Q does. */
+  pressUlt() {
+    this._ult = true;
+  }
+
+  /** Returns true if Q (or the touch ultimate button) was pressed since last call, then resets. */
+  consumeUlt() {
+    const v = this._ult;
+    this._ult = false;
+    return v;
+  }
+
   /** Releases every held key and pending action, e.g. when focus moves to the chat box. */
   clearInput() {
     this.keys = {};
     this._click = false;
     this._jump = false;
+    this._ult = false;
     this.isAiming = false;
   }
 

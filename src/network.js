@@ -15,6 +15,7 @@ export const EV_PLAYER_NAME  = 7; // { actorNr, name }
 export const EV_PLAYER_SKIN  = 8; // { actorNr, skinId }
 export const EV_BOT_STATE    = 9; // { b: [[id, x, y, z, r, name], ...] } — sent by the bot host
 export const EV_CHAT         = 10; // { m: text }
+export const EV_ULT          = 11; // { k: spell, ... } — an ultimate was cast; damage still travels as EV_HIT
 
 // Per-sender token buckets as [refill per second, burst]. Normal play stays well under these:
 // positions and bot state tick at 13 Hz, a player fires at most every 0.5s, and the bot host
@@ -30,6 +31,7 @@ const EVENT_LIMITS = {
   [EV_PLAYER_SKIN]:  [2, 6],
   [EV_BOT_STATE]:    [30, 40],
   [EV_CHAT]:         [1.5, 4],
+  [EV_ULT]:          [0.3, 2], // the meter takes far longer than this to refill
 };
 const TOTAL_LIMIT = [100, 140]; // all event types combined, per sender
 
@@ -169,6 +171,7 @@ export class NetworkManager {
         case EV_PLAYER_SKIN:  this.callbacks.onPlayerSkin(actorNr, content); break;
         case EV_BOT_STATE:    this.callbacks.onBotState(actorNr, content); break;
         case EV_CHAT:         this.callbacks.onChat(actorNr, content); break;
+        case EV_ULT:          this.callbacks.onUlt(actorNr, content); break;
       }
     };
 
@@ -238,6 +241,11 @@ export class NetworkManager {
   sendBotState(bots) {
     if (!this.connected || !this.client) return;
     this.client.raiseEvent(EV_BOT_STATE, { b: bots });
+  }
+
+  sendUlt(data) {
+    if (!this.connected || !this.client) return;
+    this.client.raiseEvent(EV_ULT, data);
   }
 
   sendChat(text) {

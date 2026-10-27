@@ -634,5 +634,5 @@ export function createScene(canvas) {
     spawnPoints,
   };
 
-  return { scene, camera, renderer, colliders };
+  return { scene, camera, renderer, colliders, stoneMat };
 }
