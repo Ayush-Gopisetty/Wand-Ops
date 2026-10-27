@@ -2174,4 +2174,36 @@ function hexToRgba(hex, alpha) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-init();
+// Phones and tablets get a "play on a computer" screen instead of the game: there's no keyboard or
+// pointer lock to play with, and skipping init() keeps them out of multiplayer rooms where they'd stand idle
+function showDesktopOnlyScreen() {
+  injectSpeedInsights();
+  applySeasonalLogo();
+  const screen = document.getElementById('desktop-only');
+  screen.querySelector('.do-logo-slot').replaceWith(document.querySelector('#overlay .lo-logo'));
+  document.body.classList.add('touch-only');
+  screen.hidden = false;
+
+  const url = `${location.origin}/`;
+  document.getElementById('desktop-only-url').textContent = location.host;
+  const share = document.getElementById('desktop-only-share');
+  if (navigator.share) share.textContent = 'Share link';
+  share.addEventListener('click', async () => {
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'Wand Ops', text: 'Wizard duels in your browser', url });
+      } else {
+        await navigator.clipboard.writeText(url);
+        share.textContent = 'Link copied!';
+      }
+    } catch {
+      // Share sheet dismissed or clipboard blocked; the address is printed under the button anyway
+    }
+  });
+}
+
+const TOUCH_ONLY = window.matchMedia('(hover: none) and (pointer: coarse)').matches
+  && !window.matchMedia('(any-pointer: fine)').matches;
+
+if (TOUCH_ONLY) showDesktopOnlyScreen();
+else init();
