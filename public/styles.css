@@ -2201,57 +2201,6 @@ body.lobby-open #ui { visibility: hidden; }
   .lo-skin-swatch { width: 24px; height: 24px; }
 }
 
-/* ── Phones & tablets: "play on a computer" screen instead of the lobby ── */
-body.touch-only #overlay {
-  background: radial-gradient(ellipse at 50% 30%, #2a1d5c 0%, var(--surface) 70%);
-  cursor: default;
-}
-body.touch-only #overlay > .lo-nav,
-body.touch-only #overlay > .lo-body,
-body.touch-only #ui { display: none; }
-/* The screen sits after the footer in the markup; keep the footer at the bottom */
-body.touch-only #overlay > .lo-footer { order: 1; }
-#desktop-only {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px 16px;
-  overflow-y: auto;
-}
-#desktop-only[hidden] { display: none; }
-.do-card {
-  width: min(420px, 100%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 14px;
-  text-align: center;
-}
-#desktop-only h1.lo-logo { font-size: clamp(56px, 18vw, 84px); margin-bottom: 6px; }
-.do-title { font-size: 24px; font-weight: 800; color: #fff; }
-.do-text { font-size: 15px; line-height: 1.5; color: var(--on-surface-dim); }
-.do-keys { margin: 4px 0 6px; font-size: 0.85rem; }
-.do-share {
-  padding: 13px 28px;
-  border: 0;
-  border-radius: var(--radius-full);
-  background: var(--secondary-container);
-  color: #fff;
-  font-family: var(--font-display);
-  font-size: 16px;
-  font-weight: 800;
-  box-shadow: 0 6px 0 var(--secondary-dark), 0 10px 24px rgba(174,0,131,0.35);
-  cursor: pointer;
-}
-.do-share:active { transform: translateY(3px); box-shadow: 0 3px 0 var(--secondary-dark); }
-.do-url {
-  font-family: var(--font-label);
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  color: var(--outline);
-}
-
 /* ── Touch controls (in-game, touch mode only) ── */
 #touch-controls { display: none; }
 body.touch-controls #touch-controls {
@@ -2391,3 +2340,70 @@ body.touch-controls #death-screen { padding-bottom: 8vh; }
 }
 .rotate-title { font-size: 22px; font-weight: 800; color: #fff; }
 .rotate-sub { font-size: 14px; color: var(--on-surface-dim); }
+
+/* ── Phone lobby: one scrolling column (touch mode, narrow screens) ──
+   The three column wrappers dissolve (display: contents) so their cards can be reordered freely. */
+@media (max-width: 900px) {
+  body.touch-controls .lo-body {
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: 18px max(16px, env(safe-area-inset-left)) 32px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  body.touch-controls .lo-left,
+  body.touch-controls .lo-center,
+  body.touch-controls .lo-right { display: contents; }
+  body.touch-controls :is(.lo-left, .lo-center, .lo-right) > * {
+    flex: none;
+    width: min(100%, 460px);
+    min-height: 0;
+  }
+  body.touch-controls .lo-body h1.lo-logo { order: 1; width: auto; margin-top: 6px; }
+  body.touch-controls .lo-avatar-wrap { order: 2; width: auto; }
+  body.touch-controls .lo-name-field { order: 3; }
+  body.touch-controls .lo-name-field input { width: 100%; font-size: 16px; } /* 16px stops iOS zooming in on focus */
+  body.touch-controls #lo-play-card { order: 4; }
+  body.touch-controls .lo-spell-tray { order: 5; }
+  body.touch-controls .lo-weapon-stats { order: 6; }
+  body.touch-controls .lo-skin-picker { order: 7; }
+  body.touch-controls #daily-quests-card { order: 8; }
+  body.touch-controls .lo-lifetime-card { order: 9; }
+  body.touch-controls .lo-news-card { order: 10; }
+  body.touch-controls #overlay-hint { display: none; }
+  body.touch-controls .lo-avatar-oval { height: clamp(150px, 26vh, 220px); }
+  body.touch-controls .lo-nav { padding: 0 max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left)); }
+}
+
+/* Help: touch players get touch controls, and the grid stacks on narrow screens */
+.lo-keys-touch { display: none; }
+body.touch-controls .lo-keys-desktop { display: none; }
+body.touch-controls .lo-keys-touch { display: grid; }
+@media (max-width: 600px) {
+  body.touch-controls .lo-help-grid { grid-template-columns: 1fr; }
+}
+
+/* Short landscape phones: two columns so Play is on the first screen without scrolling */
+@media (max-width: 900px) and (max-height: 520px) and (orientation: landscape) {
+  body.touch-controls .lo-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    /* Rows must hold their content; the column is meant to scroll, not squash */
+    grid-auto-rows: max-content;
+    align-content: start;
+    align-items: start;
+    justify-items: center;
+    gap: 12px 20px;
+  }
+  body.touch-controls .lo-body h1.lo-logo { grid-column: 1; grid-row: 1; margin-top: 0; }
+  body.touch-controls .lo-avatar-wrap { grid-column: 1; grid-row: 2; }
+  body.touch-controls .lo-avatar-oval { height: 150px; }
+  body.touch-controls .lo-name-field { grid-column: 2; grid-row: 1; align-self: end; }
+  body.touch-controls #lo-play-card { grid-column: 2; grid-row: 2; }
+  body.touch-controls :is(.lo-skin-picker, .lo-news-card) { grid-column: 1 / -1; }
+  body.touch-controls :is(.lo-left, .lo-center, .lo-right) > * { width: 100%; }
+  body.touch-controls :is(.lo-skin-picker, .lo-news-card) { width: min(100%, 640px); }
+  body.touch-controls .lo-body h1.lo-logo,
+  body.touch-controls .lo-avatar-wrap { width: auto; }
+}
