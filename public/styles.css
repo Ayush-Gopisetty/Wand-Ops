@@ -1498,11 +1498,12 @@ body {
 .lo-avatar-oval {
   height: clamp(110px, 17vh, 260px);
   aspect-ratio: 200 / 260;
+  /* An arched window with a warm glow on the floor the wizard stands on */
   background:
-    radial-gradient(circle at 50% 24%, rgba(255,255,255,0.06), transparent 28%),
-    linear-gradient(180deg, rgba(60,58,100,0.85), rgba(26,27,52,0.95));
-  border: 2px solid rgba(151, 141, 160, 0.55);
-  border-radius: 50%;
+    radial-gradient(ellipse at 50% 92%, rgba(255,170,60,0.35), transparent 42%),
+    linear-gradient(180deg, rgba(60,58,100,0.55), rgba(26,27,52,0.85));
+  border: 2px solid rgba(174, 114, 255, 0.35);
+  border-radius: 40% 40% 18px 18px;
   display: flex;
   align-items: center;
   justify-content: center;
