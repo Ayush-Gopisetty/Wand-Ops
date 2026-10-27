@@ -3,6 +3,21 @@
 export const WIZARD_NEWS = [
   {
     tag: 'new',
+    title: 'Play on your phone',
+    body: 'Wand Ops now works on phones and tablets: a joystick under your left thumb, drag to look, and hold the 🔥 button to keep casting. Turn your phone sideways to play.',
+  },
+  {
+    tag: 'new',
+    title: 'Streaks and the kill cam',
+    body: 'Chain kills for a Double Kill, Wizard Spree or even Archmage. Go down and the kill cam swings round to show who got you before you respawn.',
+  },
+  {
+    tag: 'update',
+    title: 'A lobby with a view',
+    body: 'The menu now floats over a slow flyover of the arena, and the logo dresses up for Halloween, Christmas and Easter.',
+  },
+  {
+    tag: 'new',
     title: 'Legendary skins have arrived',
     body: 'Starweaver (Epic), Ember Lord and Phantom (Legendary) are in the skin shop, with new rarity tiers to show them off.',
   },
