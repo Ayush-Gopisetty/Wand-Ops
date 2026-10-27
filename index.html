@@ -328,22 +328,6 @@
       </div>
     </footer>
 
-    <!-- Shown instead of the lobby on phones and tablets (see the end of main.js) -->
-    <div id="desktop-only" hidden>
-      <div class="do-card">
-        <div class="do-logo-slot"></div>
-        <h2 class="do-title">Grab a computer to play</h2>
-        <p class="do-text">Wand Ops is a keyboard-and-mouse game. Open it on a laptop or desktop to duel other wizards.</p>
-        <ul class="hud-keys do-keys" aria-label="Controls">
-          <li><kbd>WASD</kbd>Move</li>
-          <li><kbd>Mouse</kbd>Aim</li>
-          <li><kbd>Click</kbd>Cast</li>
-        </ul>
-        <button class="do-share" id="desktop-only-share" type="button">Copy link</button>
-        <p class="do-url" id="desktop-only-url"></p>
-      </div>
-    </div>
-
     <div class="lo-auth-modal-backdrop" id="auth-modal-backdrop" hidden>
       <div class="lo-auth-modal" onclick="event.stopPropagation()">
         <div class="lo-auth-modal-head">
@@ -383,7 +367,7 @@
         <div class="lo-help-grid">
           <section>
             <h3 class="lo-help-head">Controls</h3>
-            <dl class="lo-keys">
+            <dl class="lo-keys lo-keys-desktop">
               <dt>W A S D</dt><dd>Move</dd>
               <dt>Mouse</dt><dd>Look around</dd>
               <dt>Left click</dt><dd>Cast your spell</dd>
@@ -392,6 +376,15 @@
               <dt>Tab</dt><dd>Hold to see the scoreboard</dd>
               <dt>Enter</dt><dd>Chat with the match</dd>
               <dt>Esc</dt><dd>Back to the menu</dd>
+            </dl>
+            <dl class="lo-keys lo-keys-touch">
+              <dt>Left thumb</dt><dd>Move: a joystick appears wherever you touch</dd>
+              <dt>Right side</dt><dd>Drag to look around</dd>
+              <dt>🔥 button</dt><dd>Hold to cast; drag it to aim at the same time</dd>
+              <dt>⤒</dt><dd>Jump</dd>
+              <dt>🎯</dt><dd>Tap to aim down the scope</dd>
+              <dt>🏆</dt><dd>Hold to see the scoreboard</dd>
+              <dt>❚❚</dt><dd>Back to the menu</dd>
             </dl>
           </section>
           <section>
