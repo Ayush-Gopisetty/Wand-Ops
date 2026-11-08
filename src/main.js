@@ -58,7 +58,7 @@ const LOBBY_CAM_SPEED = 0.06; // radians per second, about one lap every 100s
 const LOBBY_CAM_FOV = 60;
 const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
 const SETTINGS_KEY = 'wand-ops-settings';
-const DEFAULT_SETTINGS = { sensitivity: 1, fov: DEFAULT_FOV, showFps: true, volume: 0.7, muted: false };
+const DEFAULT_SETTINGS = { sensitivity: 1, fov: DEFAULT_FOV, showFps: true, volume: 0.7, muted: false, lookSensitivity: 1, buttonScale: 1 };
 const sound = new SoundManager();
 const CHAT_MAX_LEN = 120;
 const CHAT_HISTORY = 50;
@@ -759,6 +759,9 @@ function loadSettings() {
       ? clamp(Number(saved.volume), 0, 1)
       : DEFAULT_SETTINGS.volume,
     muted: Boolean(saved.muted),
+    // Touch only: drag-to-look speed and the size of the on-screen buttons
+    lookSensitivity: clamp(Number(saved.lookSensitivity) || DEFAULT_SETTINGS.lookSensitivity, 0.2, 3),
+    buttonScale: clamp(Number(saved.buttonScale) || DEFAULT_SETTINGS.buttonScale, 0.7, 1.3),
   };
 }
 
@@ -783,6 +786,15 @@ function applySettings() {
   const fovOut = document.getElementById('setting-fov-value');
   if (sensOut) sensOut.textContent = `${settings.sensitivity.toFixed(1)}×`;
   if (fovOut) fovOut.textContent = `${settings.fov}°`;
+  const look = document.getElementById('setting-look');
+  const size = document.getElementById('setting-buttons');
+  if (look) look.value = settings.lookSensitivity;
+  if (size) size.value = settings.buttonScale;
+  const lookOut = document.getElementById('setting-look-value');
+  const sizeOut = document.getElementById('setting-buttons-value');
+  if (lookOut) lookOut.textContent = `${settings.lookSensitivity.toFixed(1)}×`;
+  if (sizeOut) sizeOut.textContent = `${Math.round(settings.buttonScale * 100)}%`;
+  document.documentElement.style.setProperty('--tc-scale', settings.buttonScale);
 }
 
 // ── Lobby panels (help / settings / chat) ────────────────────────────────────
@@ -941,6 +953,14 @@ function setupTopBar() {
 
   document.getElementById('setting-sens')?.addEventListener('input', (e) => {
     settings.sensitivity = clamp(Number(e.target.value), 0.2, 3);
+    applySettings();
+  });
+  document.getElementById('setting-look')?.addEventListener('input', (e) => {
+    settings.lookSensitivity = clamp(Number(e.target.value), 0.2, 3);
+    applySettings();
+  });
+  document.getElementById('setting-buttons')?.addEventListener('input', (e) => {
+    settings.buttonScale = clamp(Number(e.target.value), 0.7, 1.3);
     applySettings();
   });
   document.getElementById('setting-fov')?.addEventListener('input', (e) => {
@@ -2040,7 +2060,7 @@ function updateLocalPlayer(delta) {
   const { dx, dy } = controls.consumeMouseDelta();
   // The kill cam owns the view; mouse movement then is dropped so you respawn facing where you were
   if (!killCam) {
-    const sens = MOUSE_SENS * settings.sensitivity;
+    const sens = MOUSE_SENS * (TOUCH_MODE ? settings.lookSensitivity : settings.sensitivity);
     cameraYaw -= dx * sens;
     cameraPitch = clamp(cameraPitch - dy * sens, PITCH_MIN, PITCH_MAX);
   }
