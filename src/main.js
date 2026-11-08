@@ -82,6 +82,11 @@ const GRAVITY = 22;
 const RESPAWN_DELAY = 3;
 // Kills this close together chain into a multi-kill
 const MULTI_KILL_WINDOW_MS = 4000;
+// Once a bot's meter is full it waits a moment before casting, so it doesn't fire the instant it fills
+const BOT_ULT_WAIT_MIN = 1.5;
+const BOT_ULT_WAIT_MAX = 4;
+// Bots fire nonstop and rarely miss up close, so their meters fill slower than a player's
+const BOT_ULT_RATE = 0.6;
 const MULTI_KILL_TITLES = ['', '', 'Double Kill', 'Triple Kill', 'Quad Kill'];
 const STREAK_TITLES = { 3: 'Wizard Spree', 5: 'Arcane Rampage', 7: 'Unstoppable Sorcery', 10: 'Archmage' };
 const BOT_IDS = [9001, 9002];
@@ -1206,7 +1211,7 @@ function addBot(id, name, simulate, position = null, skinId = DEFAULT_SKIN_ID) {
   }
   player.targetPosition.copy(player.position);
   player.group.position.copy(player.position);
-  bots.set(id, { player, ai: simulate ? new SimpleBotController(player, colliders) : null, name });
+  bots.set(id, { player, ai: simulate ? new SimpleBotController(player, colliders) : null, name, ult: 0, ultWait: 0 });
   ensureScoreEntry(id);
   playerNames.set(id, name);
   playerSkins.set(id, player.skinId);
@@ -1401,6 +1406,14 @@ function refreshUltUi() {
   touchUi?.setUlt(ultCharge);
 }
 
+// Bot host only: bots fill their meters by the same rules as players, just slower
+function chargeBotUlt(botId, amount) {
+  const bot = bots.get(botId);
+  if (!bot?.ai || bot.ult >= 1 || !(amount > 0)) return;
+  bot.ult = Math.min(1, bot.ult + amount * BOT_ULT_RATE);
+  if (bot.ult >= 1) bot.ultWait = BOT_ULT_WAIT_MIN + Math.random() * (BOT_ULT_WAIT_MAX - BOT_ULT_WAIT_MIN);
+}
+
 function addUltCharge(amount) {
   if (ultCharge >= 1 || !(amount > 0)) return;
   ultCharge = Math.min(1, ultCharge + amount);
@@ -1417,6 +1430,7 @@ function applyLocalHit(targetId, damage, spell, dir = null, fromUlt = false) {
   if (fromUlt && bots.get(targetId)?.ai) target.applySpellEffect(spell);
 
   const dead = target.takeDamage(damage);
+  chargeBotUlt(targetId, damage * ULT_CHARGE.perDamageTaken);
   ui.addDamageNumber(damage, 'dealt');
   queueLifetimeStats({ damage_dealt: damage });
   progressDailyQuests('damage_dealt', damage);
@@ -1457,13 +1471,17 @@ function handleDefeat(killerId, victimId, killerLabel, victimLabel) {
   }
 }
 
-// Runs on the bot host for hits landed by a bot's fireball
-function handleBotHit(botId, targetId, damage, spell, dir) {
+// Runs on the bot host for hits landed by a bot's fireball or ultimate
+function handleBotHit(botId, targetId, damage, spell, dir, fromUlt = false) {
   if (isBotId(targetId)) return;
-  network.sendHit(targetId, damage, spell, spell === 'air' ? dir : null, botId);
+  network.sendHit(targetId, damage, spell, spell === 'air' ? dir : null, botId, fromUlt);
+  // As with players, ultimate damage doesn't refill the meter
+  const charge = (amount) => { if (!fromUlt) chargeBotUlt(botId, amount); };
   if (targetId === localActorId) {
     if (localPlayer.isRespawning) return;
     const dead = localPlayer.takeDamage(damage);
+    charge(damage * ULT_CHARGE.perDamage);
+    if (spell === 'air' && dir) _knockbackVel.set(dir.x, 0, dir.z).normalize().multiplyScalar(30);
     sound.hurt(damage);
     ui.addDamageNumber(damage, 'taken');
     queueLifetimeStats({ damage_taken: damage });
@@ -1475,10 +1493,13 @@ function handleBotHit(botId, targetId, damage, spell, dir) {
     handleLocalDeath(botId, spell);
   } else {
     const target = remotePlayers.get(targetId);
-    if (!target || target.isRespawning || !target.takeDamage(damage)) return;
+    if (!target || target.isRespawning) return;
+    charge(damage * ULT_CHARGE.perDamage);
+    if (!target.takeDamage(damage)) return;
     target.health = 100;
     target.respawnTimer = RESPAWN_DELAY;
   }
+  charge(ULT_CHARGE.perKill);
   handleDefeat(botId, targetId, getPlayerLabel(botId), getPlayerLabel(targetId));
   network.sendKill(botId, targetId);
 }
@@ -1757,7 +1778,8 @@ function init() {
       if (!ult) return;
       lastUltAt.set(actorNr, performance.now());
       const ok = (v) => Number.isFinite(v) && Math.abs(v) < 200;
-      ui.addKillEntry(`${getPlayerLabel(actorNr)} unleashed ${ult.name}!`, 'streak');
+      const caster = isBotId(data.b) && runsBots(actorNr) ? data.b : actorNr;
+      ui.addKillEntry(`${getPlayerLabel(caster)} unleashed ${ult.name}!`, 'streak');
       if (data.k === 'lightning') {
         const pts = Array.isArray(data.p) ? data.p : [];
         if (pts.length < 2 || pts.length > ult.maxTargets + 1) return;
@@ -1894,6 +1916,7 @@ function init() {
         if (target && !target.isRespawning) {
           if (ultHit && bots.get(data.targetId)?.ai) target.applySpellEffect(effect);
           target.takeDamage(damage);
+          chargeBotUlt(data.targetId, damage * ULT_CHARGE.perDamageTaken);
           if (actorNr === localActorId) ui.addDamageNumber(damage, 'dealt');
         }
       }
@@ -2116,7 +2139,9 @@ function updateWorld(delta) {
   updateBurn(delta);
   bots.forEach((bot, id) => {
     if (!bot.ai) return;
-    const botShot = bot.ai.update(delta, getNearestHuman(bot.player.position));
+    const target = getNearestHuman(bot.player.position);
+    const botShot = bot.ai.update(delta, target);
+    if (bot.ult >= 1 && target) updateBotUlt(id, bot, target, delta);
     if (!botShot) return;
     fireballs.spawn(botShot.position, botShot.direction, id, botShot.spell);
     network.sendFireball(botShot.position, botShot.direction, botShot.spell, id);
@@ -2212,6 +2237,11 @@ function chainTargets(ult) {
   if (!best) return hits;
   hits.push(best);
   pool.delete(best.id);
+  return extendChain(hits, pool, ult);
+}
+
+// Each jump goes to the nearest enemy left in the pool that the last one can see
+function extendChain(hits, pool, ult) {
   while (hits.length < ult.maxTargets) {
     const from = hits[hits.length - 1].at;
     let next = null;
@@ -2333,6 +2363,94 @@ function castUltimate() {
   network.sendUlt(payload);
   strike();
   ui.addKillEntry(`You unleashed ${ult.name}!`, 'streak');
+}
+
+// What a bot's ultimate can hit: humans only, like its fireballs
+function botUltTargets() {
+  const targets = getCombatTargets();
+  for (const id of targets.keys()) if (isBotId(id)) targets.delete(id);
+  return targets;
+}
+
+function updateBotUlt(botId, bot, target, delta) {
+  bot.ultWait -= delta;
+  if (bot.ultWait > 0 || bot.player.silenceTimer > 0 || bot.player.freezeTimer > 0) return;
+  // Nothing suits the fight right now (out of range or out of sight): look again shortly
+  if (!castBotUltimate(botId, bot, target)) bot.ultWait = 0.5;
+}
+
+// Bot host only. Picks the ultimate that fits the fight: a blast when you're close, lightning or a
+// meteor when you're in sight further out. Bots never cast Stone Wall. Returns false if nothing fits.
+function castBotUltimate(botId, bot, target) {
+  const me = bot.player.position;
+  const eye = new THREE.Vector3(me.x, me.y + EYE_HEIGHT, me.z);
+  const chest = chestOf(target);
+  const dist = eye.distanceTo(chest);
+  const seen = lineOfSight(eye, chest);
+  const coin = Math.random() < 0.5;
+  const spell = dist <= ULTIMATES.ice.radius * 0.8 ? (coin ? 'ice' : 'air')
+    : seen && dist <= ULTIMATES.lightning.range ? (coin ? 'lightning' : 'fire')
+      : seen && dist <= ULTIMATES.fire.range ? 'fire'
+        : null;
+  if (!spell) return false;
+
+  const ult = ULTIMATES[spell];
+  const hit = (id, damage, sp, dir = null) => handleBotHit(botId, id, damage, sp, dir, true);
+  const round = (v) => +v.toFixed(2);
+  let payload;
+  let strike = () => {};
+
+  if (spell === 'fire') {
+    // Dropped where you stand: the warning ring gives you a second to get clear
+    const t = target.position;
+    const point = new THREE.Vector3(t.x, floorBelow(t.x, t.z, t.y), t.z);
+    ultFx.meteor(point, ult.delay, ult.radius, () => {
+      fireballs.burst(point.clone().setY(point.y + 0.6), 'fire');
+      sound.ultBlast();
+      for (const [id, player] of botUltTargets()) {
+        const dx = player.position.x - point.x;
+        const dz = player.position.z - point.z;
+        if (dx * dx + dz * dz <= ult.radius ** 2 && Math.abs(player.position.y - point.y) < 4) hit(id, ult.damage, 'fire');
+      }
+    });
+    payload = { k: spell, x: round(point.x), y: round(point.y), z: round(point.z) };
+  } else if (spell === 'lightning') {
+    const pool = botUltTargets();
+    pool.delete(target.id);
+    const hits = extendChain([{ id: target.id, at: chest }], pool, ult);
+    const start = eye.clone().addScaledVector(chest.clone().sub(eye).normalize(), 0.8);
+    strike = () => {
+      for (const h of hits) hit(h.id, ult.damage, 'lightning');
+    };
+    const points = [start, ...hits.map((h) => h.at)];
+    ultFx.chain(points);
+    payload = { k: spell, p: points.map((v) => [round(v.x), round(v.y), round(v.z)]) };
+  } else {
+    const center = me.clone();
+    strike = () => {
+      for (const [id, player] of botUltTargets()) {
+        if (player.position.distanceTo(center) > ult.radius) continue;
+        if (spell === 'ice') {
+          hit(id, ult.damage, 'freeze');
+          continue;
+        }
+        const away = player.position.clone().sub(center).setY(0);
+        if (away.lengthSq() < 0.01) away.set(1, 0, 0);
+        hit(id, ult.damage, 'air', away.normalize());
+      }
+    };
+    if (spell === 'ice') ultFx.nova(center, ult.radius);
+    else ultFx.cyclone(center, ult.radius);
+    payload = { k: spell, x: round(center.x), y: round(center.y), z: round(center.z) };
+  }
+
+  if (spell !== 'fire') sound.ultBlast();
+  bot.ult = 0;
+  // `b` names the bot, so other players' feeds credit it rather than the host
+  network.sendUlt({ ...payload, b: botId });
+  strike();
+  ui.addKillEntry(`${getPlayerLabel(botId)} unleashed ${ult.name}!`, 'streak');
+  return true;
 }
 
 function castFireball() {
