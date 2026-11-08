@@ -991,6 +991,9 @@ body.lobby-open #ui { visibility: hidden; }
 .lo-settings { display: flex; flex-direction: column; gap: 16px; }
 .lo-setting { display: flex; flex-direction: column; gap: 8px; cursor: pointer; }
 .lo-setting-check { flex-direction: row; align-items: center; gap: 10px; }
+/* Phones get look speed and button size instead of mouse sensitivity */
+body:not(.touch-controls) .lo-setting-touch,
+body.touch-controls .lo-setting-mouse { display: none; }
 .lo-setting-label {
   display: flex;
   justify-content: space-between;
@@ -2235,6 +2238,9 @@ body.touch-controls #scoreboard-keys { display: none; }
   backdrop-filter: blur(4px);
   touch-action: none;
 }
+/* Button size setting, for the thumb buttons only: zoom scales their offsets too, so the
+   cluster grows out from its corner. The small top buttons stay put so nothing collides. */
+.tc-cast, .tc-jump, .tc-aim, .tc-ult { zoom: var(--tc-scale, 1); }
 .tc-btn:active, .tc-btn.is-held { background: rgba(174,114,255,0.45); border-color: rgba(216,185,255,0.8); }
 .tc-cast {
   right: max(28px, env(safe-area-inset-right));
