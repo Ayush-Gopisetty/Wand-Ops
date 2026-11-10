@@ -2,12 +2,10 @@
  * Potion pickups: tuning and spawn-spot picking (pure logic, no DOM or network). The bot host decides
  * what spawns where and when; everyone else mirrors it.
  */
-import { MANA_POTION } from './mana.js';
 import { GROUND_Y, getGroundY, pointInSolid } from './collision.js';
 
 export const PICKUP_TYPES = [
-  { id: 'health', label: 'Health potion', color: 0xe5384f, heal: 40, weight: 55 },
-  { id: 'mana', label: 'Mana potion', color: 0x3d8bff, mana: MANA_POTION, weight: 45 },
+  { id: 'health', label: 'Health potion', color: 0xe5384f, heal: 40 },
 ];
 
 export const PICKUP_MIN = 2;         // the host tops the map up to this straight away
@@ -21,16 +19,6 @@ const HIGH_GROUND_CHANCE = 0.35;     // how often a potion goes on a raised plat
 const MIN_PLATFORM_Y = 2.5;          // low cover blocks are jumped onto, not climbed to
 const MIN_PLATFORM_SIZE = 3;         // narrow ledges are too fiddly to stand on
 const PLATFORM_EDGE = 0.8;           // keep this far from a platform's edge
-
-export function pickType(rand = Math.random) {
-  const total = PICKUP_TYPES.reduce((sum, t) => sum + t.weight, 0);
-  let roll = rand() * total;
-  for (let i = 0; i < PICKUP_TYPES.length; i++) {
-    roll -= PICKUP_TYPES[i].weight;
-    if (roll < 0) return i;
-  }
-  return 0;
-}
 
 // Probe the spot and a ring around it, near and far, so thin walls can't hide between the samples
 const OFFSETS = [[0, 0]];

@@ -16,15 +16,14 @@ import {
   getSkinConfig,
 } from './player.js';
 import { Controls } from './controls.js';
-import { FireballManager, SPELL_CONFIG } from './fireball.js';
+import { FireballManager, SPELL_CONFIG, castCooldown } from './fireball.js';
 import { ULTIMATES, ULT_CHARGE, ULT_MAX_DAMAGE, UltimateFx } from './ultimates.js';
 import { NetworkManager } from './network.js';
 import { UIManager, SPELL_LABELS } from './ui.js';
 import { attachTouchControls } from './touch-controls.js';
 import { SimpleBotController } from './bot.js';
 import { GAME_MODES, TEAMS, TDM_KILLS_TO_WIN, TDM_TEAM_SIZE, TDM_ROUND_BREAK_MS, smallerTeam, isTeamMode, modeGoal } from './teams.js';
-import { MANA_MAX, SPELL_CAST, castCost, castCooldown, spendMana, regenMana, addMana } from './mana.js';
-import { PICKUP_TYPES, PICKUP_MIN, PICKUP_MAX, PICKUP_INTERVAL, PICKUP_RADIUS, pickType, pickSpot } from './pickups.js';
+import { PICKUP_TYPES, PICKUP_MIN, PICKUP_MAX, PICKUP_INTERVAL, PICKUP_RADIUS, pickSpot } from './pickups.js';
 import { CONTROL_POINT, newControlPoint, stepControlPoint, controlPointStatus } from './control-point.js';
 import { SoundManager } from './audio.js';
 import { WIZARD_NEWS } from './news.js';
@@ -99,7 +98,7 @@ const BOT_IDS = [9001, 9002, 9003];
 const BOT_SPAWNS = [[0, 20], [0, -20], [20, 0]];
 const MODE_KEY = 'wand-ops-mode';
 const TEAM_SYNC_INTERVAL = 5; // seconds between the bot host's team/score refreshes
-// Control and impact are descriptive bars; damage, speed, mana cost and cooldown come from the real spell tables
+// Control and impact are descriptive bars; damage, speed and cooldown come from the real spell table
 const WEAPON_STATS = {
   fire: {
     name: 'Fire Wand',
@@ -179,9 +178,6 @@ let localMultiKills = 0;
 let localLastKillAt = 0;
 let lastHitOnMe = null; // { id, spell, at } so a burn-out can still name who lit you up
 let ultFx = null;
-let mana = MANA_MAX; // each normal spell costs some; it regenerates and potions refill it
-let wasRespawning = false;
-let lastNoManaAt = 0;
 let ultCharge = 0; // 0..1; a full meter unlocks the selected spell's ultimate (kept through deaths)
 const lastUltAt = new Map(); // actorNr -> when their last ultimate event arrived
 const playerNames = new Map();
@@ -454,7 +450,6 @@ function resetRound() {
   scores.forEach((s) => { s.kills = 0; s.deaths = 0; s.assists = 0; });
   killStreaks.clear();
   ui.showRoundBanner(null);
-  mana = MANA_MAX;
   if (localActorId >= 0) {
     localPlayer.respawn(pickSpawnPoint(localPlayer));
     _knockbackVel.set(0, 0, 0);
@@ -550,7 +545,7 @@ function updateControlPoint(delta) {
 }
 
 // ── Potion pickups ───────────────────────────────────────────────────────────
-// The bot host spawns health and mana potions at random open spots (on the ground or up on platforms and
+// The bot host spawns health potions at random open spots (on the ground or up on platforms and
 // wall tops). Whoever walks onto one asks the host to claim it; the host picks the first claim and tells
 // everyone, so two players grabbing the same potion can't both get it. Bots use them too.
 const pickups = new Map(); // id -> { id, type, x, z, y, group }; y is the standing height
@@ -678,7 +673,7 @@ function hostSpawnPickup() {
   const spot = pickSpot(colliders, [...pickups.values()]);
   if (!spot) return;
   const id = Math.max(-1, ...pickups.keys()) + 1;
-  const type = pickType();
+  const type = 0; // health is the only potion
   addPickup(id, type, spot.x, spot.z, spot.y);
   network.sendPickup({ k: 's', i: id, t: type, x: spot.x, z: spot.z, y: spot.y });
 }
@@ -710,17 +705,10 @@ function resolvePickup(id, winner, heal) {
   pendingClaims.delete(id);
   const healed = def.heal ? Math.min(heal, def.heal) : 0;
   if (winner === localActorId) {
-    if (def.heal) {
-      const gained = Math.min(healed, 100 - localPlayer.health);
-      localPlayer.health += gained;
-      ui.setHealth(localPlayer.health);
-      ui.addKillEntry(`+${Math.round(gained)} health`);
-    } else {
-      const before = mana;
-      mana = addMana(mana, def.mana);
-      ui.setMana(mana, MANA_MAX, castCost(selectedSpell));
-      ui.addKillEntry(`+${Math.round(mana - before)} mana`);
-    }
+    const gained = Math.min(healed, 100 - localPlayer.health);
+    localPlayer.health += gained;
+    ui.setHealth(localPlayer.health);
+    ui.addKillEntry(`+${Math.round(gained)} health`);
     sound.pickup(def.id);
     ui.flashPickup(`#${def.color.toString(16).padStart(6, '0')}`);
     return;
@@ -728,11 +716,10 @@ function resolvePickup(id, winner, heal) {
   // Someone else's potion: keep our copy of them in step, since kills are decided on the shooter's screen
   const other = isBotId(winner) ? bots.get(winner)?.player : remotePlayers.get(winner);
   if (!other) return;
-  if (def.heal) other.health = Math.min(100, other.health + healed); // mana is private to each player
+  other.health = Math.min(100, other.health + healed);
 }
 
-// Walking onto a potion asks the host for it. A potion that would be wasted (full health, full
-// ultimate) stays put.
+// Walking onto a potion asks the host for it. A potion that would be wasted (full health) stays put.
 function collectPickups() {
   if (!controls.isLocked || localPlayer.isRespawning || localActorId < 0) return;
   const now = performance.now();
@@ -741,13 +728,8 @@ function collectPickups() {
     if (Math.abs(localPlayer.position.y - pickup.y) > 2) continue; // on a different floor
     if (now - (pendingClaims.get(pickup.id) ?? -Infinity) < CLAIM_RETRY_MS) continue;
     const def = PICKUP_TYPES[pickup.type];
-    let heal = 0;
-    if (def.heal) {
-      heal = Math.min(def.heal, 100 - localPlayer.health);
-      if (heal <= 0) continue;
-    } else if (mana >= MANA_MAX) {
-      continue; // already full
-    }
+    const heal = Math.min(def.heal, 100 - localPlayer.health);
+    if (heal <= 0) continue;
     pendingClaims.set(pickup.id, now);
     if (isBotHost()) hostResolvePickup(pickup.id, localActorId, heal);
     else network.sendPickup({ k: 'c', i: pickup.id, h: Math.round(heal) });
@@ -761,7 +743,7 @@ function updateBotPickups() {
     const { player } = bot;
     const wants = (pickup) => {
       const def = PICKUP_TYPES[pickup.type];
-      return def.heal && player.health <= 100 - 20; // bots have unlimited mana
+      return def.heal && player.health <= 100 - 20;
     };
     let nearest = null;
     let best = BOT_PICKUP_SEEK_RANGE;
@@ -781,18 +763,6 @@ function updateBotPickups() {
       break;
     }
   });
-}
-
-// Mana trickles back, and comes back in full when you respawn (so a death never leaves you unable to fight)
-function updateMana(delta) {
-  if (localActorId < 0) return;
-  if (localPlayer.isRespawning) {
-    wasRespawning = true;
-    return;
-  }
-  if (wasRespawning) { wasRespawning = false; mana = MANA_MAX; }
-  mana = regenMana(mana, delta);
-  ui.setMana(mana, MANA_MAX, castCost(selectedSpell));
 }
 
 function updatePickups(delta) {
@@ -835,7 +805,6 @@ function clearRoomState() {
   teams.clear();
   teamScores = [0, 0];
   controlPoint = newControlPoint();
-  mana = MANA_MAX;
   clearPickups();
   clearTimeout(roundTimer);
   roundOver = false;
@@ -1726,10 +1695,7 @@ function updateWeaponStats(spell) {
   });
 
   const castEl = document.getElementById('weapon-stats-cast');
-  if (castEl) {
-    const cast = SPELL_CAST[spell] || SPELL_CAST.fire;
-    castEl.textContent = `${real.damage} damage · ${cast.cost} mana · ${cast.cooldown}s cooldown`;
-  }
+  if (castEl) castEl.textContent = `${real.damage} damage · ${real.cooldown}s cooldown`;
 }
 
 function syncSkinPicker(skinId) {
@@ -2274,13 +2240,13 @@ function init() {
       selectedSpell = btn.dataset.spell;
       document.querySelectorAll('.spell-btn').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
-      ui.setSpell(selectedSpell, castCost(selectedSpell));
+      ui.setSpell(selectedSpell);
       touchUi?.setSpellIcon(SPELL_LABELS[selectedSpell].split(' ')[0]);
       refreshUltUi();
       updateWeaponStats(selectedSpell);
     });
   });
-  ui.setSpell(selectedSpell, castCost(selectedSpell));
+  ui.setSpell(selectedSpell);
   touchUi?.setSpellIcon(SPELL_LABELS[selectedSpell].split(' ')[0]);
   refreshUltUi();
   updateWeaponStats(selectedSpell);
@@ -2793,16 +2759,8 @@ function updateLocalPlayer(delta) {
 
   shootTimer -= delta;
   if (controls.consumeClick() && shootTimer <= 0 && localPlayer.silenceTimer <= 0) {
-    const cost = castCost(selectedSpell);
-    if (mana < cost) {
-      ui.flashNoMana(cost);
-      const now = performance.now();
-      if (now - lastNoManaAt > 350) { lastNoManaAt = now; sound.noMana(); }
-    } else {
-      shootTimer = castCooldown(selectedSpell);
-      mana = spendMana(mana, cost);
-      castFireball();
-    }
+    shootTimer = castCooldown(selectedSpell);
+    castFireball();
   }
   if (controls.consumeUlt()) castUltimate();
 }
@@ -2830,7 +2788,6 @@ function updateBurn(delta) {
 }
 
 function updateWorld(delta) {
-  updateMana(delta);
   updatePickups(delta);
   updateControlPoint(delta);
   sound.updateHeartbeat(localPlayer.health, controls.isLocked);
