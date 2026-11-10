@@ -16,6 +16,11 @@ export const EV_PLAYER_SKIN  = 8; // { actorNr, skinId }
 export const EV_BOT_STATE    = 9; // { b: [[id, x, y, z, r, name], ...] } — sent by the bot host
 export const EV_CHAT         = 10; // { m: text }
 export const EV_ULT          = 11; // { k: spell, ... } — an ultimate was cast; damage still travels as EV_HIT
+export const EV_TEAMS        = 12; // { t: [[id, team], ...], s: [blue, red] } — team deathmatch, sent by the bot host
+export const EV_ROUND        = 13; // { w: team } — a team reached the kill target, sent by the bot host
+
+// Dev builds can use a private copy of each room (?room=name) so testing never lands in a live match
+const ROOM_SUFFIX = import.meta.env.DEV ? new URLSearchParams(location.search).get('room') : null;
 
 // Per-sender token buckets as [refill per second, burst]. Normal play stays well under these:
 // positions and bot state tick at 13 Hz, a player fires at most every 0.5s, and the bot host
@@ -32,12 +37,15 @@ const EVENT_LIMITS = {
   [EV_BOT_STATE]:    [30, 40],
   [EV_CHAT]:         [1.5, 4],
   [EV_ULT]:          [0.3, 2], // the meter takes far longer than this to refill
+  [EV_TEAMS]:        [2, 6],
+  [EV_ROUND]:        [0.2, 2],
 };
 const TOTAL_LIMIT = [100, 140]; // all event types combined, per sender
 
 export class NetworkManager {
-  constructor(callbacks) {
+  constructor(callbacks, roomName) {
     this.callbacks       = callbacks;
+    this.roomName        = ROOM_SUFFIX ? `${roomName}-${ROOM_SUFFIX}` : roomName;
     this.client          = null;
     this.localActorNr    = -1;
     this.connected       = false;
@@ -120,8 +128,8 @@ export class NetworkManager {
         this._joinRoom();
       } else if (isJoinedLobby && this._joiningRoom && !this.connected) {
         // createRoom failed (room already exists) — join it instead
-        console.log('[Network] Room exists — joining WizardArena…');
-        this.client.joinRoom('WizardArena');
+        console.log(`[Network] Room exists — joining ${this.roomName}…`);
+        this.client.joinRoom(this.roomName);
       }
     };
 
@@ -147,19 +155,21 @@ export class NetworkManager {
     };
 
     this.client.onActorJoin = (actor) => {
+      if (!this.connected) return;
       if (actor.actorNr !== this.localActorNr) {
         this.callbacks.onPlayerJoin(actor.actorNr);
       }
     };
 
     this.client.onActorLeave = (actor) => {
+      if (!this.connected) return;
       this._forgetActor(actor.actorNr);
       this.callbacks.onPlayerLeave(actor.actorNr);
     };
 
     // ── Custom events ─────────────────────────────────────────────────────
     this.client.onEvent = (code, content, actorNr) => {
-      if (!this._allowEvent(actorNr, code, content)) return;
+      if (!this.connected || !this._allowEvent(actorNr, code, content)) return;
       switch (code) {
         case EV_POSITION: this.callbacks.onPosition(actorNr, content); break;
         case EV_FIREBALL: this.callbacks.onFireball(actorNr, content); break;
@@ -172,6 +182,8 @@ export class NetworkManager {
         case EV_BOT_STATE:    this.callbacks.onBotState(actorNr, content); break;
         case EV_CHAT:         this.callbacks.onChat(actorNr, content); break;
         case EV_ULT:          this.callbacks.onUlt(actorNr, content); break;
+        case EV_TEAMS:        this.callbacks.onTeams(actorNr, content); break;
+        case EV_ROUND:        this.callbacks.onRoundEnd(actorNr, content); break;
       }
     };
 
@@ -195,15 +207,35 @@ export class NetworkManager {
       if (!retried) {
         retried = true;
         // createRoom failed (room already exists) — join it instead
-        this.client.joinRoom('WizardArena');
+        this.client.joinRoom(this.roomName);
       } else {
         this.callbacks.onConnectionFailed(`Room unavailable (${code})`);
       }
     };
 
     // Always try createRoom first; if room already exists onJoinRoomFailed → joinRoom
-    console.log('[Network] Creating/joining room WizardArena…');
-    this.client.createRoom('WizardArena', { maxPlayers: 8 });
+    console.log(`[Network] Creating/joining room ${this.roomName}…`);
+    this.client.createRoom(this.roomName, { maxPlayers: 8 });
+  }
+
+  /** Leaves the current room for another (a different game mode); onConnected fires again once inside. */
+  switchRoom(roomName) {
+    this.roomName = ROOM_SUFFIX ? `${roomName}-${ROOM_SUFFIX}` : roomName;
+    if (!this.connected) return; // still connecting: the join picks up the new name
+    this.connected = false;
+    this._buckets.clear();
+    this._warned.clear();
+    if (!this.client) {
+      // Offline: there's no room to leave, so just start over
+      setTimeout(() => {
+        this.connected = true;
+        this.callbacks.onConnected(this.localActorNr);
+      }, 0);
+      return;
+    }
+    // Back on the master server, onStateChange joins the new room
+    this._joiningRoom = false;
+    this.client.leaveRoom();
   }
 
   // ── Public send helpers ─────────────────────────────────────────────────────
@@ -247,6 +279,16 @@ export class NetworkManager {
   sendUlt(data) {
     if (!this.connected || !this.client) return;
     this.client.raiseEvent(EV_ULT, data);
+  }
+
+  sendTeams(teams, scores) {
+    if (!this.connected || !this.client) return;
+    this.client.raiseEvent(EV_TEAMS, { t: teams, s: scores });
+  }
+
+  sendRoundEnd(winner) {
+    if (!this.connected || !this.client) return;
+    this.client.raiseEvent(EV_ROUND, { w: winner });
   }
 
   sendChat(text) {

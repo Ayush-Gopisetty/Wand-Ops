@@ -322,6 +322,81 @@ body {
 .kill-entry-streak { border-left-color: #f5b83d; color: #ffe7a8; }
 
 /* ── Multi-kill / streak callout ── */
+/* ── Team deathmatch: score bar and round banner ── */
+#team-score {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(12, 8, 24, 0.62);
+  border: 1px solid rgba(255,255,255,0.14);
+  backdrop-filter: blur(6px);
+  font-family: var(--font-label);
+  pointer-events: none;
+}
+#team-score[hidden] { display: none; }
+.ts-team { display: flex; align-items: center; gap: 8px; font-weight: 800; }
+.ts-name { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.85; }
+.ts-value { font-size: 24px; min-width: 1.4em; text-align: center; font-variant-numeric: tabular-nums; }
+.ts-blue { color: #6ea8ff; }
+.ts-red { color: #ff7482; }
+/* Your side gets a "YOU" chip */
+.ts-team.is-mine .ts-name::after {
+  content: 'You';
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  color: #120b24;
+  font-size: 10px;
+}
+.ts-blue.is-mine .ts-name::after { background: #6ea8ff; }
+.ts-red.is-mine .ts-name::after { background: #ff7482; }
+.ts-red.is-mine .ts-name::after { margin: 0 6px 0 0; }
+.ts-red.is-mine .ts-name { display: flex; flex-direction: row-reverse; }
+.ts-goal {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.55);
+  white-space: nowrap;
+}
+#round-banner {
+  position: absolute;
+  top: 28%;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  pointer-events: none;
+  animation: roundPop 0.5s ease-out;
+}
+#round-banner[hidden] { display: none; }
+@keyframes roundPop {
+  from { opacity: 0; transform: translateX(-50%) scale(1.4); }
+  to   { opacity: 1; transform: translateX(-50%) scale(1); }
+}
+.round-title {
+  font-family: 'Luckiest Guy', var(--font-display);
+  font-size: clamp(34px, 5vw, 60px);
+  letter-spacing: 0.04em;
+  -webkit-text-stroke: 2px #0b0718;
+  paint-order: stroke fill;
+}
+#round-banner[data-team="0"] .round-title { color: #6ea8ff; }
+#round-banner[data-team="1"] .round-title { color: #ff7482; }
+.round-sub {
+  margin-top: 6px;
+  font-family: var(--font-label);
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.7);
+}
+
 #streak-callout {
   position: absolute;
   top: 24%;
@@ -708,6 +783,9 @@ body {
   color: rgba(255,255,255,0.85);
 }
 #scoreboard-table tr.local-row td { color: #c084fc; font-weight: 700; }
+#scoreboard-table tr.team-row-0 td:nth-child(2) { box-shadow: inset 4px 0 0 #3d8bff; }
+#scoreboard-table tr.team-row-1 td:nth-child(2) { box-shadow: inset 4px 0 0 #ff4d5e; }
+#scoreboard-table tr.team-row-0 + tr.team-row-1 td { border-top: 2px solid rgba(255,255,255,0.25); }
 #scoreboard-table td:first-child  { color: rgba(255,255,255,0.35); font-size: 0.8rem; }
 /* ── Controls key chips (scoreboard strip + start-of-match card) ── */
 .hud-keys {
@@ -1270,6 +1348,35 @@ body.touch-controls .lo-setting-mouse { display: none; }
   .lo-logo-orb, .lo-logo-star { animation: none; }
 }
 
+
+/* ── Game mode switch (under Play; grouped so phones keep them together) ── */
+.lo-play-group { display: flex; flex-direction: column; gap: 12px; }
+.lo-mode-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--radius-md);
+  background: rgba(12, 8, 24, 0.55);
+  border: 1px solid var(--outline-variant);
+}
+.lo-mode-btn {
+  padding: 9px 6px;
+  border: none;
+  border-radius: calc(var(--radius-md) - 4px);
+  background: transparent;
+  color: rgba(255,255,255,0.65);
+  font-family: var(--font-label);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.lo-mode-btn:hover { color: #fff; background: rgba(255,255,255,0.06); }
+.lo-mode-btn.is-active { background: var(--secondary-container); color: #fff; box-shadow: 0 3px 0 var(--secondary-dark); }
+.lo-mode-btn:focus-visible { outline: 2px solid #d8b9ff; outline-offset: 2px; }
 
 /* ── Play card ── */
 .lo-play-card {
@@ -2373,7 +2480,7 @@ body.touch-controls #death-screen { padding-bottom: 8vh; }
   body.touch-controls .lo-avatar-wrap { order: 2; width: auto; }
   body.touch-controls .lo-name-field { order: 3; }
   body.touch-controls .lo-name-field input { width: 100%; font-size: 16px; } /* 16px stops iOS zooming in on focus */
-  body.touch-controls #lo-play-card { order: 4; }
+  body.touch-controls .lo-play-group { order: 4; }
   body.touch-controls .lo-spell-tray { order: 5; }
   body.touch-controls .lo-weapon-stats { order: 6; }
   body.touch-controls .lo-skin-picker { order: 7; }
@@ -2409,13 +2516,22 @@ body.touch-controls .lo-keys-touch { display: grid; }
   body.touch-controls .lo-avatar-wrap { grid-column: 1; grid-row: 2; }
   body.touch-controls .lo-avatar-oval { height: 150px; }
   body.touch-controls .lo-name-field { grid-column: 2; grid-row: 1; align-self: end; }
-  body.touch-controls #lo-play-card { grid-column: 2; grid-row: 2; }
+  body.touch-controls .lo-play-group { grid-column: 2; grid-row: 2; gap: 8px; }
+  /* A slimmer Play card so the mode switch under it still fits on the first screen */
+  body.touch-controls #lo-play-card { padding: 12px 16px 10px; }
+  body.touch-controls .lo-play-label { font-size: 44px; }
+  body.touch-controls .lo-mode-btn { padding: 7px 6px; }
   body.touch-controls :is(.lo-skin-picker, .lo-news-card) { grid-column: 1 / -1; }
   body.touch-controls :is(.lo-left, .lo-center, .lo-right) > * { width: 100%; }
   body.touch-controls :is(.lo-skin-picker, .lo-news-card) { width: min(100%, 640px); }
   body.touch-controls .lo-body h1.lo-logo,
   body.touch-controls .lo-avatar-wrap { width: auto; }
 }
+
+/* Touch: the team bar sits under the home button and pushes chat down */
+body.touch-controls #team-score { top: 64px; padding: 3px 10px; gap: 8px; }
+body.touch-controls .ts-value { font-size: 18px; }
+body.touch-controls.mode-tdm #hud-chat { top: 100px; }
 
 /* ── Ultimate meter ── */
 #ult-meter {
