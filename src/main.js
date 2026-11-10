@@ -486,7 +486,7 @@ function setGameMode(mode) {
   try { localStorage.setItem(MODE_KEY, mode); } catch { /* private mode: just don't remember it */ }
   renderModeToggle();
   clearRoomState();
-  network.switchRoom(GAME_MODES[mode].room);
+  network.switchRoom(GAME_MODES[mode].room, GAME_MODES[mode].maxPlayers);
 }
 
 function renderModeToggle() {
@@ -2160,7 +2160,7 @@ function init() {
       if (gameMode !== 'tdm' || !runsBots(sender) || (w !== 0 && w !== 1)) return;
       startRoundBreak(w);
     },
-  }, GAME_MODES[gameMode].room);
+  }, GAME_MODES[gameMode].room, GAME_MODES[gameMode].maxPlayers);
 
   network.connect();
 

@@ -2,9 +2,13 @@
  * Game modes and team deathmatch tuning. Each mode has its own Photon room; in team deathmatch the
  * bot host assigns teams and keeps the score, everyone else mirrors it.
  */
+export const TDM_TEAM_MAX = 4; // 4v4 at most
+
+// `maxPlayers` is the room's human cap. Newcomers join the smaller team, so a team deathmatch room
+// of 8 can never go past 4 on a side.
 export const GAME_MODES = {
-  ffa: { room: 'WizardArena', label: 'Free for all', card: 'Quick match: Arena' },
-  tdm: { room: 'WizardArena-TDM', label: 'Team deathmatch', card: 'Team deathmatch: Arena' },
+  ffa: { room: 'WizardArena', maxPlayers: 8, label: 'Free for all', card: 'Quick match: Arena' },
+  tdm: { room: 'WizardArena-TDM', maxPlayers: TDM_TEAM_MAX * 2, label: 'Team deathmatch', card: 'Team deathmatch: Arena' },
 };
 
 export const TEAMS = [

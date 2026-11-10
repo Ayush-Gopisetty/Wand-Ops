@@ -40,9 +40,10 @@ const EVENT_LIMITS = {
 const TOTAL_LIMIT = [100, 140]; // all event types combined, per sender
 
 export class NetworkManager {
-  constructor(callbacks, roomName) {
+  constructor(callbacks, roomName, maxPlayers = 8) {
     this.callbacks       = callbacks;
     this.roomName        = roomName;
+    this.maxPlayers      = maxPlayers;
     this.client          = null;
     this.localActorNr    = -1;
     this.connected       = false;
@@ -212,12 +213,13 @@ export class NetworkManager {
 
     // Always try createRoom first; if room already exists onJoinRoomFailed → joinRoom
     console.log(`[Network] Creating/joining room ${this.roomName}…`);
-    this.client.createRoom(this.roomName, { maxPlayers: 8 });
+    this.client.createRoom(this.roomName, { maxPlayers: this.maxPlayers });
   }
 
   /** Leaves the current room for another (a different game mode); onConnected fires again once inside. */
-  switchRoom(roomName) {
+  switchRoom(roomName, maxPlayers = 8) {
     this.roomName = roomName;
+    this.maxPlayers = maxPlayers;
     if (!this.connected) return; // still connecting: the join picks up the new name
     this.connected = false;
     this._buckets.clear();
