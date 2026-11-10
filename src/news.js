@@ -3,6 +3,21 @@
 export const WIZARD_NEWS = [
   {
     tag: 'new',
+    title: 'Team deathmatch',
+    body: 'Pick Team deathmatch under Play to fight as Blue or Red, up to 4v4. No friendly fire, bots fill any empty spots, and the first team to 20 kills wins the round.',
+  },
+  {
+    tag: 'update',
+    title: 'Bots unleash ultimates',
+    body: 'Bots now charge their own meters and fight back with Frost Nova, Cyclone, Chain Lightning and Meteor. Watch for the warning ring under your feet!',
+  },
+  {
+    tag: 'update',
+    title: 'Phone controls, your way',
+    body: 'On your phone, ⚙️ Settings now has Look sensitivity and Button size, so you can tune the drag speed and make the buttons bigger or smaller.',
+  },
+  {
+    tag: 'new',
     title: 'Ultimates are here',
     body: 'Deal damage to fill your ultimate meter, then press Q (or tap ✦ on your phone). Every spell has its own: Meteor, Frost Nova, Chain Lightning, Cyclone and Stone Wall.',
   },
