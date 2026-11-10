@@ -182,19 +182,10 @@ export class SoundManager {
     this._tone('sine', 196, 0.18, 0.55, 0.2, 98);
   }
 
-  /** Dull click when you try to cast without enough mana. */
-  noMana() {
-    if (!this._ready) return;
-    this._tone('square', 170, 0, 0.12, 0.16, 105);
-  }
-
   // ── Potions ────────────────────────────────────────────────────────────────
   pickup(type = 'health') {
     if (!this._ready) return;
-    if (type === 'mana') {
-      // Sparkle: three quick rising chimes
-      [880, 1175, 1760].forEach((f, i) => this._tone('triangle', f, i * 0.06, 0.28, 0.22));
-    } else {
+    {
       // Warm two-note rise
       this._tone('sine', 523, 0, 0.22, 0.3, 560);
       this._tone('sine', 784, 0.1, 0.34, 0.3, 800);

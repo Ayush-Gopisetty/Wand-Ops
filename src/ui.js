@@ -15,11 +15,6 @@ export class UIManager {
   constructor() {
     this._bar = document.getElementById('health-bar');
     this._healthText = document.getElementById('health-text');
-    this._manaTrack = document.getElementById('mana-track');
-    this._manaBar = document.getElementById('mana-bar');
-    this._manaText = document.getElementById('mana-text');
-    this._manaShown = '';
-    this._manaWarning = document.getElementById('mana-warning');
     this._pickupFlash = document.getElementById('pickup-flash');
     this._playerCnt = document.getElementById('player-count');
     this._kdaTracker = document.getElementById('kda-tracker');
@@ -68,32 +63,6 @@ export class UIManager {
     }, 900);
   }
 
-  /** Mana bar: `cost` is what one spell takes, so the bar dims when you can't cast. */
-  setMana(mana, max, cost) {
-    if (!this._manaBar) return;
-    const rounded = Math.floor(mana);
-    const key = `${rounded}:${cost}`; // the low-mana dimming depends on the selected spell's cost
-    if (key === this._manaShown) return;
-    this._manaShown = key;
-    this._manaBar.style.width = `${Math.max(0, Math.min(100, (mana / max) * 100))}%`;
-    this._manaText.textContent = `${rounded} MP`;
-    this._manaTrack.classList.toggle('is-low', mana < cost);
-  }
-
-  /** Brief red flash on the mana bar when a cast fails for lack of mana. */
-  flashNoMana(need = 0) {
-    if (!this._manaTrack) return;
-    this._manaTrack.classList.remove('is-empty');
-    void this._manaTrack.offsetWidth; // restart the animation
-    this._manaTrack.classList.add('is-empty');
-    if (this._manaWarning) {
-      this._manaWarning.textContent = need ? `Not enough mana (needs ${need})` : 'Not enough mana';
-      this._manaWarning.classList.remove('is-showing');
-      void this._manaWarning.offsetWidth;
-      this._manaWarning.classList.add('is-showing');
-    }
-  }
-
   /** Quick screen tint when you use a potion; `color` is a CSS colour. */
   flashPickup(color) {
     if (!this._pickupFlash) return;
@@ -126,10 +95,9 @@ export class UIManager {
     document.body.classList.toggle('lobby-open', visible);
   }
 
-  /** `cost` (mana per cast) is shown next to the spell's name. */
-  setSpell(spell, cost = null) {
+  setSpell(spell) {
     const label = SPELL_LABELS[spell] || spell;
-    this._spellIndicator.textContent = cost ? `${label} · ${cost} MP` : label;
+    this._spellIndicator.textContent = label;
     this._spellIndicator.dataset.spell = spell;
   }
 

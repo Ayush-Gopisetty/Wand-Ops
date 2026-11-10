@@ -12,15 +12,19 @@ const PARTICLE_COUNT = 1500;
 const FLASH_COUNT    = 8;
 const IMPACT_SPARKS  = 22;
 
-// Damage per hit and projectile speed; mana cost and cooldown are in mana.js. Slow earth bolts keep the
-// same range as the others (they live longer), so a slow shot is easier to dodge, not shorter.
+// Damage per hit, seconds between casts and projectile speed. Damage per second stays in a similar band,
+// so the wands differ in feel rather than raw power: lightning is rapid, earth is a slow, heavy hitter.
+// Slow earth bolts keep the same range as the others (they live longer), so a slow shot is easier to
+// dodge, not shorter.
 export const SPELL_CONFIG = {
-  fire:      { damage: 15, speed: 22 },
-  ice:       { damage: 20, speed: 22 },
-  lightning: { damage: 12, speed: 30 },
-  air:       { damage: 16, speed: 22 },
-  earth:     { damage: 36, speed: 15 },
+  fire:      { damage: 15, cooldown: 0.5,  speed: 22 },
+  ice:       { damage: 20, cooldown: 0.6,  speed: 22 },
+  lightning: { damage: 12, cooldown: 0.35, speed: 30 },
+  air:       { damage: 16, cooldown: 0.45, speed: 22 },
+  earth:     { damage: 36, cooldown: 1.0,  speed: 15 },
 };
+
+export const castCooldown = (spell) => (SPELL_CONFIG[spell] ?? SPELL_CONFIG.fire).cooldown;
 
 // Per-spell look: glow colour/size, trail colours, trail rate and how the trail particles move
 const SPELL_VFX = {

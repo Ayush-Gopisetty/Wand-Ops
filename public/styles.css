@@ -2698,71 +2698,7 @@ body.touch-controls .ult-label kbd { display: none; }
   animation: ultPulse 0.9s ease-in-out infinite alternate;
 }
 
-/* ── Mana bar (under the health bar) ── */
-#mana-track {
-  position: relative;
-  width: 220px;
-  height: 11px;
-  background: rgba(0,0,0,0.55);
-  border: 1px solid rgba(255,255,255,0.18);
-  border-radius: 6px;
-  overflow: hidden;
-}
-#mana-bar {
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, #2f6fe0, #5aa9ff);
-  border-radius: 6px;
-  transition: width 0.12s linear;
-  box-shadow: 0 0 8px rgba(90,169,255,0.5);
-}
-#mana-track.is-low #mana-bar { background: linear-gradient(90deg, #5a4f9a, #7d74c4); box-shadow: none; }
-#mana-text {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-shadow: 0 1px 2px #000;
-  pointer-events: none;
-}
-#mana-track.is-empty { animation: manaEmpty 0.35s ease-out; }
-@keyframes manaEmpty {
-  0%   { box-shadow: 0 0 0 2px rgba(255,80,80,0.95); transform: translateX(-3px); }
-  50%  { transform: translateX(3px); }
-  100% { box-shadow: 0 0 0 0 rgba(255,80,80,0); transform: translateX(0); }
-}
-body.touch-controls #mana-track { width: 180px; }
-
-/* ── Out-of-mana warning, pickup flash, mode rule, wand cost line ── */
-#mana-warning {
-  position: absolute;
-  left: 50%;
-  top: calc(50% + 48px);
-  transform: translateX(-50%);
-  padding: 4px 12px;
-  border-radius: 999px;
-  background: rgba(20, 8, 24, 0.7);
-  border: 1px solid rgba(120, 170, 255, 0.55);
-  color: #bcd6ff;
-  font-family: var(--font-label);
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-}
-#mana-warning.is-showing { animation: manaWarn 1.1s ease-out; }
-@keyframes manaWarn {
-  0%   { opacity: 0; transform: translate(-50%, 6px); }
-  12%  { opacity: 1; transform: translate(-50%, 0); }
-  70%  { opacity: 1; }
-  100% { opacity: 0; transform: translate(-50%, -6px); }
-}
+/* ── Pickup flash, mode rule, wand stats line ── */
 #pickup-flash {
   position: absolute;
   inset: 0;
@@ -2788,8 +2724,5 @@ body.touch-controls #mana-track { width: 180px; }
   color: rgba(255,255,255,0.6);
 }
 @media (prefers-reduced-motion: reduce) {
-  #mana-warning.is-showing { animation-name: manaWarnFade; }
   #pickup-flash.is-showing { animation-duration: 0.3s; }
 }
-@keyframes manaWarnFade { 0%, 70% { opacity: 1; } 100% { opacity: 0; } }
-body.touch-controls #mana-warning { top: calc(50% + 30px); font-size: 12px; }
