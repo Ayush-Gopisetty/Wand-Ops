@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { getGroundY, moveWithCollisions, pointInSolid } from './collision.js';
+import { PICKUP_RADIUS } from './pickups.js';
 
 const BOT_MOVE_SPEED = 5.8;
 const BOT_STRAFE_SPEED = 0.9;
@@ -13,6 +14,16 @@ const BOT_CLIMB_SPEED = 6;
 const BOT_HEAD_AIM = 0.7;
 // Shot still blocked this long at close range: stop strafing in place and step around the cover
 const BOT_BLOCKED_REPOSITION = 0.75;
+// Walking to a potion: aim well inside the pickup radius so the bot actually lands on it
+const BOT_SEEK_STOP = PICKUP_RADIUS * 0.4;
+// Holding the control point (anchor = { x, z, radius }): when idle, settle near the middle; when
+// fighting, head back once this close to the ring's edge, so strafing never carries the bot out of it
+const BOT_ANCHOR_IDLE_FRACTION = 0.55; // clear of the fountain basin in the middle
+const BOT_ANCHOR_FIGHT_MARGIN = 2;
+// Only break off a fight for a potion when the enemy is at least this far away
+const BOT_SEEK_FIGHT_DIST = 7;
+const BOT_DETOUR_SECONDS = 0.9;
+const BOT_WAYPOINT_STOP = 0.8;
 
 const _toTarget = new THREE.Vector3();
 const _forward = new THREE.Vector3();
@@ -21,6 +32,8 @@ const _move = new THREE.Vector3();
 const _probe = new THREE.Vector3();
 const _stepDelta = new THREE.Vector3();
 const _aim = new THREE.Vector3();
+const _goal = new THREE.Vector3();
+const _intended = new THREE.Vector3();
 
 // Samples the shot path against the same solids fireballs collide with
 function hasLineOfSight(from, to, colliders) {
@@ -28,6 +41,20 @@ function hasLineOfSight(from, to, colliders) {
   const steps = Math.ceil(from.distanceTo(to) / 0.4);
   for (let i = 1; i < steps; i++) {
     if (pointInSolid(_probe.lerpVectors(from, to, i / steps), colliders)) return false;
+  }
+  return true;
+}
+
+/**
+ * True when a bot could walk straight from `from` to (x, z) on its own floor: nothing solid on the way
+ * at body height. Used to skip potions behind walls, which a bot would only walk into.
+ */
+export function hasClearWalk(from, x, z, colliders) {
+  if (!colliders) return true;
+  const steps = Math.ceil(Math.hypot(x - from.x, z - from.z) / 0.5);
+  for (let i = 1; i <= steps; i++) {
+    const t = i / steps;
+    if (pointInSolid(_probe.set(from.x + (x - from.x) * t, from.y, from.z + (z - from.z) * t), colliders)) return false;
   }
   return true;
 }
@@ -43,27 +70,70 @@ export class SimpleBotController {
     this._windowTime = 0;
     this._detourTimer = 0;
     this._detourDir = 1;
+    this._detourAxis = new THREE.Vector3(0, 0, -1); // the direction the detour steps around
     this._blocked = false;
     this._blockedFor = 0;
     this.anchor = null;
+    this.anchorVia = null; // a waypoint (e.g. a gate) on the way to the anchor, when it can't walk straight there
     this.seek = null;
     // Height the bot is really standing at; its visible y eases up toward this, so stairs are judged against it
     this._supportY = player.position.y;
   }
 
-  // Idle movement toward a point ({x, z}): the potion a bot is after, else the control point
-  _walkTo(point, stopDistance, delta) {
-    if (this.player.freezeTimer > 0) return;
-    const ax = point.x - this.player.position.x;
-    const az = point.z - this.player.position.z;
-    const ad = Math.hypot(ax, az);
-    if (ad > stopDistance) {
-      _move.set(ax / ad, 0, az / ad);
-      this.player.rotation = Math.atan2(-_move.x, -_move.z);
-      _stepDelta.copy(_move).multiplyScalar(BOT_MOVE_SPEED * delta);
-      moveWithCollisions(this.player.position, _stepDelta, this.colliders, Math.max(this.player.position.y, this._supportY));
+  /**
+   * Sets _goal to the unit direction toward `point` and returns true, or returns false once the bot is
+   * within `stop` of it.
+   */
+  _towards(point, stop) {
+    const dx = point.x - this.player.position.x;
+    const dz = point.z - this.player.position.z;
+    const d = Math.hypot(dx, dz);
+    if (d <= stop) return false;
+    _goal.set(dx / d, 0, dz / d);
+    return true;
+  }
+
+  // Sets _goal toward the control point (through its waypoint first), or returns false once there
+  _towardsAnchor(fighting) {
+    if (this.anchorVia) return this._towards(this.anchorVia, BOT_WAYPOINT_STOP);
+    const r = this.anchor.radius;
+    return this._towards(this.anchor, fighting ? r - BOT_ANCHOR_FIGHT_MARGIN : r * BOT_ANCHOR_IDLE_FRACTION);
+  }
+
+  _startDetour(axis) {
+    this._detourTimer = BOT_DETOUR_SECONDS;
+    this._detourDir = Math.random() > 0.5 ? 1 : -1;
+    this._detourAxis.copy(axis).setY(0).normalize();
+  }
+
+  /**
+   * Walks one step along _move. While a detour runs, steps sideways around the detour axis instead.
+   * Progress is judged over a short window (collision push-out makes a pinned bot jitter in place), and
+   * a stall starts a detour around the direction the bot was trying to go.
+   */
+  _moveAlong(delta) {
+    _intended.copy(_move).normalize();
+    if (this._detourTimer > 0) {
+      this._detourTimer -= delta;
+      const a = this._detourAxis;
+      _move.set(-a.z, 0, a.x).multiplyScalar(this._detourDir).addScaledVector(a, 0.35);
     }
-    this._settleHeight(delta);
+    _move.normalize();
+    _stepDelta.copy(_move).multiplyScalar(BOT_MOVE_SPEED * delta);
+    moveWithCollisions(this.player.position, _stepDelta, this.colliders, Math.max(this.player.position.y, this._supportY));
+
+    this._windowTime += delta;
+    if (this._windowTime >= 0.5) {
+      const net = Math.hypot(this.player.position.x - this._windowStart.x, this.player.position.z - this._windowStart.z);
+      if (this._detourTimer <= 0 && net < BOT_MOVE_SPEED * this._windowTime * 0.25) this._startDetour(_intended);
+      this._windowStart.copy(this.player.position);
+      this._windowTime = 0;
+    }
+  }
+
+  _resetProgressWindow() {
+    this._windowStart.copy(this.player.position);
+    this._windowTime = 0;
   }
 
   _settleHeight(delta) {
@@ -76,8 +146,17 @@ export class SimpleBotController {
   update(delta, target) {
     // `seek` is a potion the bot wants; `anchor` is the control point it holds (both are {x, z} or null)
     if (!target) {
-      if (this.seek) this._walkTo(this.seek, 0.6, delta);
-      else if (this.anchor) this._walkTo(this.anchor, 3, delta);
+      const going = this.player.freezeTimer <= 0 && (this.seek
+        ? this._towards(this.seek, BOT_SEEK_STOP)
+        : this.anchor && this._towardsAnchor(false));
+      if (going) {
+        _move.copy(_goal);
+        this._moveAlong(delta);
+        this.player.rotation = Math.atan2(-_move.x, -_move.z);
+      } else {
+        this._resetProgressWindow(); // standing still on purpose is not a stall
+      }
+      this._settleHeight(delta);
       return null;
     }
 
@@ -109,51 +188,25 @@ export class SimpleBotController {
     if (this._blocked && dist <= BOT_DESIRED_MIN_DIST + 1) {
       this._blockedFor += delta;
       if (this._blockedFor > BOT_BLOCKED_REPOSITION && this._detourTimer <= 0) {
-        this._detourTimer = 0.9;
-        this._detourDir = Math.random() > 0.5 ? 1 : -1;
+        this._startDetour(_forward); // step around the cover between us and the enemy
         this._blockedFor = 0;
       }
     } else {
       this._blockedFor = 0;
     }
 
-    // Stay near the control point: when drifting too far out, head back (the bot still shoots on the way)
-    if (this.seek && dist > 7) {
-      const sx = this.seek.x - this.player.position.x;
-      const sz = this.seek.z - this.player.position.z;
-      const sd = Math.hypot(sx, sz);
-      if (sd > 0.6) _move.set(sx / sd, 0, sz / sd);
+    // A potion (when the enemy isn't close) or the control point overrides the fighting footwork:
+    // the bot walks there and still shoots on the way. On the point it fights freely until it nears the edge.
+    if (this.seek && dist > BOT_SEEK_FIGHT_DIST) {
+      if (this._towards(this.seek, BOT_SEEK_STOP)) _move.copy(_goal);
     } else if (this.anchor) {
-      const ax = this.anchor.x - this.player.position.x;
-      const az = this.anchor.z - this.player.position.z;
-      const ad = Math.hypot(ax, az);
-      if (ad > 9) _move.set(ax / ad, 0, az / ad);
+      if (this._towardsAnchor(true)) _move.copy(_goal);
     }
 
     // Frozen by a Frost Nova: no walking (the bot still turns to face you and settles on the floor)
     if (this.player.freezeTimer > 0) _move.set(0, 0, 0);
-    if (_move.lengthSq() > 0.0001) {
-      if (this._detourTimer > 0) {
-        this._detourTimer -= delta;
-        _move.set(-_forward.z, 0, _forward.x).multiplyScalar(this._detourDir).addScaledVector(_forward, 0.35);
-      }
-      _move.normalize();
-      _stepDelta.copy(_move).multiplyScalar(BOT_MOVE_SPEED * delta);
-      moveWithCollisions(this.player.position, _stepDelta, this.colliders, Math.max(this.player.position.y, this._supportY));
-
-      // Pinned against cover: collision push-out makes the bot jitter in place, so judge
-      // progress over a short window and sidestep around the obstacle when it stalls
-      this._windowTime += delta;
-      if (this._windowTime >= 0.5) {
-        const net = Math.hypot(this.player.position.x - this._windowStart.x, this.player.position.z - this._windowStart.z);
-        if (this._detourTimer <= 0 && net < BOT_MOVE_SPEED * this._windowTime * 0.25) {
-          this._detourTimer = 0.9;
-          this._detourDir = Math.random() > 0.5 ? 1 : -1;
-        }
-        this._windowStart.copy(this.player.position);
-        this._windowTime = 0;
-      }
-    }
+    if (_move.lengthSq() > 0.0001) this._moveAlong(delta);
+    else this._resetProgressWindow();
 
     this._settleHeight(delta);
 

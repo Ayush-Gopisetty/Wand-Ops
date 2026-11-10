@@ -21,10 +21,10 @@ import { ULTIMATES, ULT_CHARGE, ULT_MAX_DAMAGE, UltimateFx } from './ultimates.j
 import { NetworkManager } from './network.js';
 import { UIManager, SPELL_LABELS } from './ui.js';
 import { attachTouchControls } from './touch-controls.js';
-import { SimpleBotController } from './bot.js';
+import { SimpleBotController, hasClearWalk } from './bot.js';
 import { GAME_MODES, TEAMS, TDM_KILLS_TO_WIN, TDM_TEAM_SIZE, TDM_ROUND_BREAK_MS, smallerTeam, isTeamMode, modeGoal } from './teams.js';
 import { PICKUP_TYPES, PICKUP_MIN, PICKUP_MAX, PICKUP_INTERVAL, PICKUP_RADIUS, pickSpot } from './pickups.js';
-import { CONTROL_POINT, newControlPoint, stepControlPoint, controlPointStatus } from './control-point.js';
+import { CONTROL_POINT, controlPointWaypoint, newControlPoint, stepControlPoint, controlPointStatus } from './control-point.js';
 import { SoundManager } from './audio.js';
 import { WIZARD_NEWS } from './news.js';
 import { applySeasonalLogo } from './season.js';
@@ -91,6 +91,8 @@ const BOT_ULT_WAIT_MAX = 4;
 // Bots fire nonstop and rarely miss up close, so their meters fill slower than a player's
 const BOT_ULT_RATE = 0.6;
 const BOT_PICKUP_SEEK_RANGE = 24; // bots only go for potions this close
+const BOT_PICKUP_CP_HEALTH = 50;   // on the control point, bots only leave it for a potion when this hurt
+const BOT_PICKUP_THINK = 0.25;     // seconds between each bot's potion choices (path checks aren't free)
 const MULTI_KILL_TITLES = ['', '', 'Double Kill', 'Triple Kill', 'Quad Kill'];
 const STREAK_TITLES = { 3: 'Wizard Spree', 5: 'Arcane Rampage', 7: 'Unstoppable Sorcery', 10: 'Archmage' };
 // Free-for-all uses up to two bots; team deathmatch can need a third (1 human vs 2 bots, plus a teammate)
@@ -486,9 +488,13 @@ function createControlPointVisual() {
   return { group, mats: [ring.material, disc.material, beam.material] };
 }
 
+const _cpColor = new THREE.Color();
+const _cpTeamColors = TEAMS.map((t) => new THREE.Color(t.color));
+const _cpMarker = { ...CONTROL_POINT, color: '#ffffff' };
+let _cpMarkerControl = NaN;
+
 function controlPointColor() {
-  const team = TEAMS[controlPoint.control < 0 ? 0 : 1];
-  return new THREE.Color(0xffffff).lerp(new THREE.Color(team.color), Math.abs(controlPoint.control));
+  return _cpColor.set(0xffffff).lerp(_cpTeamColors[controlPoint.control < 0 ? 0 : 1], Math.abs(controlPoint.control));
 }
 
 function controlPointActive() {
@@ -507,17 +513,28 @@ function updateControlPointVisual() {
 }
 
 function getControlPointMarker() {
-  return controlPointActive() ? { ...CONTROL_POINT, color: `#${controlPointColor().getHexString()}` } : null;
+  if (!controlPointActive()) return null;
+  if (controlPoint.control !== _cpMarkerControl) {
+    _cpMarkerControl = controlPoint.control;
+    _cpMarker.color = `#${controlPointColor().getHexString()}`;
+  }
+  return _cpMarker;
 }
+
+const onPoint = (player) => !player.isRespawning
+  && Math.hypot(player.position.x - CONTROL_POINT.x, player.position.z - CONTROL_POINT.z) < CONTROL_POINT.radius;
 
 // Bot host: count who is standing on the point, move the bar, score, and tell everyone four times a second
 function stepControlPointHost(delta) {
   const inside = [0, 0];
-  getCombatTargets().forEach((player, id) => {
+  const count = (id, player) => {
     const team = teams.get(id);
-    if (team === undefined || player.isRespawning) return;
-    if (Math.hypot(player.position.x - CONTROL_POINT.x, player.position.z - CONTROL_POINT.z) < CONTROL_POINT.radius) inside[team]++;
-  });
+    if (team !== undefined && onPoint(player)) inside[team]++;
+  };
+  // The host only counts while actually playing: paused in a menu, bots ignore them, so the point must too
+  if (controls.isLocked) count(localActorId, localPlayer);
+  remotePlayers.forEach((player, id) => count(id, player));
+  bots.forEach((bot, id) => count(id, bot.player));
   stepControlPoint(controlPoint, delta, inside[0], inside[1]);
   const goal = modeGoal('cp');
   teamScores = controlPoint.points.map((v) => Math.min(goal, Math.floor(v)));
@@ -551,6 +568,9 @@ function updateControlPoint(delta) {
 const pickups = new Map(); // id -> { id, type, x, z, y, group }; y is the standing height
 let pickupTimer = 0;
 let pickupGeo = null;
+let nextPickupId = 0;
+let pickupMarkers = null; // minimap markers, rebuilt only when the potions change
+const PICKUP_CSS = PICKUP_TYPES.map((t) => `#${t.color.toString(16).padStart(6, '0')}`);
 
 function getPickupAssets() {
   if (pickupGeo) return pickupGeo;
@@ -603,6 +623,8 @@ function addPickup(id, typeIndex, x, z, y = GROUND_Y) {
   group.position.set(x, y - GROUND_Y, z); // the visual floor sits GROUND_Y below standing height
   scene.add(group);
   pickups.set(id, { id, type: typeIndex, x, z, y, group });
+  pickupMarkers = null;
+  nextPickupId = Math.max(nextPickupId, id + 1); // if we become host later, never reuse an id we've seen
 }
 
 // A ring and a column of light that spread out and fade where a potion was used, for everyone to see
@@ -649,6 +671,7 @@ function removePickup(id) {
   if (!pickup) return;
   scene.remove(pickup.group); // geometries and materials are shared, so nothing to dispose
   pickups.delete(id);
+  pickupMarkers = null;
 }
 
 function clearPickups() {
@@ -659,7 +682,8 @@ function clearPickups() {
 }
 
 function getPickupMarkers() {
-  return [...pickups.values()].map((p) => ({ x: p.x, z: p.z, color: `#${PICKUP_TYPES[p.type].color.toString(16).padStart(6, '0')}` }));
+  pickupMarkers ??= [...pickups.values()].map((p) => ({ x: p.x, z: p.z, color: PICKUP_CSS[p.type] }));
+  return pickupMarkers;
 }
 
 function isValidPickup(id, type, x, z, y) {
@@ -672,7 +696,7 @@ function isValidPickup(id, type, x, z, y) {
 function hostSpawnPickup() {
   const spot = pickSpot(colliders, [...pickups.values()]);
   if (!spot) return;
-  const id = Math.max(-1, ...pickups.keys()) + 1;
+  const id = nextPickupId; // addPickup moves the counter on
   const type = 0; // health is the only potion
   addPickup(id, type, spot.x, spot.z, spot.y);
   network.sendPickup({ k: 's', i: id, t: type, x: spot.x, z: spot.z, y: spot.y });
@@ -689,8 +713,9 @@ const CLAIM_RETRY_MS = 1000;
 // Bot host: hand the potion to `winner` (a player or bot id) and tell everyone. `heal` is how much
 // health the winner can actually use, as worked out on their own screen.
 function hostResolvePickup(id, winner, heal) {
-  if (!pickups.has(id)) return; // someone else got there first
-  const amount = Math.max(0, Math.min(40, Math.round(Number(heal) || 0)));
+  const pickup = pickups.get(id);
+  if (!pickup) return; // someone else got there first
+  const amount = Math.max(0, Math.min(PICKUP_TYPES[pickup.type].heal, Math.round(Number(heal) || 0)));
   network.sendPickup({ k: 't', i: id, w: winner, h: amount });
   resolvePickup(id, winner, amount);
 }
@@ -710,7 +735,7 @@ function resolvePickup(id, winner, heal) {
     ui.setHealth(localPlayer.health);
     ui.addKillEntry(`+${Math.round(gained)} health`);
     sound.pickup(def.id);
-    ui.flashPickup(`#${def.color.toString(16).padStart(6, '0')}`);
+    ui.flashPickup(PICKUP_CSS[pickup.type]);
     return;
   }
   // Someone else's potion: keep our copy of them in step, since kills are decided on the shooter's screen
@@ -736,23 +761,37 @@ function collectPickups() {
   }
 }
 
-// Bot host: bots on the ground-floor head for a potion they could use, and take any they walk over
-function updateBotPickups() {
+// Bot host: bots head for a ground-floor potion they could use and can walk straight to, and take any
+// they walk over. Holding the control point comes first unless the bot is badly hurt.
+let botPickupThink = 0;
+
+function chooseBotPotion(player) {
+  if (player.isRespawning) return null;
+  const holdingPoint = gameMode === 'cp' && !roundOver;
+  if (holdingPoint && player.health > BOT_PICKUP_CP_HEALTH) return null;
+  const candidates = [];
+  for (const pickup of pickups.values()) {
+    const def = PICKUP_TYPES[pickup.type];
+    // Worth it once the bot is missing at least half of what the potion restores; bots don't climb for them
+    if (pickup.y !== GROUND_Y || 100 - player.health < def.heal / 2) continue;
+    const d = Math.hypot(player.position.x - pickup.x, player.position.z - pickup.z);
+    if (d < BOT_PICKUP_SEEK_RANGE) candidates.push([d, pickup]);
+  }
+  candidates.sort((a, b) => a[0] - b[0]);
+  for (const [, pickup] of candidates) {
+    if (hasClearWalk(player.position, pickup.x, pickup.z, colliders)) return pickup;
+  }
+  return null;
+}
+
+function updateBotPickups(delta) {
+  botPickupThink -= delta;
+  const think = botPickupThink <= 0;
+  if (think) botPickupThink = BOT_PICKUP_THINK;
   bots.forEach((bot, id) => {
     if (!bot.ai) return;
     const { player } = bot;
-    const wants = (pickup) => {
-      const def = PICKUP_TYPES[pickup.type];
-      return def.heal && player.health <= 100 - 20;
-    };
-    let nearest = null;
-    let best = BOT_PICKUP_SEEK_RANGE;
-    for (const pickup of pickups.values()) {
-      if (pickup.y !== GROUND_Y || !wants(pickup)) continue; // bots don't climb for them
-      const d = Math.hypot(player.position.x - pickup.x, player.position.z - pickup.z);
-      if (d < best) { best = d; nearest = pickup; }
-    }
-    bot.ai.seek = nearest && !player.isRespawning ? nearest : null;
+    if (think || (bot.ai.seek && !pickups.has(bot.ai.seek.id))) bot.ai.seek = chooseBotPotion(player);
     if (player.isRespawning) return;
     for (const pickup of pickups.values()) {
       if (Math.hypot(player.position.x - pickup.x, player.position.z - pickup.z) > PICKUP_RADIUS) continue;
@@ -788,7 +827,7 @@ function updatePickups(delta) {
     p.group.userData.bottle.rotation.y = t * 1.5;
   });
   collectPickups();
-  if (isBotHost()) updateBotPickups();
+  if (isBotHost()) updateBotPickups(delta);
 }
 
 // Leaving a room: drop everyone in it, the bots and all match state; onConnected starts over
@@ -2542,7 +2581,8 @@ function init() {
         const pickup = pickups.get(data.i);
         const claimant = remotePlayers.get(sender);
         if (!pickup || !claimant || claimant.isRespawning) return;
-        const near = Math.hypot(claimant.position.x - pickup.x, claimant.position.z - pickup.z) <= PICKUP_RADIUS + 4;
+        const near = Math.hypot(claimant.position.x - pickup.x, claimant.position.z - pickup.z) <= PICKUP_RADIUS + 4
+          && Math.abs(claimant.position.y - pickup.y) <= 3;
         if (near) hostResolvePickup(pickup.id, sender, data.h);
       } else if (data.k === 't' && runsBots(sender) && !isBotHost()) {
         const winner = Number(data.w);
@@ -2796,6 +2836,7 @@ function updateWorld(delta) {
     if (!bot.ai) return;
     const target = getBotTarget(id, bot.player.position);
     bot.ai.anchor = gameMode === 'cp' && !roundOver ? CONTROL_POINT : null;
+    bot.ai.anchorVia = bot.ai.anchor ? controlPointWaypoint(bot.player.position.x, bot.player.position.z) : null;
     const botShot = bot.ai.update(delta, target);
     if (bot.ult >= 1 && target) updateBotUlt(id, bot, target, delta);
     if (!botShot) return;

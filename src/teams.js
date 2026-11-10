@@ -15,7 +15,7 @@ export const GAME_MODES = {
   tdm: { room: 'WizardArena-TDM', maxPlayers: TDM_TEAM_MAX * 2, label: 'Team deathmatch', card: 'Team deathmatch: Arena',
     rule: `Blue vs Red, no friendly fire. First team to ${TDM_KILLS_TO_WIN} kills wins the round.` },
   cp: { room: 'WizardArena-CP', maxPlayers: TDM_TEAM_MAX * 2, label: 'Control point', card: 'Control point: Arena',
-    rule: `Hold the courtyard ring to score a point a second. First team to ${CP_POINTS_TO_WIN} wins.` },
+    rule: `Capture the courtyard ring, then stand in it to score a point a second. First team to ${CP_POINTS_TO_WIN} wins.` },
 };
 
 /** Modes with two teams (and bots topping them up). */
