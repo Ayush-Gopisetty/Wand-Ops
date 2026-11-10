@@ -1640,9 +1640,12 @@ function applyLocalHit(targetId, damage, spell, dir = null, fromUlt = false) {
   if (!fromUlt) addUltCharge(damage * ULT_CHARGE.perDamage);
   if (!dead) {
     sound.hitConfirm(spell === 'freeze' ? 'ice' : spell);
+    ui.showHitMarker();
     return;
   }
   sound.kill();
+  ui.showHitMarker(true);
+  ui.showKillConfirm(getPlayerLabel(targetId));
   if (!fromUlt) addUltCharge(ULT_CHARGE.perKill);
 
   // Only the simulating client moves a respawned body; mirrored copies just reset health
@@ -1976,6 +1979,8 @@ function init() {
       // Only a burn-out reports a kill on our behalf; our other kills are counted when they land
       if (killerId === localActorId) {
         sound.kill();
+        ui.showHitMarker(true);
+        ui.showKillConfirm(getPlayerLabel(victimId));
         addUltCharge(ULT_CHARGE.perKill);
         const victim = remotePlayers.get(victimId);
         if (victim) victim.health = 100;

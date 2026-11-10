@@ -68,6 +68,93 @@ body {
 #crosshair::before { width: 18px; height: 2px; top: 8px; left: 0; }
 #crosshair::after  { width: 2px; height: 18px; top: 0; left: 8px; }
 
+/* ── Hit marker: an ✕ around the crosshair on every hit; bigger and red on a kill ── */
+#hit-marker {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 34px;
+  height: 34px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  opacity: 0;
+  z-index: 6; /* above the scope overlay, so it shows while aiming too */
+}
+/* Four ticks pointing in at the centre, leaving the crosshair clear */
+#hit-marker i {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 10px;
+  height: 2.5px;
+  margin: -1.25px 0 0 -5px;
+  border-radius: 2px;
+  background: #fff;
+  box-shadow: 0 0 3px rgba(0,0,0,0.6);
+}
+#hit-marker i:nth-child(1) { transform: rotate(45deg) translateX(-11px); }
+#hit-marker i:nth-child(2) { transform: rotate(135deg) translateX(-11px); }
+#hit-marker i:nth-child(3) { transform: rotate(225deg) translateX(-11px); }
+#hit-marker i:nth-child(4) { transform: rotate(315deg) translateX(-11px); }
+#hit-marker.is-hit { animation: hitMarker 0.18s ease-out; }
+#hit-marker.is-kill { animation: hitMarkerKill 0.4s ease-out; }
+#hit-marker.is-kill i { background: #ff3b4e; width: 13px; margin-left: -6.5px; }
+@keyframes hitMarker {
+  0%   { opacity: 1; transform: translate(-50%, -50%) scale(1.25); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes hitMarkerKill {
+  0%   { opacity: 1; transform: translate(-50%, -50%) scale(1.7); }
+  35%  { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.15); }
+}
+
+/* ── Kill confirm: a short "Eliminated <name>" pop under the crosshair ── */
+#kill-confirm {
+  position: absolute;
+  top: 58%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 6;
+}
+#kill-confirm.is-showing { animation: killConfirm 1.4s ease-out forwards; }
+.kc-skull { font-size: 22px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.6)); }
+.kc-label {
+  font-family: 'Luckiest Guy', var(--font-display);
+  font-size: 22px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #ff4d5e;
+  -webkit-text-stroke: 1.5px #2a0610;
+  paint-order: stroke fill;
+}
+.kc-name {
+  font-family: var(--font-label);
+  font-size: 15px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.8);
+}
+@keyframes killConfirm {
+  0%   { opacity: 0; transform: translateX(-50%) scale(1.5); }
+  10%  { opacity: 1; transform: translateX(-50%) scale(0.95); }
+  18%  { transform: translateX(-50%) scale(1); }
+  75%  { opacity: 1; transform: translateX(-50%) scale(1); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-8px) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #hit-marker.is-hit, #hit-marker.is-kill { animation-name: hitMarkerFade; }
+  #kill-confirm.is-showing { animation-name: killConfirmFade; }
+}
+@keyframes hitMarkerFade { from { opacity: 1; } to { opacity: 0; } }
+@keyframes killConfirmFade { 0%, 75% { opacity: 1; } 100% { opacity: 0; } }
+
 #minimap-wrap {
   position: absolute;
   top: 14px;
