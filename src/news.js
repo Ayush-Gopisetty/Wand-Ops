@@ -3,6 +3,26 @@
 export const WIZARD_NEWS = [
   {
     tag: 'new',
+    title: 'Control point',
+    body: 'A third mode under Play: capture the glowing ring in the courtyard, then keep a wizard in it with no rivals inside to score a point a second. First team to 100 wins.',
+  },
+  {
+    tag: 'new',
+    title: 'Health potions',
+    body: 'Red potions now appear around the castle, on the ground and up on walls and towers. Walk over one to heal 40 HP. They show on your minimap, and bots will grab them too.',
+  },
+  {
+    tag: 'new',
+    title: 'A soundtrack for the castle',
+    body: 'Matches now have medieval music with lute, flute and drums. Turn it up or down with the Music slider in ⚙️ Settings.',
+  },
+  {
+    tag: 'update',
+    title: 'Every wand feels different',
+    body: 'Each wand now has its own damage, cooldown and bolt speed. Lightning fires fast, earth hits hard but slow, and fire, air and ice sit in between. Check the weapon stats panel in the lobby.',
+  },
+  {
+    tag: 'new',
     title: 'Hits you can feel',
     body: 'Land a spell and an ✕ flashes on your crosshair. Finish someone off and it turns red, with a 💀 ELIMINATED pop and a heavier kill sound.',
   },
