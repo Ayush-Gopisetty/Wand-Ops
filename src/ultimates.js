@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { fitStoneUVs } from './scene.js';
 
 /**
  * Ultimate abilities: one per spell, unlocked by filling the ultimate meter.
@@ -188,7 +189,9 @@ export class UltimateFx {
     const up = floorY + height / 2;
     const rise = 0.25 / duration;
     const sink = 1 - 0.4 / duration;
-    slab.position.set(x, up - height, z);
+    slab.position.set(x, up, z);
+    fitStoneUVs(slab); // bricks matched to the castle's, measured where the wall will stand
+    slab.position.y = up - height;
     let phase = 'rising';
     this._add(slab, duration, (t) => {
       const k = t < rise ? t / rise : t > sink ? 1 - (t - sink) / (1 - sink) : 1;

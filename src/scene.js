@@ -2,6 +2,41 @@ import * as THREE from 'three';
 
 const ARENA = 55;
 
+// World units covered by one repeat of the stone texture (about 7 bricks across, 11 rows up)
+const STONE_TILE = 4;
+const _uvPos = new THREE.Vector3();
+const _uvNormal = new THREE.Vector3();
+const _uvNormalMatrix = new THREE.Matrix3();
+
+/**
+ * Re-maps a stone mesh's UVs to world size, so bricks look the same on a 110-unit wall and a
+ * 1-unit stair step. Default box UVs stretch the whole texture over every face, whatever its size,
+ * which smears thin faces like the sides of steps. Box faces are projected from the world, so
+ * stacked steps line up; cylinder sides keep their wrap and are scaled by circumference and height.
+ * Call once the mesh is in its final position.
+ */
+export function fitStoneUVs(mesh) {
+  const geo = mesh.geometry;
+  const { position, normal, uv } = geo.attributes;
+  mesh.updateMatrixWorld(true);
+  _uvNormalMatrix.getNormalMatrix(mesh.matrixWorld);
+  const cyl = geo.type === 'CylinderGeometry' ? geo.parameters : null;
+  const around = cyl ? (Math.PI * (cyl.radiusTop + cyl.radiusBottom)) / STONE_TILE : 0;
+  for (let i = 0; i < position.count; i++) {
+    _uvNormal.fromBufferAttribute(normal, i).applyMatrix3(_uvNormalMatrix).normalize();
+    if (cyl && Math.abs(_uvNormal.y) < 0.7) {
+      uv.setXY(i, uv.getX(i) * around, uv.getY(i) * (cyl.height / STONE_TILE));
+      continue;
+    }
+    _uvPos.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld).divideScalar(STONE_TILE);
+    const ax = Math.abs(_uvNormal.x), ay = Math.abs(_uvNormal.y), az = Math.abs(_uvNormal.z);
+    if (ay >= ax && ay >= az) uv.setXY(i, _uvPos.x, _uvPos.z);
+    else if (ax >= az) uv.setXY(i, _uvPos.z, _uvPos.y);
+    else uv.setXY(i, _uvPos.x, _uvPos.y);
+  }
+  uv.needsUpdate = true;
+}
+
 export function createScene(canvas) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x87ceeb);
@@ -183,7 +218,8 @@ export function createScene(canvas) {
 
     const tex = new THREE.CanvasTexture(cv);
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(6, 1);
+    // Tiling comes from fitStoneUVs, in world units
+    tex.anisotropy = 4;
     return tex;
   }
 
@@ -633,6 +669,9 @@ export function createScene(canvas) {
     boxes:     [...elevBoxes, ...ringWallBoxes, ...coverBoxes, ...parapetBoxes],
     spawnPoints,
   };
+
+  // Every stone piece gets world-scale bricks
+  scene.traverse((o) => { if (o.isMesh && o.material === stoneMat) fitStoneUVs(o); });
 
   return { scene, camera, renderer, colliders, stoneMat };
 }
