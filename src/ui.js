@@ -30,6 +30,8 @@ export class UIManager {
     this._death = document.getElementById('death-screen');
     this._deathSeconds = this._death?.querySelector('.death-seconds');
     this._killCamMarker = document.getElementById('killcam-marker');
+    this._teamScore = document.getElementById('team-score');
+    this._roundBanner = document.getElementById('round-banner');
     this._ult = document.getElementById('ult-meter');
     this._ultFill = this._ult?.querySelector('.ult-fill');
     this._ultName = this._ult?.querySelector('.ult-name');
@@ -106,14 +108,17 @@ export class UIManager {
     this._scoreboard.style.display = 'none';
   }
 
-  updateScoreboard(scores, localActorId, getPlayerLabel = null) {
-    const rows = [...scores.entries()].sort((a, b) => b[1].kills - a[1].kills);
+  /** `teamOf(id)` (team deathmatch) groups the rows by team and colours them. */
+  updateScoreboard(scores, localActorId, getPlayerLabel = null, teamOf = null) {
+    const team = (id) => teamOf?.(id) ?? 2;
+    const rows = [...scores.entries()].sort((a, b) => team(a[0]) - team(b[0]) || b[1].kills - a[1].kills);
 
     this._scoreBody.innerHTML = '';
     rows.forEach(([id, s], i) => {
       const tr = document.createElement('tr');
       const isLocal = id === localActorId;
       if (isLocal) tr.classList.add('local-row');
+      if (teamOf && team(id) < 2) tr.classList.add(`team-row-${team(id)}`);
       const label = getPlayerLabel ? getPlayerLabel(id, isLocal) : (isLocal ? '⚔ You' : 'Wizard ' + id);
       for (const value of [i + 1, label, s.kills, s.deaths]) {
         const td = document.createElement('td');
@@ -122,6 +127,28 @@ export class UIManager {
       }
       this._scoreBody.appendChild(tr);
     });
+  }
+
+  /** Team deathmatch score bar: `{ scores: [blue, red], mine, goal }`, or null to hide it. */
+  setTeamScore(info) {
+    if (!this._teamScore) return;
+    this._teamScore.hidden = !info;
+    if (!info) return;
+    this._teamScore.querySelectorAll('.ts-team').forEach((el, t) => {
+      el.querySelector('.ts-value').textContent = info.scores[t];
+      el.classList.toggle('is-mine', info.mine === t);
+    });
+    this._teamScore.querySelector('.ts-goal').textContent = `First to ${info.goal}`;
+  }
+
+  /** End-of-round banner; `team` is 0 or 1 for the colour. Pass null to hide it. */
+  showRoundBanner(title, sub = '', team = null) {
+    if (!this._roundBanner) return;
+    this._roundBanner.hidden = title === null;
+    if (title === null) return;
+    this._roundBanner.dataset.team = team ?? '';
+    this._roundBanner.querySelector('.round-title').textContent = title;
+    this._roundBanner.querySelector('.round-sub').textContent = sub;
   }
 
   addKillEntry(msg, variant = '') {

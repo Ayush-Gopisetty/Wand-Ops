@@ -22,6 +22,7 @@ import { NetworkManager } from './network.js';
 import { UIManager, SPELL_LABELS } from './ui.js';
 import { attachTouchControls } from './touch-controls.js';
 import { SimpleBotController } from './bot.js';
+import { GAME_MODES, TEAMS, TDM_KILLS_TO_WIN, TDM_TEAM_SIZE, TDM_ROUND_BREAK_MS, smallerTeam } from './teams.js';
 import { SoundManager } from './audio.js';
 import { WIZARD_NEWS } from './news.js';
 import { applySeasonalLogo } from './season.js';
@@ -89,8 +90,11 @@ const BOT_ULT_WAIT_MAX = 4;
 const BOT_ULT_RATE = 0.6;
 const MULTI_KILL_TITLES = ['', '', 'Double Kill', 'Triple Kill', 'Quad Kill'];
 const STREAK_TITLES = { 3: 'Wizard Spree', 5: 'Arcane Rampage', 7: 'Unstoppable Sorcery', 10: 'Archmage' };
-const BOT_IDS = [9001, 9002];
-const BOT_SPAWNS = [[0, 20], [0, -20]];
+// Free-for-all uses up to two bots; team deathmatch can need a third (1 human vs 2 bots, plus a teammate)
+const BOT_IDS = [9001, 9002, 9003];
+const BOT_SPAWNS = [[0, 20], [0, -20], [20, 0]];
+const MODE_KEY = 'wand-ops-mode';
+const TEAM_SYNC_INTERVAL = 5; // seconds between the bot host's team/score refreshes
 const WEAPON_STATS = {
   fire: {
     name: 'Fire Wand',
@@ -144,6 +148,12 @@ let firstPersonWand;
 let previewScene, previewCamera, previewRenderer, previewModel;
 const remotePlayers = new Map();
 const bots = new Map(); // id -> { player, ai, name }; ai is set only on the bot host
+let gameMode = loadGameMode(); // 'ffa' | 'tdm'; each mode is its own room
+const teams = new Map(); // team deathmatch: id -> 0 (Blue) | 1 (Red), assigned by the bot host
+let teamScores = [0, 0];
+let teamSyncTimer = 0;
+let roundOver = false; // a team has won; the next round starts after the banner
+let roundTimer = null;
 const BOT_GAMER_TAGS = [
   'xX_HexLord_Xx', 'NoScopeMerlin', 'FrostByte', 'Gandalf_Main', 'spellsl1nger',
   'ManaBurnt', 'xXArcaneXx', 'CritWizard99', 'pyro_kid07', 'LagWizard',
@@ -336,7 +346,160 @@ function updateLocalKDA() {
 }
 
 function refreshScoreboard() {
-  ui.updateScoreboard(scores, localActorId, getPlayerLabel);
+  ui.updateScoreboard(scores, localActorId, getPlayerLabel, gameMode === 'tdm' ? (id) => teams.get(id) : null);
+}
+
+function loadGameMode() {
+  try { return localStorage.getItem(MODE_KEY) === 'tdm' ? 'tdm' : 'ffa'; } catch { return 'ffa'; }
+}
+
+// Whether `a` can hurt `b`: anyone else in free-for-all, the other team in team deathmatch
+function isEnemy(a, b) {
+  if (a === b) return false;
+  if (gameMode !== 'tdm') return true;
+  const ta = teams.get(a);
+  const tb = teams.get(b);
+  // Someone whose team hasn't arrived yet counts as an enemy rather than being untouchable
+  return ta === undefined || tb === undefined || ta !== tb;
+}
+
+function updateTeamHud() {
+  ui.setTeamScore(gameMode === 'tdm' ? { scores: teamScores, mine: teams.get(localActorId), goal: TDM_KILLS_TO_WIN } : null);
+}
+
+// Name tags and foot rings in team colours (nothing in free-for-all)
+function applyTeamVisuals() {
+  const colorOf = (id) => (gameMode === 'tdm' && teams.has(id) ? TEAMS[teams.get(id)].color : null);
+  remotePlayers.forEach((player, id) => player.setTeam(colorOf(id)));
+  bots.forEach((bot, id) => bot.player.setTeam(colorOf(id)));
+}
+
+// Bot host: humans without a team join the smaller side, then bots top each team up to TDM_TEAM_SIZE
+function fillTeamsWithBots() {
+  const humans = [localActorId, ...remotePlayers.keys()].sort((a, b) => a - b);
+  for (const id of humans) if (!teams.has(id)) teams.set(id, smallerTeam(teams, humans));
+  const humanCount = [0, 0];
+  humans.forEach((id) => humanCount[teams.get(id)]++);
+  const want = humanCount.map((n) => Math.max(0, TDM_TEAM_SIZE - n));
+  const kept = [0, 0];
+  for (const id of [...bots.keys()]) {
+    const team = teams.get(id);
+    if (team !== undefined && kept[team] < want[team]) {
+      kept[team]++;
+    } else {
+      removeBot(id);
+      teams.delete(id);
+    }
+  }
+  for (const team of [0, 1]) {
+    for (; kept[team] < want[team]; kept[team]++) {
+      const id = BOT_IDS.find((b) => !bots.has(b));
+      if (id === undefined) break;
+      teams.set(id, team);
+      addBot(id, pickBotGamerTag(), true, null, pickBotSkin());
+      const { player } = bots.get(id);
+      player.respawn(pickSpawnPoint(player));
+    }
+  }
+  for (const id of [...teams.keys()]) if (!humans.includes(id) && !bots.has(id)) teams.delete(id);
+  applyTeamVisuals();
+  refreshScoreboard();
+  updateTeamHud();
+}
+
+function sendTeams() {
+  if (gameMode === 'tdm' && isBotHost()) network.sendTeams([...teams], teamScores);
+}
+
+// Team deathmatch: a kill scores for the killer's team, and the bot host calls the round at the target
+function scoreTeamKill(killerId, victimId) {
+  if (gameMode !== 'tdm' || roundOver) return;
+  const team = teams.get(killerId);
+  if (team === undefined || team === teams.get(victimId)) return;
+  teamScores[team]++;
+  updateTeamHud();
+  if (teamScores[team] >= TDM_KILLS_TO_WIN && isBotHost()) {
+    network.sendRoundEnd(team);
+    startRoundBreak(team);
+  }
+}
+
+function startRoundBreak(winner) {
+  if (roundOver) return;
+  roundOver = true;
+  teamScores[winner] = Math.max(teamScores[winner], TDM_KILLS_TO_WIN);
+  updateTeamHud();
+  const mine = teams.get(localActorId);
+  const sub = mine === undefined ? 'Next round starting…' : mine === winner ? 'Victory! Next round starting…' : 'Defeat. Next round starting…';
+  ui.showRoundBanner(`${TEAMS[winner].name} team wins!`, sub, winner);
+  sound.streak(mine === winner ? 3 : 1);
+  clearTimeout(roundTimer);
+  roundTimer = setTimeout(resetRound, TDM_ROUND_BREAK_MS);
+}
+
+// Fresh round: scores back to zero and everyone starts again from a safe spot
+function resetRound() {
+  roundOver = false;
+  teamScores = [0, 0];
+  scores.forEach((s) => { s.kills = 0; s.deaths = 0; s.assists = 0; });
+  killStreaks.clear();
+  ui.showRoundBanner(null);
+  if (localActorId >= 0) {
+    localPlayer.respawn(pickSpawnPoint(localPlayer));
+    _knockbackVel.set(0, 0, 0);
+    playerVelocityY = 0;
+    ui.setHealth(localPlayer.health);
+  }
+  bots.forEach((bot) => { if (bot.ai) bot.player.respawn(pickSpawnPoint(bot.player)); });
+  refreshScoreboard();
+  updateLocalKDA();
+  updateTeamHud();
+  sendTeams();
+}
+
+// Leaving a room: drop everyone in it, the bots and all match state; onConnected starts over
+function clearRoomState() {
+  remotePlayers.forEach((player) => player.remove());
+  remotePlayers.clear();
+  bots.forEach((bot) => bot.player.remove());
+  bots.clear();
+  scores.clear();
+  playerNames.clear();
+  playerSkins.clear();
+  killStreaks.clear();
+  lastUltAt.clear();
+  teams.clear();
+  teamScores = [0, 0];
+  clearTimeout(roundTimer);
+  roundOver = false;
+  ui.showRoundBanner(null);
+  fireballs.clear();
+  localActorId = -1;
+  refreshScoreboard();
+  updateTeamHud();
+}
+
+// The lobby's mode switch: each mode is a separate room, so changing it moves you between rooms
+function setGameMode(mode) {
+  if (!(mode in GAME_MODES) || mode === gameMode || controls.isLocked) return;
+  gameMode = mode;
+  try { localStorage.setItem(MODE_KEY, mode); } catch { /* private mode: just don't remember it */ }
+  renderModeToggle();
+  clearRoomState();
+  network.switchRoom(GAME_MODES[mode].room, GAME_MODES[mode].maxPlayers);
+}
+
+function renderModeToggle() {
+  document.querySelectorAll('.lo-mode-btn').forEach((btn) => {
+    const on = btn.dataset.mode === gameMode;
+    btn.classList.toggle('is-active', on);
+    btn.setAttribute('aria-checked', String(on));
+  });
+  const card = document.querySelector('.lo-play-mode');
+  if (card) card.textContent = GAME_MODES[gameMode].card;
+  document.body.classList.toggle('mode-tdm', gameMode === 'tdm');
+  const online = document.getElementById('lobby-online');
+  if (online && localActorId < 0) online.textContent = 'Joining…';
 }
 
 // Bots fill the lobby to 3 combatants: 1 human -> 2 bots, 2 humans -> 1 bot, 3+ humans -> none
@@ -1268,6 +1431,11 @@ function refreshBots() {
     }
   }
   if (!host) return;
+  if (gameMode === 'tdm') {
+    fillTeamsWithBots();
+    sendTeams();
+    return;
+  }
   const desired = getDesiredBotCount();
   BOT_IDS.forEach((id, i) => {
     if (i < desired && !bots.has(id)) addBot(id, pickBotGamerTag(), true, null, pickBotSkin());
@@ -1299,10 +1467,27 @@ function getNearestHuman(position) {
   return nearest;
 }
 
-// Random pick among the 3 spawn points farthest from everyone else, so respawns are safe but not predictable
+// A bot's target: the nearest human in free-for-all; the nearest enemy, bots included, in team deathmatch
+function getBotTarget(botId, position) {
+  if (gameMode !== 'tdm') return getNearestHuman(position);
+  let nearest = null;
+  let best = Infinity;
+  const consider = (id, player) => {
+    if (player.isRespawning || !isEnemy(botId, id)) return;
+    const d = player.position.distanceToSquared(position);
+    if (d < best) { best = d; nearest = player; }
+  };
+  if (controls.isLocked) consider(localActorId, localPlayer);
+  remotePlayers.forEach((player, id) => consider(id, player));
+  bots.forEach((bot, id) => consider(id, bot.player));
+  return nearest;
+}
+
+// Random pick among the 3 spawn points farthest from everyone else (enemies only in team deathmatch),
+// so respawns are safe but not predictable
 function pickSpawnPoint(self) {
   const others = [localPlayer, ...remotePlayers.values(), ...[...bots.values()].map((b) => b.player)]
-    .filter((p) => p && p !== self);
+    .filter((p) => p && p !== self && (gameMode !== 'tdm' || self?.id == null || isEnemy(self.id, p.id)));
   const ranked = colliders.spawnPoints
     .map((pt) => {
       let nearest = Infinity;
@@ -1332,6 +1517,12 @@ function getSimulatedOwners() {
   return owners;
 }
 
+// Robe colour, or team colour in team deathmatch
+function minimapColor(id, player) {
+  const color = gameMode === 'tdm' && teams.has(id) ? TEAMS[teams.get(id)].color : getSkinConfig(player.skinId).body;
+  return `#${color.toString(16).padStart(6, '0')}`;
+}
+
 function getMinimapPlayers() {
   const players = [];
   if (localPlayer) {
@@ -1342,23 +1533,14 @@ function getMinimapPlayers() {
     });
   }
 
-  remotePlayers.forEach((player) => {
+  remotePlayers.forEach((player, id) => {
     if (player.isRespawning) return;
-    const skin = getSkinConfig(player.skinId);
-    players.push({
-      x: player.position.x,
-      z: player.position.z,
-      color: `#${skin.body.toString(16).padStart(6, '0')}`,
-    });
+    players.push({ x: player.position.x, z: player.position.z, color: minimapColor(id, player) });
   });
 
   // Drawn exactly like human players so the minimap doesn't give bots away
-  bots.forEach(({ player }) => {
-    players.push({
-      x: player.position.x,
-      z: player.position.z,
-      color: `#${getSkinConfig(player.skinId).body.toString(16).padStart(6, '0')}`,
-    });
+  bots.forEach(({ player }, id) => {
+    players.push({ x: player.position.x, z: player.position.z, color: minimapColor(id, player) });
   });
 
   return players;
@@ -1478,6 +1660,7 @@ function handleDefeat(killerId, victimId, killerLabel, victimLabel) {
   ensureScoreEntry(killerId).kills++;
   ensureScoreEntry(victimId).deaths++;
   recordStreak(killerId, victimId);
+  scoreTeamKill(killerId, victimId);
   if (killerId === localActorId) queueLifetimeStats({ kills: 1 });
   if (killerId === localActorId) awardCoins(1);
   if (killerId === localActorId) progressDailyQuests('kills', 1);
@@ -1493,11 +1676,20 @@ function handleDefeat(killerId, victimId, killerLabel, victimLabel) {
 
 // Runs on the bot host for hits landed by a bot's fireball or ultimate
 function handleBotHit(botId, targetId, damage, spell, dir, fromUlt = false) {
-  if (isBotId(targetId)) return;
+  // Bots only fight each other in team deathmatch, and never their own team
+  if ((isBotId(targetId) && gameMode !== 'tdm') || !isEnemy(botId, targetId)) return;
   network.sendHit(targetId, damage, spell, spell === 'air' ? dir : null, botId, fromUlt);
   // As with players, ultimate damage doesn't refill the meter
   const charge = (amount) => { if (!fromUlt) chargeBotUlt(botId, amount); };
-  if (targetId === localActorId) {
+  if (isBotId(targetId)) {
+    const target = bots.get(targetId)?.player;
+    if (!target) return;
+    charge(damage * ULT_CHARGE.perDamage);
+    chargeBotUlt(targetId, damage * ULT_CHARGE.perDamageTaken);
+    if (fromUlt) target.applySpellEffect(spell);
+    if (!target.takeDamage(damage)) return;
+    target.respawn(pickSpawnPoint(target));
+  } else if (targetId === localActorId) {
     if (localPlayer.isRespawning) return;
     const dead = localPlayer.takeDamage(damage);
     charge(damage * ULT_CHARGE.perDamage);
@@ -1700,6 +1892,8 @@ function init() {
     onConnected(actorNr) {
       localActorId = actorNr;
       localPlayer.id = actorNr;
+      // New room (first join or a mode switch): start somewhere safe
+      localPlayer.respawn(pickSpawnPoint(localPlayer));
       playerNames.set(actorNr, localPlayerName);
       playerSkins.set(actorNr, localSkinId);
       scores.set(actorNr, { kills: 0, deaths: 0, assists: 0 });
@@ -1774,6 +1968,8 @@ function init() {
         ensureScoreEntry(killerId).kills++;
         ensureScoreEntry(victimId).deaths++;
         recordStreak(killerId, victimId);
+        scoreTeamKill(killerId, victimId);
+        refreshScoreboard();
       } else {
         handleDefeat(killerId, victimId, getPlayerLabel(killerId), getPlayerLabel(victimId));
       }
@@ -1841,6 +2037,7 @@ function init() {
         if (!bot) {
           addBot(id, name, false, new THREE.Vector3(x, y, z), skinId);
           bot = bots.get(id);
+          applyTeamVisuals();
         } else if (bot.name !== name) {
           bot.name = name;
           bot.player.setName(name);
@@ -1910,6 +2107,8 @@ function init() {
     },
 
     onHit(actorNr, data) {
+      // Team deathmatch has no friendly fire
+      if (!isEnemy(isBotId(data.by) ? data.by : actorNr, data.targetId)) return;
       const ultHit = data.u === 1 && performance.now() - (lastUltAt.get(actorNr) ?? -Infinity) < ULT_HIT_WINDOW_MS;
       const damage = clamp(Number(data.damage) || 0, 0, ultHit ? ULT_MAX_DAMAGE : MAX_SPELL_HIT_DAMAGE);
       // Only a genuine ultimate hit may freeze; anything else claiming to counts as plain ice
@@ -1941,7 +2140,27 @@ function init() {
         }
       }
     },
-  });
+
+    // Team deathmatch: the bot host's teams and scores replace ours
+    onTeams(sender, { t, s }) {
+      if (gameMode !== 'tdm' || isBotHost() || !runsBots(sender) || !Array.isArray(t)) return;
+      teams.clear();
+      for (const entry of t) {
+        if (Array.isArray(entry) && Number.isInteger(entry[0]) && (entry[1] === 0 || entry[1] === 1)) teams.set(entry[0], entry[1]);
+      }
+      if (!roundOver && Array.isArray(s) && s.length === 2 && s.every((v) => Number.isInteger(v) && v >= 0 && v <= TDM_KILLS_TO_WIN)) {
+        teamScores = [s[0], s[1]];
+      }
+      applyTeamVisuals();
+      refreshScoreboard();
+      updateTeamHud();
+    },
+
+    onRoundEnd(sender, { w }) {
+      if (gameMode !== 'tdm' || !runsBots(sender) || (w !== 0 && w !== 1)) return;
+      startRoundBreak(w);
+    },
+  }, GAME_MODES[gameMode].room, GAME_MODES[gameMode].maxPlayers);
 
   network.connect();
 
@@ -1963,6 +2182,14 @@ function init() {
     e.stopPropagation();
     controls.requestLock();
   });
+  document.querySelectorAll('.lo-mode-btn').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setGameMode(btn.dataset.mode);
+    });
+  });
+  renderModeToggle();
+  updateTeamHud();
 
   // Show the controls card for the first few seconds of each match; Tab brings the strip back later
   const controlsCard = document.getElementById('controls-card');
@@ -2159,7 +2386,7 @@ function updateWorld(delta) {
   updateBurn(delta);
   bots.forEach((bot, id) => {
     if (!bot.ai) return;
-    const target = getNearestHuman(bot.player.position);
+    const target = getBotTarget(id, bot.player.position);
     const botShot = bot.ai.update(delta, target);
     if (bot.ult >= 1 && target) updateBotUlt(id, bot, target, delta);
     if (!botShot) return;
@@ -2180,7 +2407,7 @@ function updateWorld(delta) {
     }
 
     if (isBotId(ownerId)) handleBotHit(ownerId, targetId, damage, spell, dir);
-  }, colliders);
+  }, colliders, isEnemy);
 
   netTimer += delta;
   if (netTimer >= NET_TICK) {
@@ -2189,6 +2416,13 @@ function updateWorld(delta) {
     // Sent even when empty so mirrors drop bots once the lobby fills up
     if (remotePlayers.size && isBotHost()) sendBotState();
     updateDisplayedPlayerCount();
+  }
+
+  // Corrects any drift in everyone's team scores, and catches players who missed an update
+  teamSyncTimer += delta;
+  if (teamSyncTimer >= TEAM_SYNC_INTERVAL) {
+    teamSyncTimer = 0;
+    if (remotePlayers.size) sendTeams();
   }
 }
 
@@ -2220,10 +2454,10 @@ function lineOfSight(a, b) {
 
 const chestOf = (player) => player.position.clone().setY(player.position.y + 0.6);
 
-// Everyone an ultimate can hit: the match minus you (respawning players are already left out)
+// Everyone your ultimate can hit: the match minus you, or the other team (respawning players are already left out)
 function ultTargets() {
   const targets = getCombatTargets();
-  targets.delete(localActorId);
+  for (const id of targets.keys()) if (!isEnemy(localActorId, id)) targets.delete(id);
   return targets;
 }
 
@@ -2385,10 +2619,12 @@ function castUltimate() {
   ui.addKillEntry(`You unleashed ${ult.name}!`, 'streak');
 }
 
-// What a bot's ultimate can hit: humans only, like its fireballs
-function botUltTargets() {
+// What a bot's ultimate can hit: humans in free-for-all, the other team (bots too) in team deathmatch
+function botUltTargets(botId) {
   const targets = getCombatTargets();
-  for (const id of targets.keys()) if (isBotId(id)) targets.delete(id);
+  for (const id of targets.keys()) {
+    if ((isBotId(id) && gameMode !== 'tdm') || !isEnemy(botId, id)) targets.delete(id);
+  }
   return targets;
 }
 
@@ -2427,7 +2663,7 @@ function castBotUltimate(botId, bot, target) {
     ultFx.meteor(point, ult.delay, ult.radius, () => {
       fireballs.burst(point.clone().setY(point.y + 0.6), 'fire');
       sound.ultBlast();
-      for (const [id, player] of botUltTargets()) {
+      for (const [id, player] of botUltTargets(botId)) {
         const dx = player.position.x - point.x;
         const dz = player.position.z - point.z;
         if (dx * dx + dz * dz <= ult.radius ** 2 && Math.abs(player.position.y - point.y) < 4) hit(id, ult.damage, 'fire');
@@ -2435,7 +2671,7 @@ function castBotUltimate(botId, bot, target) {
     });
     payload = { k: spell, x: round(point.x), y: round(point.y), z: round(point.z) };
   } else if (spell === 'lightning') {
-    const pool = botUltTargets();
+    const pool = botUltTargets(botId);
     pool.delete(target.id);
     const hits = extendChain([{ id: target.id, at: chest }], pool, ult);
     const start = eye.clone().addScaledVector(chest.clone().sub(eye).normalize(), 0.8);
@@ -2448,7 +2684,7 @@ function castBotUltimate(botId, bot, target) {
   } else {
     const center = me.clone();
     strike = () => {
-      for (const [id, player] of botUltTargets()) {
+      for (const [id, player] of botUltTargets(botId)) {
         if (player.position.distanceTo(center) > ult.radius) continue;
         if (spell === 'ice') {
           hit(id, ult.damage, 'freeze');

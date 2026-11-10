@@ -369,7 +369,8 @@ function createNameTag(text = 'Wizard') {
   return sprite;
 }
 
-function updateNameTag(sprite, text) {
+// `teamColor` (team deathmatch) outlines the tag in the team's colour
+function updateNameTag(sprite, text, teamColor = null) {
   const { canvas, texture } = sprite.userData;
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -378,8 +379,9 @@ function updateNameTag(sprite, text) {
   roundRect(ctx, 8, 10, canvas.width - 16, canvas.height - 20, 18);
   ctx.fill();
 
-  ctx.strokeStyle = 'rgba(255,255,255,0.14)';
-  ctx.lineWidth = 2;
+  const team = teamColor === null ? null : `#${teamColor.toString(16).padStart(6, '0')}`;
+  ctx.strokeStyle = team || 'rgba(255,255,255,0.14)';
+  ctx.lineWidth = team ? 5 : 2;
   roundRect(ctx, 8, 10, canvas.width - 16, canvas.height - 20, 18);
   ctx.stroke();
 
@@ -413,6 +415,8 @@ export class Player {
     this.hitFlashTimer = 0;
     this._bodyColor = color;
     this.name = 'Wizard';
+    this.teamColor = null;
+    this._teamRing = null;
 
     this.burnTimer = 0;
     this.burnDps = 0;
@@ -490,7 +494,29 @@ export class Player {
 
   setName(name) {
     this.name = name;
-    if (this.nameTag) updateNameTag(this.nameTag, name);
+    if (this.nameTag) updateNameTag(this.nameTag, name, this.teamColor);
+  }
+
+  /** Team deathmatch: colours the name tag and a ring at the feet; null clears both. */
+  setTeam(color) {
+    if (color === this.teamColor) return;
+    this.teamColor = color;
+    if (this.nameTag) updateNameTag(this.nameTag, this.name, color);
+    if (color === null) {
+      if (this._teamRing) this._teamRing.visible = false;
+      return;
+    }
+    if (!this._teamRing) {
+      this._teamRing = new THREE.Mesh(
+        new THREE.RingGeometry(0.58, 0.78, 32),
+        new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }),
+      );
+      this._teamRing.rotation.x = -Math.PI / 2;
+      this._teamRing.position.y = -0.72; // just above the floor under the robe
+      this.group.add(this._teamRing);
+    }
+    this._teamRing.material.color.setHex(color);
+    this._teamRing.visible = true;
   }
 
   setSkin(skinId) {

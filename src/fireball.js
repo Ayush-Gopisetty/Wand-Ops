@@ -310,7 +310,8 @@ export class FireballManager {
     }
   }
 
-  update(delta, targets, simulatedOwners, onHit, colliders) {
+  /** `canHit(ownerId, targetId)` lets projectiles pass through teammates. */
+  update(delta, targets, simulatedOwners, onHit, colliders, canHit = null) {
     this.particles.update(delta);
     this._updateFlashes(delta);
 
@@ -325,7 +326,7 @@ export class FireballManager {
       let removed = false;
       for (let s = 0; s < steps && !removed; s++) {
         fb.mesh.position.addScaledVector(fb.dir, travel / steps);
-        removed = this._collide(i, fb, targets, simulatedOwners, onHit, colliders);
+        removed = this._collide(i, fb, targets, simulatedOwners, onHit, colliders, canHit);
       }
       if (removed) continue;
       this._animate(fb, delta);
@@ -334,7 +335,7 @@ export class FireballManager {
   }
 
   /** Stops projectile `i` if it's touching a solid or a target; returns true when it was removed. */
-  _collide(i, fb, targets, simulatedOwners, onHit, colliders) {
+  _collide(i, fb, targets, simulatedOwners, onHit, colliders, canHit) {
     const p = fb.mesh.position;
 
     // ── World collision ────────────────────────────────────────────────────
@@ -351,7 +352,7 @@ export class FireballManager {
     // Only the owner's client decides damage; everyone else just shows the projectile stopping on contact
     const simulated = simulatedOwners.has(fb.ownerId);
     for (const [id, player] of targets) {
-      if (id === fb.ownerId) continue;
+      if (id === fb.ownerId || (canHit && !canHit(fb.ownerId, id))) continue;
       if (p.distanceTo(player.position) < HIT_DIST) {
         if (simulated) onHit(fb.ownerId, id, fb.cfg.damage, fb.spell, fb.dir);
         this._remove(i, true);

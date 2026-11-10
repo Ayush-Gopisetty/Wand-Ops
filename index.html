@@ -46,6 +46,15 @@
     <div id="effect-status"></div>
 
     <div id="kill-feed"></div>
+    <div id="team-score" hidden>
+      <div class="ts-team ts-blue"><span class="ts-name">Blue</span><span class="ts-value">0</span></div>
+      <div class="ts-goal">First to 20</div>
+      <div class="ts-team ts-red"><span class="ts-value">0</span><span class="ts-name">Red</span></div>
+    </div>
+    <div id="round-banner" hidden aria-live="polite">
+      <div class="round-title"></div>
+      <div class="round-sub"></div>
+    </div>
     <div id="streak-callout" aria-live="polite">
       <div class="streak-title"></div>
       <div class="streak-sub"></div>
@@ -143,10 +152,17 @@
 
     <div class="lo-body">
       <aside class="lo-left">
+        <div class="lo-play-group">
         <div class="lo-play-card" id="lo-play-card">
           <h2 class="lo-play-label">PLAY</h2>
           <p class="lo-play-mode">QUICK MATCH: ARENA</p>
           <p class="lo-play-meta" id="lobby-online"></p>
+        </div>
+
+        <div class="lo-mode-toggle" role="radiogroup" aria-label="Game mode">
+          <button class="lo-mode-btn" type="button" role="radio" data-mode="ffa">Free for all</button>
+          <button class="lo-mode-btn" type="button" role="radio" data-mode="tdm">Team deathmatch</button>
+        </div>
         </div>
 
         <div class="lo-spell-tray lo-spell-tray-sidebar" onclick="event.stopPropagation()">
