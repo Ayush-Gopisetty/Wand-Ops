@@ -3,6 +3,16 @@
 export const WIZARD_NEWS = [
   {
     tag: 'new',
+    title: 'Hits you can feel',
+    body: 'Land a spell and an ✕ flashes on your crosshair. Finish someone off and it turns red, with a 💀 ELIMINATED pop and a heavier kill sound.',
+  },
+  {
+    tag: 'update',
+    title: 'Sharper castle stonework',
+    body: 'Stairs, walls and towers now share one neat brick pattern, so the sides of the steps no longer look smeared.',
+  },
+  {
+    tag: 'new',
     title: 'Team deathmatch',
     body: 'Pick Team deathmatch under Play to fight as Blue or Red, up to 4v4. No friendly fire, bots fill any empty spots, and the first team to 20 kills wins the round.',
   },
