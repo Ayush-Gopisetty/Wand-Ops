@@ -136,9 +136,11 @@ export class SoundManager {
 
   kill() {
     if (!this._ready) return;
-    this._tone('sine', 880, 0, 0.16, 0.22);
-    this._tone('sine', 1320, 0.09, 0.32, 0.22);
-    this._tone('triangle', 220, 0, 0.2, 0.12, 110);
+    // A low punch under the chime gives the kill some weight
+    this._tone('sine', 150, 0, 0.24, 0.42, 48);
+    this._tone('triangle', 220, 0, 0.2, 0.16, 110);
+    this._tone('sine', 880, 0.02, 0.16, 0.26);
+    this._tone('sine', 1320, 0.11, 0.34, 0.26);
   }
 
   /** Fanfare for multi-kills and streaks: a rising arpeggio that climbs higher with `level` (1–4). */

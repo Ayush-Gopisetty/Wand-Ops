@@ -30,6 +30,8 @@ export class UIManager {
     this._death = document.getElementById('death-screen');
     this._deathSeconds = this._death?.querySelector('.death-seconds');
     this._killCamMarker = document.getElementById('killcam-marker');
+    this._hitMarker = document.getElementById('hit-marker');
+    this._killConfirm = document.getElementById('kill-confirm');
     this._teamScore = document.getElementById('team-score');
     this._roundBanner = document.getElementById('round-banner');
     this._ult = document.getElementById('ult-meter');
@@ -205,6 +207,23 @@ export class UIManager {
       return;
     }
     this._deathSeconds.textContent = String(Math.ceil(secondsLeft));
+  }
+
+  /** Flashes the ✕ around the crosshair; a kill makes it red and bigger. */
+  showHitMarker(kill = false) {
+    if (!this._hitMarker) return;
+    this._hitMarker.classList.remove('is-hit', 'is-kill');
+    void this._hitMarker.offsetWidth; // restart the animation on back-to-back hits
+    this._hitMarker.classList.add(kill ? 'is-kill' : 'is-hit');
+  }
+
+  /** "💀 Eliminated <name>" under the crosshair. */
+  showKillConfirm(name) {
+    if (!this._killConfirm) return;
+    this._killConfirm.querySelector('.kc-name').textContent = name;
+    this._killConfirm.classList.remove('is-showing');
+    void this._killConfirm.offsetWidth;
+    this._killConfirm.classList.add('is-showing');
   }
 
   addDamageNumber(amount, variant = 'dealt') {
