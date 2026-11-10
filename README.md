@@ -11,7 +11,7 @@ Built with [Three.js](https://threejs.org/) and [Vite](https://vitejs.dev/). Mul
 ## Features
 
 - **Quick Match arena**: a castle with walls, climbable towers, stairs, ladders and raised platforms, plus courtyard cover, ruins and boulders to fight around. Respawns pick a spot away from enemies.
-- **Game modes**, each in its own room (pick one in the lobby): free for all; team deathmatch (Blue vs Red, first team to 20 kills); and control point (hold the courtyard ring to earn a point per second, first team to 100 wins).
+- **Game modes**, each in its own room (pick one in the lobby): free for all; team deathmatch (Blue vs Red, first team to 20 kills); and control point (capture the courtyard ring, then keep a wizard in it with no rivals to earn a point per second, first team to 100 wins).
 - **Wands**: each wand has its own damage, cooldown and projectile speed, with damage per second kept in a similar band: lightning is rapid (12 damage every 0.35s, faster bolt), fire 15 / 0.5s, air 16 / 0.45s, ice 20 / 0.6s, and earth is a slow, heavy hitter (36 damage every 1s, slower bolt).
 - **Health potions**: spawn at random open spots, on the ground or up on platforms, wall tops and towers (2 to 4 on the map, a new one every 12 seconds). Walk over one to restore 40 HP. They show on the minimap, a potion you don't need yet stays where it is, the host settles who gets a contested one, and bots grab them too.
 - **Music**: a looping medieval soundtrack (lute, flute, drone and frame drum) generated in the browser, with its own volume slider in Settings.
