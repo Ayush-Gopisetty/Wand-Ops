@@ -17,6 +17,8 @@ export const EV_BOT_STATE    = 9; // { b: [[id, x, y, z, r, name], ...] } — se
 export const EV_CHAT         = 10; // { m: text }
 export const EV_ULT          = 11; // { k: spell, ... } — an ultimate was cast; damage still travels as EV_HIT
 export const EV_TEAMS        = 12; // { t: [[id, team], ...], s: [blue, red] } — team deathmatch, sent by the bot host
+export const EV_PICKUP       = 15; // { k: 's'|'a'|'t', ... } — potion spawns (bot host) and pickups (anyone)
+export const EV_CP           = 14; // { c, p: [blue, red], x } — control point state, sent by the bot host
 export const EV_ROUND        = 13; // { w: team } — a team reached the kill target, sent by the bot host
 
 // Per-sender token buckets as [refill per second, burst]. Normal play stays well under these:
@@ -36,6 +38,8 @@ const EVENT_LIMITS = {
   [EV_ULT]:          [0.3, 2], // the meter takes far longer than this to refill
   [EV_TEAMS]:        [2, 6],
   [EV_ROUND]:        [0.2, 2],
+  [EV_CP]:           [6, 12], // the host sends 4 a second
+  [EV_PICKUP]:       [4, 10],
 };
 const TOTAL_LIMIT = [100, 140]; // all event types combined, per sender
 
@@ -182,6 +186,8 @@ export class NetworkManager {
         case EV_ULT:          this.callbacks.onUlt(actorNr, content); break;
         case EV_TEAMS:        this.callbacks.onTeams(actorNr, content); break;
         case EV_ROUND:        this.callbacks.onRoundEnd(actorNr, content); break;
+        case EV_CP:           this.callbacks.onControlPoint(actorNr, content); break;
+        case EV_PICKUP:       this.callbacks.onPickup(actorNr, content); break;
       }
     };
 
@@ -283,6 +289,16 @@ export class NetworkManager {
   sendTeams(teams, scores) {
     if (!this.connected || !this.client) return;
     this.client.raiseEvent(EV_TEAMS, { t: teams, s: scores });
+  }
+
+  sendPickup(data) {
+    if (!this.connected || !this.client) return;
+    this.client.raiseEvent(EV_PICKUP, data);
+  }
+
+  sendControlPoint(data) {
+    if (!this.connected || !this.client) return;
+    this.client.raiseEvent(EV_CP, data);
   }
 
   sendRoundEnd(winner) {

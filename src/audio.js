@@ -1,6 +1,8 @@
 // Synthesized sound effects (Web Audio API): no asset files to load or license.
 // Browsers only allow audio after a user gesture, so the context starts on the first click or key.
 
+import { MusicPlayer } from './music.js';
+
 const LOW_HEALTH = 30;
 
 export class SoundManager {
@@ -11,6 +13,7 @@ export class SoundManager {
     this.muted = false;
     this._noise = null;
     this._nextBeat = 0;
+    this.music = new MusicPlayer();
 
     const unlock = () => {
       this._ensureContext();
@@ -28,6 +31,7 @@ export class SoundManager {
     this.master = this.ctx.createGain();
     this.master.connect(this.ctx.destination);
     this._applyGain();
+    this.music.start(this.ctx, this.master);
 
     // One second of white noise, reused for every noisy sound
     const buffer = this.ctx.createBuffer(1, this.ctx.sampleRate, this.ctx.sampleRate);
@@ -176,6 +180,25 @@ export class SoundManager {
     if (!this._ready) return;
     this._tone('triangle', 392, 0, 0.3, 0.16, 196);
     this._tone('sine', 196, 0.18, 0.55, 0.2, 98);
+  }
+
+  /** Dull click when you try to cast without enough mana. */
+  noMana() {
+    if (!this._ready) return;
+    this._tone('square', 170, 0, 0.12, 0.16, 105);
+  }
+
+  // ── Potions ────────────────────────────────────────────────────────────────
+  pickup(type = 'health') {
+    if (!this._ready) return;
+    if (type === 'mana') {
+      // Sparkle: three quick rising chimes
+      [880, 1175, 1760].forEach((f, i) => this._tone('triangle', f, i * 0.06, 0.28, 0.22));
+    } else {
+      // Warm two-note rise
+      this._tone('sine', 523, 0, 0.22, 0.3, 560);
+      this._tone('sine', 784, 0.1, 0.34, 0.3, 800);
+    }
   }
 
   // ── Taking damage ──────────────────────────────────────────────────────────

@@ -22,7 +22,10 @@ import { NetworkManager } from './network.js';
 import { UIManager, SPELL_LABELS } from './ui.js';
 import { attachTouchControls } from './touch-controls.js';
 import { SimpleBotController } from './bot.js';
-import { GAME_MODES, TEAMS, TDM_KILLS_TO_WIN, TDM_TEAM_SIZE, TDM_ROUND_BREAK_MS, smallerTeam } from './teams.js';
+import { GAME_MODES, TEAMS, TDM_KILLS_TO_WIN, TDM_TEAM_SIZE, TDM_ROUND_BREAK_MS, smallerTeam, isTeamMode, modeGoal } from './teams.js';
+import { MANA_MAX, SPELL_CAST, castCost, castCooldown, spendMana, regenMana, addMana } from './mana.js';
+import { PICKUP_TYPES, PICKUP_MIN, PICKUP_MAX, PICKUP_INTERVAL, PICKUP_RADIUS, pickType, pickSpot } from './pickups.js';
+import { CONTROL_POINT, newControlPoint, stepControlPoint, controlPointStatus } from './control-point.js';
 import { SoundManager } from './audio.js';
 import { WIZARD_NEWS } from './news.js';
 import { applySeasonalLogo } from './season.js';
@@ -59,18 +62,18 @@ const LOBBY_CAM_SPEED = 0.06; // radians per second, about one lap every 100s
 const LOBBY_CAM_FOV = 60;
 const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
 const SETTINGS_KEY = 'wand-ops-settings';
-const DEFAULT_SETTINGS = { sensitivity: 1, fov: DEFAULT_FOV, showFps: true, volume: 0.7, muted: false, lookSensitivity: 1, buttonScale: 1 };
+const DEFAULT_SETTINGS = { sensitivity: 1, fov: DEFAULT_FOV, showFps: true, volume: 0.7, musicVolume: 0.5, muted: false, lookSensitivity: 1, buttonScale: 1 };
 const sound = new SoundManager();
 const CHAT_MAX_LEN = 120;
 const CHAT_HISTORY = 50;
 const CHAT_COOLDOWN_MS = 800;
 const HUD_CHAT_LINES = 8;
 const HUD_CHAT_FADE_MS = 8000;
-const SHOOT_COOLDOWN = 0.5;
 const NET_TICK = 1 / 13;
 // Incoming hits can't claim more than the strongest spell does. A hit flagged as an ultimate may claim up
 // to the strongest ultimate, but only from a player whose ultimate event arrived in the last few seconds
 const MAX_SPELL_HIT_DAMAGE = Math.max(...Object.values(SPELL_CONFIG).map((s) => s.damage));
+const MAX_PROJECTILE_SPEED = Math.max(...Object.values(SPELL_CONFIG).map((s) => s.speed));
 const ULT_HIT_WINDOW_MS = 3000; // a meteor lands a second after its cast event
 const NAME_SEND_DELAY_MS = 400;
 const LIFETIME_FLUSH_DELAY_MS = 2000; // batch stat changes into one write
@@ -88,6 +91,7 @@ const BOT_ULT_WAIT_MIN = 1.5;
 const BOT_ULT_WAIT_MAX = 4;
 // Bots fire nonstop and rarely miss up close, so their meters fill slower than a player's
 const BOT_ULT_RATE = 0.6;
+const BOT_PICKUP_SEEK_RANGE = 24; // bots only go for potions this close
 const MULTI_KILL_TITLES = ['', '', 'Double Kill', 'Triple Kill', 'Quad Kill'];
 const STREAK_TITLES = { 3: 'Wizard Spree', 5: 'Arcane Rampage', 7: 'Unstoppable Sorcery', 10: 'Archmage' };
 // Free-for-all uses up to two bots; team deathmatch can need a third (1 human vs 2 bots, plus a teammate)
@@ -95,39 +99,30 @@ const BOT_IDS = [9001, 9002, 9003];
 const BOT_SPAWNS = [[0, 20], [0, -20], [20, 0]];
 const MODE_KEY = 'wand-ops-mode';
 const TEAM_SYNC_INTERVAL = 5; // seconds between the bot host's team/score refreshes
+// Control and impact are descriptive bars; damage, speed, mana cost and cooldown come from the real spell tables
 const WEAPON_STATS = {
   fire: {
     name: 'Fire Wand',
-    damage: 88,
-    speed: 74,
     control: 52,
     impact: 70,
   },
   ice: {
     name: 'Ice Wand',
-    damage: 60,
-    speed: 68,
     control: 90,
     impact: 46,
   },
   lightning: {
     name: 'Lightning Wand',
-    damage: 72,
-    speed: 96,
     control: 62,
     impact: 58,
   },
   air: {
     name: 'Air Wand',
-    damage: 42,
-    speed: 82,
     control: 78,
     impact: 92,
   },
   earth: {
     name: 'Earth Wand',
-    damage: 84,
-    speed: 44,
     control: 66,
     impact: 95,
   },
@@ -148,12 +143,15 @@ let firstPersonWand;
 let previewScene, previewCamera, previewRenderer, previewModel;
 const remotePlayers = new Map();
 const bots = new Map(); // id -> { player, ai, name }; ai is set only on the bot host
-let gameMode = loadGameMode(); // 'ffa' | 'tdm'; each mode is its own room
+let gameMode = loadGameMode(); // 'ffa' | 'tdm' | 'cp'; each mode is its own room
 const teams = new Map(); // team deathmatch: id -> 0 (Blue) | 1 (Red), assigned by the bot host
 let teamScores = [0, 0];
 let teamSyncTimer = 0;
 let roundOver = false; // a team has won; the next round starts after the banner
 let roundTimer = null;
+let controlPoint = newControlPoint(); // control point mode: the bot host steps it, everyone else mirrors it
+let cpSendTimer = 0;
+let cpVisual = null;
 const BOT_GAMER_TAGS = [
   'xX_HexLord_Xx', 'NoScopeMerlin', 'FrostByte', 'Gandalf_Main', 'spellsl1nger',
   'ManaBurnt', 'xXArcaneXx', 'CritWizard99', 'pyro_kid07', 'LagWizard',
@@ -181,6 +179,9 @@ let localMultiKills = 0;
 let localLastKillAt = 0;
 let lastHitOnMe = null; // { id, spell, at } so a burn-out can still name who lit you up
 let ultFx = null;
+let mana = MANA_MAX; // each normal spell costs some; it regenerates and potions refill it
+let wasRespawning = false;
+let lastNoManaAt = 0;
 let ultCharge = 0; // 0..1; a full meter unlocks the selected spell's ultimate (kept through deaths)
 const lastUltAt = new Map(); // actorNr -> when their last ultimate event arrived
 const playerNames = new Map();
@@ -346,17 +347,20 @@ function updateLocalKDA() {
 }
 
 function refreshScoreboard() {
-  ui.updateScoreboard(scores, localActorId, getPlayerLabel, gameMode === 'tdm' ? (id) => teams.get(id) : null);
+  ui.updateScoreboard(scores, localActorId, getPlayerLabel, isTeamMode(gameMode) ? (id) => teams.get(id) : null);
 }
 
 function loadGameMode() {
-  try { return localStorage.getItem(MODE_KEY) === 'tdm' ? 'tdm' : 'ffa'; } catch { return 'ffa'; }
+  try {
+    const saved = localStorage.getItem(MODE_KEY);
+    return saved in GAME_MODES ? saved : 'ffa';
+  } catch { return 'ffa'; }
 }
 
 // Whether `a` can hurt `b`: anyone else in free-for-all, the other team in team deathmatch
 function isEnemy(a, b) {
   if (a === b) return false;
-  if (gameMode !== 'tdm') return true;
+  if (!isTeamMode(gameMode)) return true;
   const ta = teams.get(a);
   const tb = teams.get(b);
   // Someone whose team hasn't arrived yet counts as an enemy rather than being untouchable
@@ -364,12 +368,17 @@ function isEnemy(a, b) {
 }
 
 function updateTeamHud() {
-  ui.setTeamScore(gameMode === 'tdm' ? { scores: teamScores, mine: teams.get(localActorId), goal: TDM_KILLS_TO_WIN } : null);
+  ui.setTeamScore(isTeamMode(gameMode) ? {
+    scores: teamScores,
+    mine: teams.get(localActorId),
+    goal: modeGoal(gameMode),
+    note: gameMode === 'cp' ? controlPointStatus(controlPoint, TEAMS.map((t) => t.name)) : '',
+  } : null);
 }
 
 // Name tags and foot rings in team colours (nothing in free-for-all)
 function applyTeamVisuals() {
-  const colorOf = (id) => (gameMode === 'tdm' && teams.has(id) ? TEAMS[teams.get(id)].color : null);
+  const colorOf = (id) => (isTeamMode(gameMode) && teams.has(id) ? TEAMS[teams.get(id)].color : null);
   remotePlayers.forEach((player, id) => player.setTeam(colorOf(id)));
   bots.forEach((bot, id) => bot.player.setTeam(colorOf(id)));
 }
@@ -408,7 +417,7 @@ function fillTeamsWithBots() {
 }
 
 function sendTeams() {
-  if (gameMode === 'tdm' && isBotHost()) network.sendTeams([...teams], teamScores);
+  if (isTeamMode(gameMode) && isBotHost()) network.sendTeams([...teams], teamScores);
 }
 
 // Team deathmatch: a kill scores for the killer's team, and the bot host calls the round at the target
@@ -427,7 +436,7 @@ function scoreTeamKill(killerId, victimId) {
 function startRoundBreak(winner) {
   if (roundOver) return;
   roundOver = true;
-  teamScores[winner] = Math.max(teamScores[winner], TDM_KILLS_TO_WIN);
+  teamScores[winner] = Math.max(teamScores[winner], modeGoal(gameMode));
   updateTeamHud();
   const mine = teams.get(localActorId);
   const sub = mine === undefined ? 'Next round starting…' : mine === winner ? 'Victory! Next round starting…' : 'Defeat. Next round starting…';
@@ -441,9 +450,11 @@ function startRoundBreak(winner) {
 function resetRound() {
   roundOver = false;
   teamScores = [0, 0];
+  controlPoint = newControlPoint();
   scores.forEach((s) => { s.kills = 0; s.deaths = 0; s.assists = 0; });
   killStreaks.clear();
   ui.showRoundBanner(null);
+  mana = MANA_MAX;
   if (localActorId >= 0) {
     localPlayer.respawn(pickSpawnPoint(localPlayer));
     _knockbackVel.set(0, 0, 0);
@@ -455,6 +466,359 @@ function resetRound() {
   updateLocalKDA();
   updateTeamHud();
   sendTeams();
+}
+
+// ── Control point ────────────────────────────────────────────────────────────
+// Ground ring and light beam over the courtyard, tinted by whoever is winning the point
+function createControlPointVisual() {
+  const group = new THREE.Group();
+  const mat = (opacity) => new THREE.MeshBasicMaterial({
+    color: 0xffffff, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide,
+  });
+  const r = CONTROL_POINT.radius;
+  const ring = new THREE.Mesh(new THREE.RingGeometry(r - 0.4, r, 64), mat(0.85));
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.1;
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(r - 0.4, 48), mat(0.12));
+  disc.rotation.x = -Math.PI / 2;
+  disc.position.y = 0.08;
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 16, 48, 1, true), mat(0.1));
+  beam.position.y = 8;
+  group.add(ring, disc, beam);
+  group.position.set(CONTROL_POINT.x, 0, CONTROL_POINT.z);
+  group.visible = false;
+  scene.add(group);
+  return { group, mats: [ring.material, disc.material, beam.material] };
+}
+
+function controlPointColor() {
+  const team = TEAMS[controlPoint.control < 0 ? 0 : 1];
+  return new THREE.Color(0xffffff).lerp(new THREE.Color(team.color), Math.abs(controlPoint.control));
+}
+
+function controlPointActive() {
+  return gameMode === 'cp' && !roundOver && localActorId >= 0;
+}
+
+function updateControlPointVisual() {
+  if (!cpVisual) cpVisual = createControlPointVisual();
+  const on = controlPointActive();
+  cpVisual.group.visible = on;
+  if (!on) return;
+  const color = controlPointColor();
+  cpVisual.mats.forEach((m) => m.color.copy(color));
+  // The beam flickers while both teams are standing in it
+  cpVisual.group.scale.y = controlPoint.contested ? 0.9 + 0.1 * Math.sin(performance.now() / 120) : 1;
+}
+
+function getControlPointMarker() {
+  return controlPointActive() ? { ...CONTROL_POINT, color: `#${controlPointColor().getHexString()}` } : null;
+}
+
+// Bot host: count who is standing on the point, move the bar, score, and tell everyone four times a second
+function stepControlPointHost(delta) {
+  const inside = [0, 0];
+  getCombatTargets().forEach((player, id) => {
+    const team = teams.get(id);
+    if (team === undefined || player.isRespawning) return;
+    if (Math.hypot(player.position.x - CONTROL_POINT.x, player.position.z - CONTROL_POINT.z) < CONTROL_POINT.radius) inside[team]++;
+  });
+  stepControlPoint(controlPoint, delta, inside[0], inside[1]);
+  const goal = modeGoal('cp');
+  teamScores = controlPoint.points.map((v) => Math.min(goal, Math.floor(v)));
+
+  cpSendTimer -= delta;
+  if (cpSendTimer <= 0) {
+    cpSendTimer = 0.25;
+    network.sendControlPoint({
+      c: +controlPoint.control.toFixed(3),
+      p: controlPoint.points.map((v) => +v.toFixed(1)),
+      x: controlPoint.contested ? 1 : 0,
+    });
+    updateTeamHud();
+  }
+  const winner = controlPoint.points.findIndex((v) => v >= goal);
+  if (winner !== -1) {
+    network.sendRoundEnd(winner);
+    startRoundBreak(winner);
+  }
+}
+
+function updateControlPoint(delta) {
+  updateControlPointVisual();
+  if (controlPointActive() && isBotHost()) stepControlPointHost(delta);
+}
+
+// ── Potion pickups ───────────────────────────────────────────────────────────
+// The bot host spawns health and mana potions at random open spots (on the ground or up on platforms and
+// wall tops). Whoever walks onto one asks the host to claim it; the host picks the first claim and tells
+// everyone, so two players grabbing the same potion can't both get it. Bots use them too.
+const pickups = new Map(); // id -> { id, type, x, z, y, group }; y is the standing height
+let pickupTimer = 0;
+let pickupGeo = null;
+
+function getPickupAssets() {
+  if (pickupGeo) return pickupGeo;
+  pickupGeo = {
+    body: new THREE.SphereGeometry(0.3, 14, 10),
+    neck: new THREE.CylinderGeometry(0.09, 0.12, 0.26, 10),
+    cork: new THREE.CylinderGeometry(0.1, 0.09, 0.1, 10),
+    disc: new THREE.CircleGeometry(1.1, 28),
+    beam: new THREE.CylinderGeometry(0.45, 0.45, 4, 16, 1, true),
+    burstRing: new THREE.RingGeometry(0.7, 1, 40),
+    burstBeam: new THREE.CylinderGeometry(0.7, 0.7, 6, 20, 1, true),
+    corkMat: new THREE.MeshStandardMaterial({ color: 0x8a5a2b, roughness: 0.9 }),
+    glass: PICKUP_TYPES.map((t) => new THREE.MeshStandardMaterial({
+      color: t.color, emissive: t.color, emissiveIntensity: 0.9, roughness: 0.15, transparent: true, opacity: 0.92,
+    })),
+    glow: PICKUP_TYPES.map((t) => new THREE.MeshBasicMaterial({
+      color: t.color, transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    })),
+    beamMat: PICKUP_TYPES.map((t) => new THREE.MeshBasicMaterial({
+      color: t.color, transparent: true, opacity: 0.22, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    })),
+  };
+  return pickupGeo;
+}
+
+function createPickupMesh(typeIndex) {
+  const a = getPickupAssets();
+  const group = new THREE.Group();
+  const bottle = new THREE.Group();
+  const body = new THREE.Mesh(a.body, a.glass[typeIndex]);
+  const neck = new THREE.Mesh(a.neck, a.glass[typeIndex]);
+  neck.position.y = 0.38;
+  const cork = new THREE.Mesh(a.cork, a.corkMat);
+  cork.position.y = 0.56;
+  bottle.add(body, neck, cork);
+  bottle.position.y = 1.0;
+  const disc = new THREE.Mesh(a.disc, a.glow[typeIndex]);
+  disc.rotation.x = -Math.PI / 2;
+  disc.position.y = 0.06;
+  const beam = new THREE.Mesh(a.beam, a.beamMat[typeIndex]);
+  beam.position.y = 2;
+  group.add(bottle, disc, beam);
+  group.userData.bottle = bottle;
+  return group;
+}
+
+function addPickup(id, typeIndex, x, z, y = GROUND_Y) {
+  if (pickups.has(id) || !PICKUP_TYPES[typeIndex]) return;
+  const group = createPickupMesh(typeIndex);
+  group.position.set(x, y - GROUND_Y, z); // the visual floor sits GROUND_Y below standing height
+  scene.add(group);
+  pickups.set(id, { id, type: typeIndex, x, z, y, group });
+}
+
+// A ring and a column of light that spread out and fade where a potion was used, for everyone to see
+const pickupBursts = [];
+const BURST_SECONDS = 0.7;
+
+function spawnPickupBurst(pickup, color) {
+  const a = getPickupAssets();
+  const mat = () => new THREE.MeshBasicMaterial({
+    color, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+  });
+  const group = new THREE.Group();
+  const ring = new THREE.Mesh(a.burstRing, mat());
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.12;
+  const column = new THREE.Mesh(a.burstBeam, mat());
+  column.position.y = 3;
+  group.add(ring, column);
+  group.position.set(pickup.x, pickup.y - GROUND_Y, pickup.z);
+  scene.add(group);
+  pickupBursts.push({ group, ring, column, t: 0 });
+}
+
+function updatePickupBursts(delta) {
+  for (let i = pickupBursts.length - 1; i >= 0; i--) {
+    const b = pickupBursts[i];
+    b.t += delta;
+    const k = Math.min(1, b.t / BURST_SECONDS);
+    b.ring.scale.setScalar(1 + k * 3.5);
+    b.ring.material.opacity = 0.9 * (1 - k);
+    b.column.scale.set(1 + k * 0.6, 1 + k * 0.4, 1 + k * 0.6);
+    b.column.material.opacity = 0.7 * (1 - k) * (1 - k);
+    if (k >= 1) {
+      scene.remove(b.group);
+      b.ring.material.dispose();
+      b.column.material.dispose();
+      pickupBursts.splice(i, 1);
+    }
+  }
+}
+
+function removePickup(id) {
+  const pickup = pickups.get(id);
+  if (!pickup) return;
+  scene.remove(pickup.group); // geometries and materials are shared, so nothing to dispose
+  pickups.delete(id);
+}
+
+function clearPickups() {
+  [...pickups.keys()].forEach(removePickup);
+  updatePickupBursts(BURST_SECONDS); // finish any bursts still playing
+  pendingClaims.clear();
+  pickupTimer = 0;
+}
+
+function getPickupMarkers() {
+  return [...pickups.values()].map((p) => ({ x: p.x, z: p.z, color: `#${PICKUP_TYPES[p.type].color.toString(16).padStart(6, '0')}` }));
+}
+
+function isValidPickup(id, type, x, z, y) {
+  const limit = colliders.arenaSize;
+  return Number.isInteger(id) && id >= 0 && PICKUP_TYPES[type] !== undefined
+    && Number.isFinite(x) && Number.isFinite(z) && Math.abs(x) <= limit && Math.abs(z) <= limit
+    && Number.isFinite(y) && y >= 0 && y <= 14;
+}
+
+function hostSpawnPickup() {
+  const spot = pickSpot(colliders, [...pickups.values()]);
+  if (!spot) return;
+  const id = Math.max(-1, ...pickups.keys()) + 1;
+  const type = pickType();
+  addPickup(id, type, spot.x, spot.z, spot.y);
+  network.sendPickup({ k: 's', i: id, t: type, x: spot.x, z: spot.z, y: spot.y });
+}
+
+// Late joiners get the whole list at once
+function sendAllPickups() {
+  network.sendPickup({ k: 'a', l: [...pickups.values()].map((p) => [p.id, p.type, p.x, p.z, p.y]) });
+}
+
+const pendingClaims = new Map(); // pickup id -> when we asked the host for it
+const CLAIM_RETRY_MS = 1000;
+
+// Bot host: hand the potion to `winner` (a player or bot id) and tell everyone. `heal` is how much
+// health the winner can actually use, as worked out on their own screen.
+function hostResolvePickup(id, winner, heal) {
+  if (!pickups.has(id)) return; // someone else got there first
+  const amount = Math.max(0, Math.min(40, Math.round(Number(heal) || 0)));
+  network.sendPickup({ k: 't', i: id, w: winner, h: amount });
+  resolvePickup(id, winner, amount);
+}
+
+// Every client: the potion is gone, and its winner gets the effect
+function resolvePickup(id, winner, heal) {
+  const pickup = pickups.get(id);
+  if (!pickup) return;
+  const def = PICKUP_TYPES[pickup.type];
+  spawnPickupBurst(pickup, def.color);
+  removePickup(id);
+  pendingClaims.delete(id);
+  const healed = def.heal ? Math.min(heal, def.heal) : 0;
+  if (winner === localActorId) {
+    if (def.heal) {
+      const gained = Math.min(healed, 100 - localPlayer.health);
+      localPlayer.health += gained;
+      ui.setHealth(localPlayer.health);
+      ui.addKillEntry(`+${Math.round(gained)} health`);
+    } else {
+      const before = mana;
+      mana = addMana(mana, def.mana);
+      ui.setMana(mana, MANA_MAX, castCost(selectedSpell));
+      ui.addKillEntry(`+${Math.round(mana - before)} mana`);
+    }
+    sound.pickup(def.id);
+    ui.flashPickup(`#${def.color.toString(16).padStart(6, '0')}`);
+    return;
+  }
+  // Someone else's potion: keep our copy of them in step, since kills are decided on the shooter's screen
+  const other = isBotId(winner) ? bots.get(winner)?.player : remotePlayers.get(winner);
+  if (!other) return;
+  if (def.heal) other.health = Math.min(100, other.health + healed); // mana is private to each player
+}
+
+// Walking onto a potion asks the host for it. A potion that would be wasted (full health, full
+// ultimate) stays put.
+function collectPickups() {
+  if (!controls.isLocked || localPlayer.isRespawning || localActorId < 0) return;
+  const now = performance.now();
+  for (const pickup of pickups.values()) {
+    if (Math.hypot(localPlayer.position.x - pickup.x, localPlayer.position.z - pickup.z) > PICKUP_RADIUS) continue;
+    if (Math.abs(localPlayer.position.y - pickup.y) > 2) continue; // on a different floor
+    if (now - (pendingClaims.get(pickup.id) ?? -Infinity) < CLAIM_RETRY_MS) continue;
+    const def = PICKUP_TYPES[pickup.type];
+    let heal = 0;
+    if (def.heal) {
+      heal = Math.min(def.heal, 100 - localPlayer.health);
+      if (heal <= 0) continue;
+    } else if (mana >= MANA_MAX) {
+      continue; // already full
+    }
+    pendingClaims.set(pickup.id, now);
+    if (isBotHost()) hostResolvePickup(pickup.id, localActorId, heal);
+    else network.sendPickup({ k: 'c', i: pickup.id, h: Math.round(heal) });
+  }
+}
+
+// Bot host: bots on the ground-floor head for a potion they could use, and take any they walk over
+function updateBotPickups() {
+  bots.forEach((bot, id) => {
+    if (!bot.ai) return;
+    const { player } = bot;
+    const wants = (pickup) => {
+      const def = PICKUP_TYPES[pickup.type];
+      return def.heal && player.health <= 100 - 20; // bots have unlimited mana
+    };
+    let nearest = null;
+    let best = BOT_PICKUP_SEEK_RANGE;
+    for (const pickup of pickups.values()) {
+      if (pickup.y !== GROUND_Y || !wants(pickup)) continue; // bots don't climb for them
+      const d = Math.hypot(player.position.x - pickup.x, player.position.z - pickup.z);
+      if (d < best) { best = d; nearest = pickup; }
+    }
+    bot.ai.seek = nearest && !player.isRespawning ? nearest : null;
+    if (player.isRespawning) return;
+    for (const pickup of pickups.values()) {
+      if (Math.hypot(player.position.x - pickup.x, player.position.z - pickup.z) > PICKUP_RADIUS) continue;
+      if (Math.abs(player.position.y - pickup.y) > 2) continue;
+      const def = PICKUP_TYPES[pickup.type];
+      if (!def.heal || player.health >= 100) continue;
+      hostResolvePickup(pickup.id, id, Math.min(def.heal, 100 - player.health));
+      break;
+    }
+  });
+}
+
+// Mana trickles back, and comes back in full when you respawn (so a death never leaves you unable to fight)
+function updateMana(delta) {
+  if (localActorId < 0) return;
+  if (localPlayer.isRespawning) {
+    wasRespawning = true;
+    return;
+  }
+  if (wasRespawning) { wasRespawning = false; mana = MANA_MAX; }
+  mana = regenMana(mana, delta);
+  ui.setMana(mana, MANA_MAX, castCost(selectedSpell));
+}
+
+function updatePickups(delta) {
+  updatePickupBursts(delta);
+  if (localActorId < 0) return;
+  if (isBotHost()) {
+    pickupTimer -= delta;
+    if (pickups.size < PICKUP_MIN) {
+      if (pickupTimer <= 0) {
+        hostSpawnPickup();
+        pickupTimer = pickups.size >= PICKUP_MIN ? PICKUP_INTERVAL : 0.5;
+      }
+    } else if (pickups.size < PICKUP_MAX && pickupTimer <= 0) {
+      hostSpawnPickup();
+      pickupTimer = PICKUP_INTERVAL;
+    } else if (pickups.size >= PICKUP_MAX) {
+      pickupTimer = PICKUP_INTERVAL; // a freed slot refills a full interval after the pickup
+    }
+  }
+  const t = performance.now() / 1000;
+  pickups.forEach((p) => {
+    p.group.userData.bottle.position.y = 1.0 + Math.sin(t * 2 + p.id) * 0.12;
+    p.group.userData.bottle.rotation.y = t * 1.5;
+  });
+  collectPickups();
+  if (isBotHost()) updateBotPickups();
 }
 
 // Leaving a room: drop everyone in it, the bots and all match state; onConnected starts over
@@ -470,6 +834,9 @@ function clearRoomState() {
   lastUltAt.clear();
   teams.clear();
   teamScores = [0, 0];
+  controlPoint = newControlPoint();
+  mana = MANA_MAX;
+  clearPickups();
   clearTimeout(roundTimer);
   roundOver = false;
   ui.showRoundBanner(null);
@@ -489,7 +856,14 @@ function setGameMode(mode) {
   network.switchRoom(GAME_MODES[mode].room, GAME_MODES[mode].maxPlayers);
 }
 
+// One line under the mode buttons: the selected mode's rule, or whichever button is hovered or focused
+function showModeRule(mode = gameMode) {
+  const el = document.getElementById('lobby-mode-desc');
+  if (el) el.textContent = GAME_MODES[mode]?.rule ?? '';
+}
+
 function renderModeToggle() {
+  showModeRule();
   document.querySelectorAll('.lo-mode-btn').forEach((btn) => {
     const on = btn.dataset.mode === gameMode;
     btn.classList.toggle('is-active', on);
@@ -497,7 +871,7 @@ function renderModeToggle() {
   });
   const card = document.querySelector('.lo-play-mode');
   if (card) card.textContent = GAME_MODES[gameMode].card;
-  document.body.classList.toggle('mode-tdm', gameMode === 'tdm');
+  document.body.classList.toggle('mode-tdm', isTeamMode(gameMode));
   const online = document.getElementById('lobby-online');
   if (online && localActorId < 0) online.textContent = 'Joining…';
 }
@@ -921,6 +1295,9 @@ function loadSettings() {
     volume: Number.isFinite(Number(saved.volume)) && saved.volume !== null && saved.volume !== undefined
       ? clamp(Number(saved.volume), 0, 1)
       : DEFAULT_SETTINGS.volume,
+    musicVolume: saved.musicVolume === undefined || saved.musicVolume === null || !Number.isFinite(Number(saved.musicVolume))
+      ? DEFAULT_SETTINGS.musicVolume
+      : clamp(Number(saved.musicVolume), 0, 1),
     muted: Boolean(saved.muted),
     // Touch only: drag-to-look speed and the size of the on-screen buttons
     lookSensitivity: clamp(Number(saved.lookSensitivity) || DEFAULT_SETTINGS.lookSensitivity, 0.2, 3),
@@ -933,6 +1310,11 @@ function applySettings() {
   const fpsEl = document.getElementById('fps-counter');
   if (fpsEl) fpsEl.style.display = settings.showFps ? '' : 'none';
   sound.setVolume(settings.volume, settings.muted);
+  sound.music.setVolume(settings.musicVolume);
+  const music = document.getElementById('setting-music');
+  const musicOut = document.getElementById('setting-music-value');
+  if (music) music.value = Math.round(settings.musicVolume * 100);
+  if (musicOut) musicOut.textContent = `${Math.round(settings.musicVolume * 100)}%`;
   const vol = document.getElementById('setting-volume');
   const mute = document.getElementById('setting-mute');
   const volOut = document.getElementById('setting-volume-value');
@@ -1138,6 +1520,10 @@ function setupTopBar() {
     settings.volume = clamp(Number(e.target.value) / 100, 0, 1);
     applySettings();
   });
+  document.getElementById('setting-music')?.addEventListener('input', (e) => {
+    settings.musicVolume = clamp(Number(e.target.value) / 100, 0, 1);
+    applySettings();
+  });
   // Play a sample on release so the new level can be heard
   document.getElementById('setting-volume')?.addEventListener('change', () => sound.uiClick());
   document.getElementById('setting-mute')?.addEventListener('change', (e) => {
@@ -1325,9 +1711,11 @@ function updateWeaponStats(spell) {
   const nameEl = document.getElementById('weapon-stats-name');
   if (nameEl) nameEl.textContent = stats.name;
 
+  // Damage (per hit) and projectile speed are the real numbers; control and impact are descriptive
+  const real = SPELL_CONFIG[spell] || SPELL_CONFIG.fire;
   const entries = [
-    ['stat-damage', stats.damage],
-    ['stat-speed', stats.speed],
+    ['stat-damage', Math.round((real.damage / MAX_SPELL_HIT_DAMAGE) * 100)],
+    ['stat-speed', Math.round((real.speed / MAX_PROJECTILE_SPEED) * 100)],
     ['stat-control', stats.control],
     ['stat-impact', stats.impact],
   ];
@@ -1336,6 +1724,12 @@ function updateWeaponStats(spell) {
     const bar = document.getElementById(id);
     if (bar) bar.style.width = `${value}%`;
   });
+
+  const castEl = document.getElementById('weapon-stats-cast');
+  if (castEl) {
+    const cast = SPELL_CAST[spell] || SPELL_CAST.fire;
+    castEl.textContent = `${real.damage} damage · ${cast.cost} mana · ${cast.cooldown}s cooldown`;
+  }
 }
 
 function syncSkinPicker(skinId) {
@@ -1431,7 +1825,7 @@ function refreshBots() {
     }
   }
   if (!host) return;
-  if (gameMode === 'tdm') {
+  if (isTeamMode(gameMode)) {
     fillTeamsWithBots();
     sendTeams();
     return;
@@ -1469,7 +1863,7 @@ function getNearestHuman(position) {
 
 // A bot's target: the nearest human in free-for-all; the nearest enemy, bots included, in team deathmatch
 function getBotTarget(botId, position) {
-  if (gameMode !== 'tdm') return getNearestHuman(position);
+  if (!isTeamMode(gameMode)) return getNearestHuman(position);
   let nearest = null;
   let best = Infinity;
   const consider = (id, player) => {
@@ -1487,7 +1881,7 @@ function getBotTarget(botId, position) {
 // so respawns are safe but not predictable
 function pickSpawnPoint(self) {
   const others = [localPlayer, ...remotePlayers.values(), ...[...bots.values()].map((b) => b.player)]
-    .filter((p) => p && p !== self && (gameMode !== 'tdm' || self?.id == null || isEnemy(self.id, p.id)));
+    .filter((p) => p && p !== self && (!isTeamMode(gameMode) || self?.id == null || isEnemy(self.id, p.id)));
   const ranked = colliders.spawnPoints
     .map((pt) => {
       let nearest = Infinity;
@@ -1519,7 +1913,7 @@ function getSimulatedOwners() {
 
 // Robe colour, or team colour in team deathmatch
 function minimapColor(id, player) {
-  const color = gameMode === 'tdm' && teams.has(id) ? TEAMS[teams.get(id)].color : getSkinConfig(player.skinId).body;
+  const color = isTeamMode(gameMode) && teams.has(id) ? TEAMS[teams.get(id)].color : getSkinConfig(player.skinId).body;
   return `#${color.toString(16).padStart(6, '0')}`;
 }
 
@@ -1680,7 +2074,7 @@ function handleDefeat(killerId, victimId, killerLabel, victimLabel) {
 // Runs on the bot host for hits landed by a bot's fireball or ultimate
 function handleBotHit(botId, targetId, damage, spell, dir, fromUlt = false) {
   // Bots only fight each other in team deathmatch, and never their own team
-  if ((isBotId(targetId) && gameMode !== 'tdm') || !isEnemy(botId, targetId)) return;
+  if ((isBotId(targetId) && !isTeamMode(gameMode)) || !isEnemy(botId, targetId)) return;
   network.sendHit(targetId, damage, spell, spell === 'air' ? dir : null, botId, fromUlt);
   // As with players, ultimate damage doesn't refill the meter
   const charge = (amount) => { if (!fromUlt) chargeBotUlt(botId, amount); };
@@ -1880,13 +2274,13 @@ function init() {
       selectedSpell = btn.dataset.spell;
       document.querySelectorAll('.spell-btn').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
-      ui.setSpell(selectedSpell);
+      ui.setSpell(selectedSpell, castCost(selectedSpell));
       touchUi?.setSpellIcon(SPELL_LABELS[selectedSpell].split(' ')[0]);
       refreshUltUi();
       updateWeaponStats(selectedSpell);
     });
   });
-  ui.setSpell(selectedSpell);
+  ui.setSpell(selectedSpell, castCost(selectedSpell));
   touchUi?.setSpellIcon(SPELL_LABELS[selectedSpell].split(' ')[0]);
   refreshUltUi();
   updateWeaponStats(selectedSpell);
@@ -1928,6 +2322,7 @@ function init() {
       }
       if (isBotHost()) {
         sendBotState();
+        sendAllPickups();
         bots.forEach((_, id) => {
           const s = scores.get(id);
           if (s) network.sendScoreUpdate(id, s.kills, s.deaths);
@@ -2115,7 +2510,8 @@ function init() {
       // Team deathmatch has no friendly fire
       if (!isEnemy(isBotId(data.by) ? data.by : actorNr, data.targetId)) return;
       const ultHit = data.u === 1 && performance.now() - (lastUltAt.get(actorNr) ?? -Infinity) < ULT_HIT_WINDOW_MS;
-      const damage = clamp(Number(data.damage) || 0, 0, ultHit ? ULT_MAX_DAMAGE : MAX_SPELL_HIT_DAMAGE);
+      const spellCap = SPELL_CONFIG[data.sp]?.damage ?? MAX_SPELL_HIT_DAMAGE; // each wand's own damage, not the strongest's
+      const damage = clamp(Number(data.damage) || 0, 0, ultHit ? ULT_MAX_DAMAGE : spellCap);
       // Only a genuine ultimate hit may freeze; anything else claiming to counts as plain ice
       const effect = data.sp === 'freeze' && !ultHit ? 'ice' : (data.sp || 'fire');
       if (data.targetId === localActorId) {
@@ -2148,12 +2544,12 @@ function init() {
 
     // Team deathmatch: the bot host's teams and scores replace ours
     onTeams(sender, { t, s }) {
-      if (gameMode !== 'tdm' || isBotHost() || !runsBots(sender) || !Array.isArray(t)) return;
+      if (!isTeamMode(gameMode) || isBotHost() || !runsBots(sender) || !Array.isArray(t)) return;
       teams.clear();
       for (const entry of t) {
         if (Array.isArray(entry) && Number.isInteger(entry[0]) && (entry[1] === 0 || entry[1] === 1)) teams.set(entry[0], entry[1]);
       }
-      if (!roundOver && Array.isArray(s) && s.length === 2 && s.every((v) => Number.isInteger(v) && v >= 0 && v <= TDM_KILLS_TO_WIN)) {
+      if (!roundOver && Array.isArray(s) && s.length === 2 && s.every((v) => Number.isInteger(v) && v >= 0 && v <= modeGoal(gameMode))) {
         teamScores = [s[0], s[1]];
       }
       applyTeamVisuals();
@@ -2162,8 +2558,43 @@ function init() {
     },
 
     onRoundEnd(sender, { w }) {
-      if (gameMode !== 'tdm' || !runsBots(sender) || (w !== 0 && w !== 1)) return;
+      if (!isTeamMode(gameMode) || !runsBots(sender) || (w !== 0 && w !== 1)) return;
       startRoundBreak(w);
+    },
+
+    // Potions: the bot host announces spawns and who got each one; anyone may ask to claim one
+    onPickup(sender, data) {
+      if (!data) return;
+      if (data.k === 's' && runsBots(sender)) {
+        if (isValidPickup(data.i, data.t, data.x, data.z, data.y) && pickups.size < PICKUP_MAX + 2) addPickup(data.i, data.t, data.x, data.z, data.y);
+      } else if (data.k === 'a' && runsBots(sender) && Array.isArray(data.l)) {
+        data.l.slice(0, PICKUP_MAX + 2).forEach((e) => {
+          if (Array.isArray(e) && isValidPickup(e[0], e[1], e[2], e[3], e[4])) addPickup(e[0], e[1], e[2], e[3], e[4]);
+        });
+      } else if (data.k === 'c' && isBotHost()) {
+        // First claim wins; the claimant must be standing near it (as we see them)
+        const pickup = pickups.get(data.i);
+        const claimant = remotePlayers.get(sender);
+        if (!pickup || !claimant || claimant.isRespawning) return;
+        const near = Math.hypot(claimant.position.x - pickup.x, claimant.position.z - pickup.z) <= PICKUP_RADIUS + 4;
+        if (near) hostResolvePickup(pickup.id, sender, data.h);
+      } else if (data.k === 't' && runsBots(sender) && !isBotHost()) {
+        const winner = Number(data.w);
+        if (Number.isInteger(winner)) resolvePickup(data.i, winner, Number(data.h) || 0);
+      }
+    },
+
+    // Control point: the bot host's capture bar and points replace ours
+    onControlPoint(sender, { c, p, x }) {
+      if (gameMode !== 'cp' || roundOver || isBotHost() || !runsBots(sender)) return;
+      const goal = modeGoal('cp');
+      if (!Number.isFinite(c) || !Array.isArray(p) || p.length !== 2
+        || !p.every((v) => Number.isFinite(v) && v >= 0 && v <= goal + 1)) return;
+      controlPoint.control = clamp(c, -1, 1);
+      controlPoint.points = [p[0], p[1]];
+      controlPoint.contested = x === 1;
+      teamScores = controlPoint.points.map((v) => Math.min(goal, Math.floor(v)));
+      updateTeamHud();
     },
   }, GAME_MODES[gameMode].room, GAME_MODES[gameMode].maxPlayers);
 
@@ -2192,6 +2623,10 @@ function init() {
       e.stopPropagation();
       setGameMode(btn.dataset.mode);
     });
+    btn.addEventListener('pointerenter', () => showModeRule(btn.dataset.mode));
+    btn.addEventListener('pointerleave', () => showModeRule());
+    btn.addEventListener('focus', () => showModeRule(btn.dataset.mode));
+    btn.addEventListener('blur', () => showModeRule());
   });
   renderModeToggle();
   updateTeamHud();
@@ -2261,7 +2696,7 @@ function loop() {
   }
   update(delta);
   updateCamera(delta);
-  if (ui && colliders) ui.renderMinimap(getMinimapPlayers(), colliders.arenaSize, localPlayer?.rotation || 0);
+  if (ui && colliders) ui.renderMinimap(getMinimapPlayers(), colliders.arenaSize, localPlayer?.rotation || 0, getControlPointMarker(), getPickupMarkers());
   renderer.render(scene, camera);
   renderFirstPersonPass();
   renderHeroPreview(delta);
@@ -2358,8 +2793,16 @@ function updateLocalPlayer(delta) {
 
   shootTimer -= delta;
   if (controls.consumeClick() && shootTimer <= 0 && localPlayer.silenceTimer <= 0) {
-    shootTimer = SHOOT_COOLDOWN;
-    castFireball();
+    const cost = castCost(selectedSpell);
+    if (mana < cost) {
+      ui.flashNoMana(cost);
+      const now = performance.now();
+      if (now - lastNoManaAt > 350) { lastNoManaAt = now; sound.noMana(); }
+    } else {
+      shootTimer = castCooldown(selectedSpell);
+      mana = spendMana(mana, cost);
+      castFireball();
+    }
   }
   if (controls.consumeUlt()) castUltimate();
 }
@@ -2387,11 +2830,15 @@ function updateBurn(delta) {
 }
 
 function updateWorld(delta) {
+  updateMana(delta);
+  updatePickups(delta);
+  updateControlPoint(delta);
   sound.updateHeartbeat(localPlayer.health, controls.isLocked);
   updateBurn(delta);
   bots.forEach((bot, id) => {
     if (!bot.ai) return;
     const target = getBotTarget(id, bot.player.position);
+    bot.ai.anchor = gameMode === 'cp' && !roundOver ? CONTROL_POINT : null;
     const botShot = bot.ai.update(delta, target);
     if (bot.ult >= 1 && target) updateBotUlt(id, bot, target, delta);
     if (!botShot) return;
@@ -2628,7 +3075,7 @@ function castUltimate() {
 function botUltTargets(botId) {
   const targets = getCombatTargets();
   for (const id of targets.keys()) {
-    if ((isBotId(id) && gameMode !== 'tdm') || !isEnemy(botId, id)) targets.delete(id);
+    if ((isBotId(id) && !isTeamMode(gameMode)) || !isEnemy(botId, id)) targets.delete(id);
   }
   return targets;
 }

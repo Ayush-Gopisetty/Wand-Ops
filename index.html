@@ -38,8 +38,14 @@
       <div id="health-track">
         <div id="health-bar"></div>
       </div>
+      <div id="mana-track" title="Mana: each spell costs some">
+        <div id="mana-bar"></div>
+        <span id="mana-text">100 MP</span>
+      </div>
       <span id="health-text">100 HP</span>
     </div>
+    <div id="mana-warning" aria-live="polite"></div>
+    <div id="pickup-flash"></div>
 
     <div id="player-count">Players: 1</div>
     <div id="kda-tracker">K/D/A: 0 / 0 / 0</div>
@@ -168,7 +174,9 @@
         <div class="lo-mode-toggle" role="radiogroup" aria-label="Game mode">
           <button class="lo-mode-btn" type="button" role="radio" data-mode="ffa">Free for all</button>
           <button class="lo-mode-btn" type="button" role="radio" data-mode="tdm">Team deathmatch</button>
+          <button class="lo-mode-btn" type="button" role="radio" data-mode="cp">Control point</button>
         </div>
+        <p class="lo-mode-desc" id="lobby-mode-desc" aria-live="polite"></p>
         </div>
 
         <div class="lo-spell-tray lo-spell-tray-sidebar" onclick="event.stopPropagation()">
@@ -204,6 +212,7 @@
         <div class="lo-card lo-weapon-stats" onclick="event.stopPropagation()">
           <div class="lo-card-head"><span>🪄</span> WEAPON STATS</div>
           <div class="lo-weapon-name" id="weapon-stats-name">Fire Wand</div>
+          <div class="lo-weapon-cast" id="weapon-stats-cast"></div>
           <div class="lo-stat-bars" id="weapon-stat-bars">
             <div class="lo-stat-bar-row">
               <div class="lo-stat-bar-label">Damage</div>
@@ -472,6 +481,10 @@
           <label class="lo-setting">
             <span class="lo-setting-label">Volume <output id="setting-volume-value"></output></span>
             <input type="range" id="setting-volume" min="0" max="100" step="5" />
+          </label>
+          <label class="lo-setting">
+            <span class="lo-setting-label">Music volume <output id="setting-music-value"></output></span>
+            <input type="range" id="setting-music" min="0" max="100" step="5" />
           </label>
           <label class="lo-setting lo-setting-check">
             <input type="checkbox" id="setting-mute" />
