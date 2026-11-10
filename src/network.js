@@ -19,9 +19,6 @@ export const EV_ULT          = 11; // { k: spell, ... } — an ultimate was cast
 export const EV_TEAMS        = 12; // { t: [[id, team], ...], s: [blue, red] } — team deathmatch, sent by the bot host
 export const EV_ROUND        = 13; // { w: team } — a team reached the kill target, sent by the bot host
 
-// Dev builds can use a private copy of each room (?room=name) so testing never lands in a live match
-const ROOM_SUFFIX = import.meta.env.DEV ? new URLSearchParams(location.search).get('room') : null;
-
 // Per-sender token buckets as [refill per second, burst]. Normal play stays well under these:
 // positions and bot state tick at 13 Hz, a player fires at most every 0.5s, and the bot host
 // also relays its bots' shots, hits and scores. Anything past the limit is a flood and is dropped.
@@ -45,7 +42,7 @@ const TOTAL_LIMIT = [100, 140]; // all event types combined, per sender
 export class NetworkManager {
   constructor(callbacks, roomName) {
     this.callbacks       = callbacks;
-    this.roomName        = ROOM_SUFFIX ? `${roomName}-${ROOM_SUFFIX}` : roomName;
+    this.roomName        = roomName;
     this.client          = null;
     this.localActorNr    = -1;
     this.connected       = false;
@@ -220,7 +217,7 @@ export class NetworkManager {
 
   /** Leaves the current room for another (a different game mode); onConnected fires again once inside. */
   switchRoom(roomName) {
-    this.roomName = ROOM_SUFFIX ? `${roomName}-${ROOM_SUFFIX}` : roomName;
+    this.roomName = roomName;
     if (!this.connected) return; // still connecting: the join picks up the new name
     this.connected = false;
     this._buckets.clear();
