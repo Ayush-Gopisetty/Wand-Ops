@@ -12,12 +12,14 @@ const PARTICLE_COUNT = 1500;
 const FLASH_COUNT    = 8;
 const IMPACT_SPARKS  = 22;
 
+// Damage per hit and projectile speed; mana cost and cooldown are in mana.js. Slow earth bolts keep the
+// same range as the others (they live longer), so a slow shot is easier to dodge, not shorter.
 export const SPELL_CONFIG = {
-  fire:      { damage: 15 },
-  ice:       { damage: 20 },
-  lightning: { damage: 20 },
-  air:       { damage: 20 },
-  earth:     { damage: 18 },
+  fire:      { damage: 15, speed: 22 },
+  ice:       { damage: 20, speed: 22 },
+  lightning: { damage: 12, speed: 30 },
+  air:       { damage: 16, speed: 22 },
+  earth:     { damage: 36, speed: 15 },
 };
 
 // Per-spell look: glow colour/size, trail colours, trail rate and how the trail particles move
@@ -190,7 +192,7 @@ export class FireballManager {
     group.add(new THREE.Mesh(this.res.streakGeo, this.res.streak[kind]));
     this.scene.add(group);
 
-    this.fireballs.push({ mesh: group, glow, parts, dir, ownerId, lifetime: LIFETIME, spell: kind, cfg, emitCarry: 0 });
+    this.fireballs.push({ mesh: group, glow, parts, dir, ownerId, lifetime: LIFETIME * SPEED / cfg.speed, speed: cfg.speed, spell: kind, cfg, emitCarry: 0 });
   }
 
   _buildBody(kind, group) {
@@ -321,7 +323,7 @@ export class FireballManager {
       if (fb.lifetime <= 0) { this._remove(i); continue; }
 
       // A frame can carry a projectile over a metre, so check for contact along the way, not just where it ends up
-      const travel = SPEED * delta;
+      const travel = fb.speed * delta;
       const steps = Math.max(1, Math.ceil(travel / MAX_STEP));
       let removed = false;
       for (let s = 0; s < steps && !removed; s++) {

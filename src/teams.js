@@ -3,20 +3,31 @@
  * bot host assigns teams and keeps the score, everyone else mirrors it.
  */
 export const TDM_TEAM_MAX = 4; // 4v4 at most
+export const TDM_KILLS_TO_WIN = 20;
 
 // `maxPlayers` is the room's human cap. Newcomers join the smaller team, so a team deathmatch room
 // of 8 can never go past 4 on a side.
+import { CP_POINTS_TO_WIN } from './control-point.js';
+
 export const GAME_MODES = {
-  ffa: { room: 'WizardArena', maxPlayers: 8, label: 'Free for all', card: 'Quick match: Arena' },
-  tdm: { room: 'WizardArena-TDM', maxPlayers: TDM_TEAM_MAX * 2, label: 'Team deathmatch', card: 'Team deathmatch: Arena' },
+  ffa: { room: 'WizardArena', maxPlayers: 8, label: 'Free for all', card: 'Quick match: Arena',
+    rule: 'Every wizard for themselves. Land kills; there is no round limit.' },
+  tdm: { room: 'WizardArena-TDM', maxPlayers: TDM_TEAM_MAX * 2, label: 'Team deathmatch', card: 'Team deathmatch: Arena',
+    rule: `Blue vs Red, no friendly fire. First team to ${TDM_KILLS_TO_WIN} kills wins the round.` },
+  cp: { room: 'WizardArena-CP', maxPlayers: TDM_TEAM_MAX * 2, label: 'Control point', card: 'Control point: Arena',
+    rule: `Hold the courtyard ring to score a point a second. First team to ${CP_POINTS_TO_WIN} wins.` },
 };
+
+/** Modes with two teams (and bots topping them up). */
+export const isTeamMode = (mode) => mode === 'tdm' || mode === 'cp';
+/** Score a team needs to win the round: kills in team deathmatch, held-seconds in control point. */
+export const modeGoal = (mode) => (mode === 'cp' ? CP_POINTS_TO_WIN : TDM_KILLS_TO_WIN);
 
 export const TEAMS = [
   { name: 'Blue', color: 0x3d8bff },
   { name: 'Red', color: 0xff4d5e },
 ];
 
-export const TDM_KILLS_TO_WIN = 20;
 export const TDM_TEAM_SIZE = 2; // bots fill each team up to this many
 export const TDM_ROUND_BREAK_MS = 6000; // winner banner, then everyone starts the next round fresh
 

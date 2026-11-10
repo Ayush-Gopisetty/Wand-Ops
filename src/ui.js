@@ -15,6 +15,12 @@ export class UIManager {
   constructor() {
     this._bar = document.getElementById('health-bar');
     this._healthText = document.getElementById('health-text');
+    this._manaTrack = document.getElementById('mana-track');
+    this._manaBar = document.getElementById('mana-bar');
+    this._manaText = document.getElementById('mana-text');
+    this._manaShown = '';
+    this._manaWarning = document.getElementById('mana-warning');
+    this._pickupFlash = document.getElementById('pickup-flash');
     this._playerCnt = document.getElementById('player-count');
     this._kdaTracker = document.getElementById('kda-tracker');
     this._overlay = document.getElementById('overlay');
@@ -62,6 +68,41 @@ export class UIManager {
     }, 900);
   }
 
+  /** Mana bar: `cost` is what one spell takes, so the bar dims when you can't cast. */
+  setMana(mana, max, cost) {
+    if (!this._manaBar) return;
+    const rounded = Math.floor(mana);
+    const key = `${rounded}:${cost}`; // the low-mana dimming depends on the selected spell's cost
+    if (key === this._manaShown) return;
+    this._manaShown = key;
+    this._manaBar.style.width = `${Math.max(0, Math.min(100, (mana / max) * 100))}%`;
+    this._manaText.textContent = `${rounded} MP`;
+    this._manaTrack.classList.toggle('is-low', mana < cost);
+  }
+
+  /** Brief red flash on the mana bar when a cast fails for lack of mana. */
+  flashNoMana(need = 0) {
+    if (!this._manaTrack) return;
+    this._manaTrack.classList.remove('is-empty');
+    void this._manaTrack.offsetWidth; // restart the animation
+    this._manaTrack.classList.add('is-empty');
+    if (this._manaWarning) {
+      this._manaWarning.textContent = need ? `Not enough mana (needs ${need})` : 'Not enough mana';
+      this._manaWarning.classList.remove('is-showing');
+      void this._manaWarning.offsetWidth;
+      this._manaWarning.classList.add('is-showing');
+    }
+  }
+
+  /** Quick screen tint when you use a potion; `color` is a CSS colour. */
+  flashPickup(color) {
+    if (!this._pickupFlash) return;
+    this._pickupFlash.style.setProperty('--flash', color);
+    this._pickupFlash.classList.remove('is-showing');
+    void this._pickupFlash.offsetWidth;
+    this._pickupFlash.classList.add('is-showing');
+  }
+
   setHealth(hp) {
     const pct = Math.max(0, Math.min(100, hp));
     this._bar.style.width = pct + '%';
@@ -85,8 +126,10 @@ export class UIManager {
     document.body.classList.toggle('lobby-open', visible);
   }
 
-  setSpell(spell) {
-    this._spellIndicator.textContent = SPELL_LABELS[spell] || spell;
+  /** `cost` (mana per cast) is shown next to the spell's name. */
+  setSpell(spell, cost = null) {
+    const label = SPELL_LABELS[spell] || spell;
+    this._spellIndicator.textContent = cost ? `${label} · ${cost} MP` : label;
     this._spellIndicator.dataset.spell = spell;
   }
 
@@ -131,7 +174,7 @@ export class UIManager {
     });
   }
 
-  /** Team deathmatch score bar: `{ scores: [blue, red], mine, goal }`, or null to hide it. */
+  /** Team deathmatch score bar: `{ scores: [blue, red], mine, goal, note? }`, or null to hide it. */
   setTeamScore(info) {
     if (!this._teamScore) return;
     this._teamScore.hidden = !info;
@@ -140,7 +183,7 @@ export class UIManager {
       el.querySelector('.ts-value').textContent = info.scores[t];
       el.classList.toggle('is-mine', info.mine === t);
     });
-    this._teamScore.querySelector('.ts-goal').textContent = `First to ${info.goal}`;
+    this._teamScore.querySelector('.ts-goal').textContent = info.note ? `First to ${info.goal} · ${info.note}` : `First to ${info.goal}`;
   }
 
   /** End-of-round banner; `team` is 0 or 1 for the colour. Pass null to hide it. */
@@ -239,7 +282,8 @@ export class UIManager {
     setTimeout(() => el.remove(), 820);
   }
 
-  renderMinimap(players, arenaSize, localRotation = 0) {
+  /** `marker` ({ x, z, radius, color }) draws the control point ring. */
+  renderMinimap(players, arenaSize, localRotation = 0, marker = null, pickups = null) {
     if (!this._minimapCtx || !this._minimap) return;
 
     const ctx = this._minimapCtx;
@@ -273,6 +317,31 @@ export class UIManager {
 
     ctx.fillStyle = 'rgba(210, 226, 238, 0.22)';
     ctx.fillRect(centerX - 14, centerY - 14, 28, 28);
+
+    if (marker) {
+      ctx.strokeStyle = marker.color;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(centerX + marker.x * scale, centerY + marker.z * scale, marker.radius * scale, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // Potions: small diamonds in the potion's colour
+    for (const pickup of pickups || []) {
+      const px = centerX + pickup.x * scale;
+      const py = centerY + pickup.z * scale;
+      ctx.fillStyle = pickup.color;
+      ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(px, py - 5);
+      ctx.lineTo(px + 4, py);
+      ctx.lineTo(px, py + 5);
+      ctx.lineTo(px - 4, py);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
 
     for (const player of players) {
       const px = centerX + player.x * scale;

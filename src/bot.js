@@ -45,12 +45,41 @@ export class SimpleBotController {
     this._detourDir = 1;
     this._blocked = false;
     this._blockedFor = 0;
+    this.anchor = null;
+    this.seek = null;
     // Height the bot is really standing at; its visible y eases up toward this, so stairs are judged against it
     this._supportY = player.position.y;
   }
 
+  // Idle movement toward a point ({x, z}): the potion a bot is after, else the control point
+  _walkTo(point, stopDistance, delta) {
+    if (this.player.freezeTimer > 0) return;
+    const ax = point.x - this.player.position.x;
+    const az = point.z - this.player.position.z;
+    const ad = Math.hypot(ax, az);
+    if (ad > stopDistance) {
+      _move.set(ax / ad, 0, az / ad);
+      this.player.rotation = Math.atan2(-_move.x, -_move.z);
+      _stepDelta.copy(_move).multiplyScalar(BOT_MOVE_SPEED * delta);
+      moveWithCollisions(this.player.position, _stepDelta, this.colliders, Math.max(this.player.position.y, this._supportY));
+    }
+    this._settleHeight(delta);
+  }
+
+  _settleHeight(delta) {
+    const targetY = getGroundY(this.player.position.x, this.player.position.z, this.player.position.y, this.colliders, Math.max(this.player.position.y, this._supportY));
+    this._supportY = targetY;
+    const maxStep = BOT_CLIMB_SPEED * delta;
+    this.player.position.y += clamp(targetY - this.player.position.y, -maxStep, maxStep);
+  }
+
   update(delta, target) {
-    if (!target) return null;
+    // `seek` is a potion the bot wants; `anchor` is the control point it holds (both are {x, z} or null)
+    if (!target) {
+      if (this.seek) this._walkTo(this.seek, 0.6, delta);
+      else if (this.anchor) this._walkTo(this.anchor, 3, delta);
+      return null;
+    }
 
     this._cooldown -= delta;
     this._strafeTimer -= delta;
@@ -88,6 +117,19 @@ export class SimpleBotController {
       this._blockedFor = 0;
     }
 
+    // Stay near the control point: when drifting too far out, head back (the bot still shoots on the way)
+    if (this.seek && dist > 7) {
+      const sx = this.seek.x - this.player.position.x;
+      const sz = this.seek.z - this.player.position.z;
+      const sd = Math.hypot(sx, sz);
+      if (sd > 0.6) _move.set(sx / sd, 0, sz / sd);
+    } else if (this.anchor) {
+      const ax = this.anchor.x - this.player.position.x;
+      const az = this.anchor.z - this.player.position.z;
+      const ad = Math.hypot(ax, az);
+      if (ad > 9) _move.set(ax / ad, 0, az / ad);
+    }
+
     // Frozen by a Frost Nova: no walking (the bot still turns to face you and settles on the floor)
     if (this.player.freezeTimer > 0) _move.set(0, 0, 0);
     if (_move.lengthSq() > 0.0001) {
@@ -113,10 +155,7 @@ export class SimpleBotController {
       }
     }
 
-    const targetY = getGroundY(this.player.position.x, this.player.position.z, this.player.position.y, this.colliders, Math.max(this.player.position.y, this._supportY));
-    this._supportY = targetY;
-    const maxStep = BOT_CLIMB_SPEED * delta;
-    this.player.position.y += clamp(targetY - this.player.position.y, -maxStep, maxStep);
+    this._settleHeight(delta);
 
     if (this.player.slowTimer > 0 || this.player.silenceTimer > 0) {
       // No sight check runs while it can't shoot, so don't keep acting on the last one
